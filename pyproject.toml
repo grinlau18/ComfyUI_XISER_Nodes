@@ -1,0 +1,24 @@
+[project]
+name = "ComfyUI_XISER_Nodes"
+description = "Custom nodes for customizing workflows"
+version = "0.1"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+
+[project.urls]
+repository = "https://github.com/grinlau18/ComfyUI_XISER_Nodes"
+
+[tool.ruff]
+PublisherId = "xiser"
+DisplayName = "ComfyUI_XISER_Nodes"
+lint.select = [
+  "S307", # suspicious-eval-usage
+  "S102", # exec
+  "T",    # print-usage
+  "W",
+  # The "F" series in Ruff stands for "Pyflakes" rules, which catch various Python syntax errors and undefined names.
+  # See all rules here: https://docs.astral.sh/ruff/rules/#pyflakes-f
+  "F",
+]
+exclude = ["*.ipynb"]
