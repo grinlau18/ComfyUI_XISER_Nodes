@@ -42,7 +42,12 @@ class XIS_Float_Slider:
             }
         }
     RETURN_TYPES = ("FLOAT",)
+    FUNCTION = "process_float_slider"
     CATEGORY = "XISER_Nodes"
+
+    def process_float_slider(self, **kwargs):
+        value = kwargs.get("value", 0.0)
+        return (value,)
 
 class XIS_INT_Slider:
     @classmethod
@@ -53,7 +58,12 @@ class XIS_INT_Slider:
             }
         }
     RETURN_TYPES = ("INT",)
+    FUNCTION = "process_int_slider"
     CATEGORY = "XISER_Nodes"
+
+    def process_int_slider(self, **kwargs):
+        value = kwargs.get("value", 0)
+        return (value,)
 
 
 
