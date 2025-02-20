@@ -13,8 +13,8 @@ class XIS_PromptsWithSwitches:
             "optional": input_config
         }
 
-    RETURN_TYPES = ("STRING",)
-    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = ("STRING", "BOOLEAN",)
+    OUTPUT_IS_LIST = (True, False,)
     FUNCTION = "process_prompts"
     CATEGORY = "XISER_Nodes"
 
@@ -29,9 +29,13 @@ class XIS_PromptsWithSwitches:
                 prompts.append(prompt)
 
         if len(prompts) == 0:
-            prompts.append("000")
+            prompt_logic = False
+            prompts = ["No prompts to display."]
+        else:
+            prompt_logic = True
+        
 
-        return (prompts,)
+        return (prompts, prompt_logic)
 
 class XIS_Float_Slider:
     @classmethod
