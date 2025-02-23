@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from PIL import Image
 import torch.nn.functional as F
+from torchvision.transforms.functional import resize
 
 # 定义缩放算法映射
 INTERPOLATION_MODES = {
@@ -53,26 +54,30 @@ class XIS_ResizeImageOrMask:
             raise ValueError("At least one of 'image' or 'mask' must be provided")
 
         # 处理 IMAGE 输入（如果提供）
-        batch_size_img = orig_height_img = orig_width_img = channels_img = None
+        img_batch_size, img_orig_height, img_orig_width = 0, 0, 0
         if image is not None:
             img = image.clone().float()  # B, H, W, C
-            batch_size_img, orig_height_img, orig_width_img, channels_img = img.shape
-            if channels_img not in [3, 4]:
+            img_batch_size, img_orig_height, img_orig_width, img_channels = img.shape
+            if img_channels not in [3, 4]:
                 raise ValueError("IMAGE input must have 3 or 4 channels")
+        else:
+            img = None
 
         # 处理 MASK 输入（如果提供）
-        batch_size_mask = orig_height_mask = orig_width_mask = None
+        mask_batch_size, mask_orig_height, mask_orig_width = 0, 0, 0
         if mask is not None:
             if mask.dim() == 2:  # H×W
                 mask = mask.unsqueeze(0).unsqueeze(-1).float()  # 1×H×W×1
             elif mask.dim() == 3:  # B×H×W
                 mask = mask.unsqueeze(-1).float()  # B×H×W×1
-            batch_size_mask, orig_height_mask, orig_width_mask, mask_channels = mask.shape
+            mask_batch_size, mask_orig_height, mask_orig_width, mask_channels = mask.shape
             if mask_channels != 1:
                 raise ValueError("MASK input must have 1 channel")
+        else:
+            mask = None
 
-        # 确定批次大小（取较大的批次）
-        batch_size = max(batch_size_img or 0, batch_size_mask or 0)
+        # 确定批次大小（取最大值）
+        batch_size = max(img_batch_size if image is not None else 0, mask_batch_size if mask is not None else 0)
 
         # 确定目标尺寸
         if reference_image is not None:
@@ -92,125 +97,143 @@ class XIS_ResizeImageOrMask:
         img_fill_value = fill_rgb if (image is not None and image.shape[-1] == 3) else (*fill_rgb, 1.0) if image is not None else None
         mask_fill_value = fill_rgb[0]  # 蒙版使用灰度值
 
-        # 处理 IMAGE 的缩放尺寸
-        new_width_img = new_height_img = None
+        # 计算 IMAGE 的缩放尺寸（如果提供）
+        img_new_width, img_new_height = 0, 0
         if image is not None:
             if resize_mode == "force_resize":
-                new_width_img, new_height_img = target_width, target_height
+                img_new_width, img_new_height = target_width, target_height
             elif resize_mode == "scale_proportionally":
-                aspect_ratio = orig_width_img / orig_height_img
+                aspect_ratio = img_orig_width / img_orig_height
                 if target_width / target_height > aspect_ratio:
-                    new_height_img = target_height
-                    new_width_img = int(new_height_img * aspect_ratio)
+                    img_new_height = target_height
+                    img_new_width = int(img_new_height * aspect_ratio)
                 else:
-                    new_width_img = target_width
-                    new_height_img = int(new_width_img / aspect_ratio)
-                new_width_img = ((new_width_img + min_unit - 1) // min_unit) * min_unit
-                new_height_img = ((new_height_img + min_unit - 1) // min_unit) * min_unit
+                    img_new_width = target_width
+                    img_new_height = int(img_new_width / aspect_ratio)
+                img_new_width = ((img_new_width + min_unit - 1) // min_unit) * min_unit
+                img_new_height = ((img_new_height + min_unit - 1) // min_unit) * min_unit
             elif resize_mode == "limited_by_canvas":
-                aspect_ratio = orig_width_img / orig_height_img
+                aspect_ratio = img_orig_width / img_orig_height
                 if target_width / target_height > aspect_ratio:
-                    new_height_img = target_height
-                    new_width_img = int(new_height_img * aspect_ratio)
+                    img_new_height = target_height
+                    img_new_width = int(img_new_height * aspect_ratio)
                 else:
-                    new_width_img = target_width
-                    new_height_img = int(new_width_img / aspect_ratio)
-                new_width_img = ((new_width_img + min_unit - 1) // min_unit) * min_unit
-                new_height_img = ((new_height_img + min_unit - 1) // min_unit) * min_unit
+                    img_new_width = target_width
+                    img_new_height = int(img_new_width / aspect_ratio)
+                img_new_width = ((img_new_width + min_unit - 1) // min_unit) * min_unit
+                img_new_height = ((img_new_height + min_unit - 1) // min_unit) * min_unit
             elif resize_mode == "fill_the_canvas":
-                aspect_ratio = orig_width_img / orig_height_img
+                aspect_ratio = img_orig_width / img_orig_height
                 target_max = max(target_width, target_height)
-                if orig_width_img > orig_height_img:  # 宽度是长边
-                    new_width_img = max(target_max, int(target_height * aspect_ratio))
-                    new_height_img = int(new_width_img / aspect_ratio)
-                else:  # 高度是长边或正方形
-                    new_height_img = max(target_max, int(target_width / aspect_ratio))
-                    new_width_img = int(new_height_img * aspect_ratio)
-                new_width_img = ((new_width_img + min_unit - 1) // min_unit) * min_unit
-                new_height_img = ((new_height_img + min_unit - 1) // min_unit) * min_unit
+                if img_orig_width > img_orig_height:
+                    img_new_width = max(target_max, int(target_height * aspect_ratio))
+                    img_new_height = int(img_new_width / aspect_ratio)
+                else:
+                    img_new_height = max(target_max, int(target_width / aspect_ratio))
+                    img_new_width = int(img_new_height * aspect_ratio)
+                img_new_width = ((img_new_width + min_unit - 1) // min_unit) * min_unit
+                img_new_height = ((img_new_height + min_unit - 1) // min_unit) * min_unit
 
-        # 处理 MASK 的缩放尺寸
-        new_width_mask = new_height_mask = None
+        # 计算 MASK 的缩放尺寸（如果提供）
+        mask_new_width, mask_new_height = 0, 0
         if mask is not None:
             if resize_mode == "force_resize":
-                new_width_mask, new_height_mask = target_width, target_height
+                mask_new_width, mask_new_height = target_width, target_height
             elif resize_mode == "scale_proportionally":
-                aspect_ratio = orig_width_mask / orig_height_mask
+                aspect_ratio = mask_orig_width / mask_orig_height
                 if target_width / target_height > aspect_ratio:
-                    new_height_mask = target_height
-                    new_width_mask = int(new_height_mask * aspect_ratio)
+                    mask_new_height = target_height
+                    mask_new_width = int(mask_new_height * aspect_ratio)
                 else:
-                    new_width_mask = target_width
-                    new_height_mask = int(new_width_mask / aspect_ratio)
-                new_width_mask = ((new_width_mask + min_unit - 1) // min_unit) * min_unit
-                new_height_mask = ((new_height_mask + min_unit - 1) // min_unit) * min_unit
+                    mask_new_width = target_width
+                    mask_new_height = int(mask_new_width / aspect_ratio)
+                mask_new_width = ((mask_new_width + min_unit - 1) // min_unit) * min_unit
+                mask_new_height = ((mask_new_height + min_unit - 1) // min_unit) * min_unit
             elif resize_mode == "limited_by_canvas":
-                aspect_ratio = orig_width_mask / orig_height_mask
+                aspect_ratio = mask_orig_width / mask_orig_height
                 if target_width / target_height > aspect_ratio:
-                    new_height_mask = target_height
-                    new_width_mask = int(new_height_mask * aspect_ratio)
+                    mask_new_height = target_height
+                    mask_new_width = int(mask_new_height * aspect_ratio)
                 else:
-                    new_width_mask = target_width
-                    new_height_mask = int(new_width_mask / aspect_ratio)
-                new_width_mask = ((new_width_mask + min_unit - 1) // min_unit) * min_unit
-                new_height_mask = ((new_height_mask + min_unit - 1) // min_unit) * min_unit
+                    mask_new_width = target_width
+                    mask_new_height = int(mask_new_width / aspect_ratio)
+                mask_new_width = ((mask_new_width + min_unit - 1) // min_unit) * min_unit
+                mask_new_height = ((mask_new_height + min_unit - 1) // min_unit) * min_unit
             elif resize_mode == "fill_the_canvas":
-                aspect_ratio = orig_width_mask / orig_height_mask
+                aspect_ratio = mask_orig_width / mask_orig_height
                 target_max = max(target_width, target_height)
-                if orig_width_mask > orig_height_mask:  # 宽度是长边
-                    new_width_mask = max(target_max, int(target_height * aspect_ratio))
-                    new_height_mask = int(new_width_mask / aspect_ratio)
-                else:  # 高度是长边或正方形
-                    new_height_mask = max(target_max, int(target_width / aspect_ratio))
-                    new_width_mask = int(new_height_mask * aspect_ratio)
-                new_width_mask = ((new_width_mask + min_unit - 1) // min_unit) * min_unit
-                new_height_mask = ((new_height_mask + min_unit - 1) // min_unit) * min_unit
+                if mask_orig_width > mask_orig_height:
+                    mask_new_width = max(target_max, int(target_height * aspect_ratio))
+                    mask_new_height = int(mask_new_width / aspect_ratio)
+                else:
+                    mask_new_height = max(target_max, int(target_width / aspect_ratio))
+                    mask_new_width = int(mask_new_height * aspect_ratio)
+                mask_new_width = ((mask_new_width + min_unit - 1) // min_unit) * min_unit
+                mask_new_height = ((mask_new_height + min_unit - 1) // min_unit) * min_unit
 
         # 调整 IMAGE 尺寸（如果提供）
         resized_img = None
         if image is not None:
-            resized_img = F.interpolate(
-                img.permute(0, 3, 1, 2),  # B, C, H, W
-                size=(new_height_img, new_width_img),
-                mode=INTERPOLATION_MODES[interpolation],
-                align_corners=False if interpolation in ["bilinear", "bicubic"] else None
-            ).permute(0, 2, 3, 1)  # B, H, W, C
+            if interpolation == "lanczos":
+                # 使用 torchvision 的 resize 支持 lanczos
+                resized_img = resize(
+                    img.permute(0, 3, 1, 2),  # B, C, H, W
+                    size=[img_new_height, img_new_width],
+                    interpolation=3,  # Lanczos 对应 PIL 的 3
+                    antialias=True
+                ).permute(0, 2, 3, 1)  # B, H, W, C
+            else:
+                resized_img = F.interpolate(
+                    img.permute(0, 3, 1, 2),  # B, C, H, W
+                    size=(img_new_height, img_new_width),
+                    mode=INTERPOLATION_MODES[interpolation],
+                    align_corners=False if interpolation in ["bilinear", "bicubic"] else None
+                ).permute(0, 2, 3, 1)  # B, H, W, C
 
         # 调整 MASK 尺寸（如果提供）
         resized_mask = None
         if mask is not None:
-            resized_mask = F.interpolate(
-                mask.permute(0, 3, 1, 2),  # B, C, H, W
-                size=(new_height_mask, new_width_mask),
-                mode=INTERPOLATION_MODES[interpolation],
-                align_corners=False if interpolation in ["bilinear", "bicubic"] else None
-            ).permute(0, 2, 3, 1)  # B, H, W, C
+            if interpolation == "lanczos":
+                # 使用 torchvision 的 resize 支持 lanczos
+                resized_mask = resize(
+                    mask.permute(0, 3, 1, 2),  # B, C, H, W
+                    size=[mask_new_height, mask_new_width],
+                    interpolation=3,  # Lanczos 对应 PIL 的 3
+                    antialias=True
+                ).permute(0, 2, 3, 1)  # B, H, W, C
+            else:
+                resized_mask = F.interpolate(
+                    mask.permute(0, 3, 1, 2),  # B, C, H, W
+                    size=(mask_new_height, mask_new_width),
+                    mode=INTERPOLATION_MODES[interpolation],
+                    align_corners=False if interpolation in ["bilinear", "bicubic"] else None
+                ).permute(0, 2, 3, 1)  # B, H, W, C
 
         # 处理缩放模式
         if resize_mode == "limited_by_canvas":
             if image is not None:
-                offset_y = (target_height - new_height_img) // 2
-                offset_x = (target_width - new_width_img) // 2
-                img_fill_tensor = torch.tensor(img_fill_value, dtype=torch.float32).view(1, 1, 1, -1).expand(batch_size, target_height, target_width, channels_img)
+                offset_y = (target_height - img_new_height) // 2
+                offset_x = (target_width - img_new_width) // 2
+                img_fill_tensor = torch.tensor(img_fill_value, dtype=torch.float32).view(1, 1, 1, -1).expand(batch_size, target_height, target_width, img_channels)
                 img_output = img_fill_tensor.clone()
-                img_output[:, offset_y:offset_y + new_height_img, offset_x:offset_x + new_width_img, :] = resized_img
+                img_output[:, offset_y:offset_y + img_new_height, offset_x:offset_x + img_new_width, :] = resized_img
                 resized_img = img_output
             if mask is not None:
-                offset_y = (target_height - new_height_mask) // 2
-                offset_x = (target_width - new_width_mask) // 2
+                offset_y = (target_height - mask_new_height) // 2
+                offset_x = (target_width - mask_new_width) // 2
                 mask_fill_tensor = torch.tensor(mask_fill_value, dtype=torch.float32).view(1, 1, 1, 1).expand(batch_size, target_height, target_width, 1)
                 mask_output = mask_fill_tensor.clone()
-                mask_output[:, offset_y:offset_y + new_height_mask, offset_x:offset_x + new_width_mask, :] = resized_mask
+                mask_output[:, offset_y:offset_y + mask_new_height, offset_x:offset_x + mask_new_width, :] = resized_mask
                 resized_mask = mask_output
         elif resize_mode == "fill_the_canvas":
             if image is not None:
-                img_output = torch.zeros(batch_size, target_height, target_width, channels_img, dtype=torch.float32)
-                offset_y = (new_height_img - target_height) // 2
-                offset_x = (new_width_img - target_width) // 2
+                img_output = torch.zeros(batch_size, target_height, target_width, img_channels, dtype=torch.float32)
+                offset_y = (img_new_height - target_height) // 2
+                offset_x = (img_new_width - target_width) // 2
                 y_start = max(0, offset_y)
-                y_end = min(new_height_img, offset_y + target_height)
+                y_end = min(img_new_height, offset_y + target_height)
                 x_start = max(0, offset_x)
-                x_end = min(new_width_img, offset_x + target_width)
+                x_end = min(img_new_width, offset_x + target_width)
                 out_y_start = max(0, -offset_y)
                 out_y_end = out_y_start + (y_end - y_start)
                 out_x_start = max(0, -offset_x)
@@ -219,12 +242,12 @@ class XIS_ResizeImageOrMask:
                 resized_img = img_output
             if mask is not None:
                 mask_output = torch.zeros(batch_size, target_height, target_width, 1, dtype=torch.float32)
-                offset_y = (new_height_mask - target_height) // 2
-                offset_x = (new_width_mask - target_width) // 2
+                offset_y = (mask_new_height - target_height) // 2
+                offset_x = (mask_new_width - target_width) // 2
                 y_start = max(0, offset_y)
-                y_end = min(new_height_mask, offset_y + target_height)
+                y_end = min(mask_new_height, offset_y + target_height)
                 x_start = max(0, offset_x)
-                x_end = min(new_width_mask, offset_x + target_width)
+                x_end = min(mask_new_width, offset_x + target_width)
                 out_y_start = max(0, -offset_y)
                 out_y_end = out_y_start + (y_end - y_start)
                 out_x_start = max(0, -offset_x)
