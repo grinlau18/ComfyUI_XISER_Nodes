@@ -5,24 +5,17 @@ import numpy as np
 from PIL import Image
 import torch.nn.functional as F
 from torchvision.transforms.functional import resize
+from typing import List, Union
 
-# 定义缩放算法映射
+# 对图像和蒙版进行指定的缩放操作，支持多种缩放模式和插值模式
 INTERPOLATION_MODES = {
     "nearest": "nearest",
     "bilinear": "bilinear",
     "bicubic": "bicubic",
     "area": "area",
-    "nearest-exact": "nearest_exact",
+    "nearest_exact": "nearest_exact",  # 修正为正确的模式名称
     "lanczos": "lanczos",
 }
-
-# HEX 颜色转换为 RGB（0-1 范围）
-def hex_to_rgb(hex_str):
-    hex_str = hex_str.lstrip('#')
-    if len(hex_str) != 6:
-        raise ValueError("HEX color must be in #RRGGBB format")
-    r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
-    return (r / 255.0, g / 255.0, b / 255.0)
 
 class XIS_ResizeImageOrMask:
     @classmethod
@@ -46,12 +39,17 @@ class XIS_ResizeImageOrMask:
     RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT")
     RETURN_NAMES = ("resized_image", "resized_mask", "width", "height")
     FUNCTION = "resize_image_or_mask"
-    CATEGORY = "XISER_Nodes/ImageProcessing"
+    CATEGORY = "XISER_Nodes"
 
     def resize_image_or_mask(self, resize_mode, interpolation, min_unit, image=None, mask=None, reference_image=None, manual_width=None, manual_height=None, fill_hex="#000000"):
         # 检查是否有至少一个输入
         if image is None and mask is None:
             raise ValueError("At least one of 'image' or 'mask' must be provided")
+
+        # HEX 颜色转换为 RGB 值
+        fill_rgb = hex_to_rgb(fill_hex)
+        img_fill_value = fill_rgb if (image is not None and image.shape[-1] == 3) else (*fill_rgb, 1.0) if image is not None else None
+        mask_fill_value = fill_rgb[0]  # 蒙版使用灰度值
 
         # 处理 IMAGE 输入（如果提供）
         img_batch_size, img_orig_height, img_orig_width = 0, 0, 0
@@ -91,11 +89,6 @@ class XIS_ResizeImageOrMask:
         # 调整目标尺寸为 min_unit 的倍数
         target_width = ((target_width + min_unit - 1) // min_unit) * min_unit
         target_height = ((target_height + min_unit - 1) // min_unit) * min_unit
-
-        # 将 HEX 颜色转换为 RGB 值
-        fill_rgb = hex_to_rgb(fill_hex)
-        img_fill_value = fill_rgb if (image is not None and image.shape[-1] == 3) else (*fill_rgb, 1.0) if image is not None else None
-        mask_fill_value = fill_rgb[0]  # 蒙版使用灰度值
 
         # 计算 IMAGE 的缩放尺寸（如果提供）
         img_new_width, img_new_height = 0, 0
@@ -263,6 +256,13 @@ class XIS_ResizeImageOrMask:
 
         return (resized_img, resized_mask, target_width, target_height)
 
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#')
+    if len(hex_str) != 6:
+        raise ValueError("HEX color must be in #RRGGBB format")
+    r, g, b = int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16)
+    return (r / 255.0, g / 255.0, b / 255.0)
+
 
 # 输入多个提示词并通过开关控制是否输出，以列表输出所有开启的提示词，如果无任何提示词开启则输出"No prompts to display."，并且输出一个布尔值来判断提示词是否为空。
 class XIS_PromptsWithSwitches:
@@ -338,6 +338,54 @@ class XIS_INT_Slider:
         return (value,)
 
 
+# 从列表中获取单个元素,支持多种类型的列表
+class GetSingleFromListMeta(type):
+    """
+    Allows random access too using primitive node!
+    Can also use negative indexes to access in reverse.
+    """
+
+    def __new__(cls, name, bases, attrs):
+        if 'RETURN_TYPES' not in attrs:
+            attrs['RETURN_TYPES'] = (attrs["TYPE"].upper(),)
+
+        if 'CATEGORY' not in attrs:
+            attrs['CATEGORY'] = 'XISER_Nodes/ListProcessing'
+
+        attrs['FUNCTION'] = 'get_one'
+        attrs['INPUT_IS_LIST'] = True
+
+        def get_one(self, list, index):
+            index = index[0]
+            index = index % len(list)
+            return (list[index],)
+
+        def INPUT_TYPES(cls):
+            return {
+                "required": {
+                    "list": (attrs["TYPE"].upper(), {"forceInput": True}),
+                    "index": ("INT", {"default": 0, "min": -2147483648})
+                }
+            }
+
+        attrs['get_one'] = get_one
+
+        if 'INPUT_TYPES' not in attrs:
+            attrs['INPUT_TYPES'] = classmethod(INPUT_TYPES)
+
+        return super().__new__(cls, name, bases, attrs)
+
+
+class XIS_FromListGet1Mask(metaclass=GetSingleFromListMeta):  TYPE = "MASK"
+class XIS_FromListGet1Image(metaclass=GetSingleFromListMeta):  TYPE = "IMAGE"
+class XIS_FromListGet1Latent(metaclass=GetSingleFromListMeta):  TYPE = "LATENT"
+class XIS_FromListGet1Cond(metaclass=GetSingleFromListMeta):  TYPE = "CONDITIONING"
+class XIS_FromListGet1Model(metaclass=GetSingleFromListMeta):  TYPE = "MODEL"
+class XIS_FromListGet1Color(metaclass=GetSingleFromListMeta):  TYPE = "COLOR"
+class XIS_FromListGet1String(metaclass=GetSingleFromListMeta): TYPE = "STRING"
+class XIS_FromListGet1Int(metaclass=GetSingleFromListMeta): TYPE = "INT"
+class XIS_FromListGet1Float(metaclass=GetSingleFromListMeta): TYPE = "FLOAT"
+
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
@@ -345,6 +393,16 @@ NODE_CLASS_MAPPINGS = {
     "XIS_Float_Slider": XIS_Float_Slider,
     "XIS_INT_Slider": XIS_INT_Slider,
     "XIS_ResizeImageOrMask": XIS_ResizeImageOrMask,
+    "XIS_FromListGet1Mask": XIS_FromListGet1Mask,
+    "XIS_FromListGet1Image": XIS_FromListGet1Image,
+    "XIS_FromListGet1Latent": XIS_FromListGet1Latent,
+    "XIS_FromListGet1Cond": XIS_FromListGet1Cond,
+    "XIS_FromListGet1Model": XIS_FromListGet1Model,
+    "XIS_FromListGet1Color": XIS_FromListGet1Color,
+    "XIS_FromListGet1String": XIS_FromListGet1String,
+    "XIS_FromListGet1Int": XIS_FromListGet1Int,
+    "XIS_FromListGet1Float": XIS_FromListGet1Float,
+
 }
 
 # 节点显示名称映射
@@ -353,4 +411,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "XIS_Float_Slider": "Float Slider",
     "XIS_INT_Slider": "INT Slider",
     "XIS_ResizeImageOrMask": "Resize Image or Mask",
+    "XIS_FromListGet1Mask": "From List Get1 Mask",
+    "XIS_FromListGet1Image": "From List Get1 Image",
+    "XIS_FromListGet1Latent": "From List Get1 Latent",
+    "XIS_FromListGet1Cond": "From List Get1 Cond",
+    "XIS_FromListGet1Model": "From List Get1 Model",
+    "XIS_FromListGet1Color": "From List Get1 Color",
+    "XIS_FromListGet1String": "From List Get1 String",
+    "XIS_FromListGet1Int": "From List Get1 Int",
+    "XIS_FromListGet1Float": "From List Get1 Float",
+
 }
