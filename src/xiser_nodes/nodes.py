@@ -162,9 +162,11 @@ class XIS_InvertMask:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image": ("IMAGE",),
                 "mask": ("MASK",),
                 "invert": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
             }
         }
 
@@ -173,46 +175,45 @@ class XIS_InvertMask:
     FUNCTION = "invert_mask"
     CATEGORY = "XISER_Nodes"
 
-    def invert_mask(self, image, mask, invert):
-        # 确保输入掩码是张量
+    def invert_mask(self, mask, invert, image=None):
+        # 确保输入掩码是张量并使用浮点类型
         if not isinstance(mask, torch.Tensor):
             mask = torch.tensor(mask, dtype=torch.float32)
+        mask = mask.to(dtype=torch.float32)
 
-        # 调试：检查输入掩码的原始值范围
+        # 调试：检查输入掩码的原始值范围和样本值
         print(f"Input mask range (raw): {mask.min().item()} - {mask.max().item()}")
-
-        # 归一化处理：如果范围是 0-1，则转换为 0-255
-        mask_max = mask.max().item()
-        if mask_max <= 1.0:
-            mask = mask * 255.0  # 转换为 0-255 范围
-        # 如果范围已是 0-255，则无需转换
-
-        # 调试：检查归一化后的值范围
-        print(f"Input mask range (normalized): {mask.min().item()} - {mask.max().item()}")
+        print(f"Input mask sample values (raw): {mask.flatten()[:10].tolist()}")
 
         # 检查掩码是否全为 0
         is_all_zero = torch.all(mask == 0)
 
-        if is_all_zero:
-            # 掩码全为 0：输出与 image 尺寸匹配的全白掩码 (255)
-            mask_output = torch.full_like(image[..., 0], 255)  # 使用 image 的第一个通道作为尺寸参考
+        # 确定输入范围
+        mask_max = mask.max().item()
+        is_0_to_1_range = mask_max > 0 and mask_max <= 1.0
+
+        # 如果掩码全为 0 且提供了 image 输入，输出与 image 尺寸匹配的全白掩码
+        if is_all_zero and image is not None:
+            if is_0_to_1_range:
+                mask_output = torch.full_like(image[..., 0], 1.0, dtype=torch.float32)  # 全 1.0
+            else:
+                mask_output = torch.full_like(image[..., 0], 255.0, dtype=torch.float32)  # 全 255.0
         else:
-            # 掩码不全为 0：根据 invert 开关处理
+            # 根据输入范围执行反转
             if invert:
-                mask_output = 255.0 - mask  # 反转：0变为255，255变为0
+                if is_0_to_1_range:
+                    mask_output = 1.0 - mask  # 反转：0变为1，1变为0
+                else:
+                    mask_output = 255.0 - mask  # 反转：0变为255，255变为0
             else:
                 mask_output = mask  # 保持原始掩码
 
-            # 如果掩码尺寸与 image 不匹配，调整尺寸
-            if mask_output.shape[-2:] != image.shape[1:3]:
-                mask_output = torch.nn.functional.interpolate(
-                    mask_output.unsqueeze(0), size=image.shape[1:3], mode="nearest"
-                ).squeeze(0)
-
-        # 调试：检查输出掩码的值范围
+        # 调试：检查输出掩码的值范围和样本值
         print(f"Mask output range: {mask_output.min().item()} - {mask_output.max().item()}")
+        print(f"Mask output sample values: {mask_output.flatten()[:10].tolist()}")
 
         return (mask_output,)
+    
 
 # 对输入的图像和蒙版进行镜像翻转操作，支持水平和垂直翻转
 class XIS_ImageMaskMirror:
