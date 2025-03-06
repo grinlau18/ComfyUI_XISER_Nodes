@@ -7,6 +7,278 @@ import torch.nn.functional as F
 from torchvision.transforms.functional import resize
 from typing import List, Union
 
+
+# 判断是否有信号接入，否则输出默认值（INT、FLOAT、BOOLEAN）
+class XIS_IsThereAnyData:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "default_int": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "step": 1}),
+                "default_float": ("FLOAT", {"default": 0.0, "min": -1e10, "max": 1e10, "step": 0.01}),
+                "default_boolean": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                "int_input": ("INT",),
+                "float_input": ("FLOAT",),
+                "boolean_input": ("BOOLEAN",),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "FLOAT", "BOOLEAN")
+    RETURN_NAMES = ("int_output", "float_output", "boolean_output")
+    FUNCTION = "select_value"
+    CATEGORY = "XISER_Nodes"
+
+    def select_value(self, default_int, default_float, default_boolean, 
+                    int_input=None, float_input=None, boolean_input=None):
+        # 判断是否有信号接入并选择输出值
+        int_output = int_input if int_input is not None else default_int
+        float_output = float_input if float_input is not None else default_float
+        boolean_output = boolean_input if boolean_input is not None else default_boolean
+
+        # 调试：打印输出值
+        print(f"INT output: {int_output}")
+        print(f"FLOAT output: {float_output}")
+        print(f"BOOLEAN output: {boolean_output}")
+
+        return (int_output, float_output, boolean_output)
+
+# 将图片或者蒙版缩放到最接近的可整除尺寸
+class XIS_ResizeToDivisible:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "divisor": ("INT", {"default": 64, "min": 1, "max": 1024, "step": 1}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "mask": ("MASK",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("image_output", "mask_output")
+    FUNCTION = "resize_to_divisible"
+    CATEGORY = "XISER_Nodes"
+
+    def resize_to_divisible(self, divisor, image=None, mask=None):
+        # 如果两个输入都为空，返回 None
+        if image is None and mask is None:
+            return (None, None)
+
+        # 初始化输出
+        image_output = None
+        mask_output = None
+
+        # 处理图像
+        if image is not None:
+            image_output = self._resize_tensor(image, divisor, is_image=True)
+
+        # 处理蒙版
+        if mask is not None:
+            mask_output = self._resize_tensor(mask, divisor, is_image=False)
+
+        return (image_output, mask_output)
+
+    def _resize_tensor(self, tensor, divisor, is_image=False):
+        # 获取原始尺寸
+        if is_image:
+            batch, height, width, channels = tensor.shape
+        else:
+            # 对于 mask，可能是 2D 或 3D
+            if tensor.dim() == 2:
+                tensor = tensor.unsqueeze(0)  # 添加 batch 维度
+            batch, height, width = tensor.shape
+            channels = 1
+
+        orig_aspect = width / height
+
+        # 计算目标尺寸（宽高需被 divisor 整除）
+        target_height = self._nearest_divisible(height, divisor)
+        target_width = self._nearest_divisible(width, divisor)
+        target_aspect = target_width / target_height
+
+        # 缩放到中间尺寸，保持比例
+        if orig_aspect > target_aspect:
+            # 原始宽度较宽，按目标高度缩放
+            scale = target_height / height
+            intermediate_width = int(width * scale)
+            intermediate_height = target_height
+        else:
+            # 原始高度较高，按目标宽度缩放
+            scale = target_width / width
+            intermediate_height = int(height * scale)
+            intermediate_width = target_width
+
+        # 调整张量维度并缩放
+        if is_image:
+            # image: [batch, height, width, channels] -> [batch, channels, height, width]
+            tensor_permuted = tensor.permute(0, 3, 1, 2)
+            tensor_resized = F.interpolate(
+                tensor_permuted,
+                size=(intermediate_height, intermediate_width),
+                mode="nearest"
+            )
+            # 恢复原始维度顺序
+            tensor_resized = tensor_resized.permute(0, 2, 3, 1)
+        else:
+            # mask: [batch, height, width]
+            tensor_resized = F.interpolate(
+                tensor.unsqueeze(0),  # 添加 channel 维度: [1, batch, height, width]
+                size=(intermediate_height, intermediate_width),
+                mode="nearest"
+            ).squeeze(0)  # 移除 channel 维度
+
+        # 居中裁剪到目标尺寸
+        if intermediate_height != target_height or intermediate_width != target_width:
+            start_h = (intermediate_height - target_height) // 2
+            start_w = (intermediate_width - target_width) // 2
+            tensor_resized = tensor_resized[:, start_h:start_h + target_height, start_w:start_w + target_width]
+
+        # 调试：检查输出尺寸
+        print(f"Resized tensor shape: {tensor_resized.shape}")
+
+        # 对于 mask，如果输入是 2D，移除 batch 维度
+        if not is_image and tensor.dim() == 2:
+            tensor_resized = tensor_resized.squeeze(0)
+
+        return tensor_resized
+
+    def _nearest_divisible(self, value, divisor):
+        # 找到最接近 value 且能被 divisor 整除的数
+        quotient = value // divisor
+        lower = quotient * divisor
+        upper = (quotient + 1) * divisor
+        # 选择最接近原始值的尺寸
+        if abs(value - lower) < abs(value - upper):
+            return lower
+        return upper
+
+# 对输入的掩码进行反转处理，如掩码为空，则输出接入参考图尺寸匹配的全白掩码
+class XIS_InvertMask:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "mask": ("MASK",),
+                "invert": ("BOOLEAN", {"default": True}),
+            }
+        }
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("mask_output",)
+    FUNCTION = "invert_mask"
+    CATEGORY = "XISER_Nodes"
+
+    def invert_mask(self, image, mask, invert):
+        # 确保输入掩码是张量
+        if not isinstance(mask, torch.Tensor):
+            mask = torch.tensor(mask, dtype=torch.float32)
+
+        # 调试：检查输入掩码的原始值范围
+        print(f"Input mask range (raw): {mask.min().item()} - {mask.max().item()}")
+
+        # 归一化处理：如果范围是 0-1，则转换为 0-255
+        mask_max = mask.max().item()
+        if mask_max <= 1.0:
+            mask = mask * 255.0  # 转换为 0-255 范围
+        # 如果范围已是 0-255，则无需转换
+
+        # 调试：检查归一化后的值范围
+        print(f"Input mask range (normalized): {mask.min().item()} - {mask.max().item()}")
+
+        # 检查掩码是否全为 0
+        is_all_zero = torch.all(mask == 0)
+
+        if is_all_zero:
+            # 掩码全为 0：输出与 image 尺寸匹配的全白掩码 (255)
+            mask_output = torch.full_like(image[..., 0], 255)  # 使用 image 的第一个通道作为尺寸参考
+        else:
+            # 掩码不全为 0：根据 invert 开关处理
+            if invert:
+                mask_output = 255.0 - mask  # 反转：0变为255，255变为0
+            else:
+                mask_output = mask  # 保持原始掩码
+
+            # 如果掩码尺寸与 image 不匹配，调整尺寸
+            if mask_output.shape[-2:] != image.shape[1:3]:
+                mask_output = torch.nn.functional.interpolate(
+                    mask_output.unsqueeze(0), size=image.shape[1:3], mode="nearest"
+                ).squeeze(0)
+
+        # 调试：检查输出掩码的值范围
+        print(f"Mask output range: {mask_output.min().item()} - {mask_output.max().item()}")
+
+        return (mask_output,)
+
+# 对输入的图像和蒙版进行镜像翻转操作，支持水平和垂直翻转
+class XIS_ImageMaskMirror:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "flip_axis": (["X", "Y"], {"default": "X"}),
+                "enable_flip": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "mask": ("MASK",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("image_output", "mask_output")
+    FUNCTION = "mirror_flip"
+    CATEGORY = "XISER_Nodes"
+
+    def mirror_flip(self, flip_axis, enable_flip, image=None, mask=None):
+        # 如果两个输入都为空，返回空值
+        if image is None and mask is None:
+            return (None, None)
+
+        # 处理图像
+        image_output = None
+        if image is not None:
+            if enable_flip:
+                if flip_axis == "X":
+                    image_output = image.flip(2)  # 水平翻转 (宽度维度)
+                else:  # Y轴
+                    image_output = image.flip(1)  # 垂直翻转 (高度维度)
+            else:
+                image_output = image
+
+        # 处理蒙版
+        mask_output = None
+        if mask is not None:
+            # 打印蒙版形状以调试
+            print(f"Input mask shape: {mask.shape}")
+            
+            # 确保蒙版维度正确处理
+            mask_input = mask
+            if mask.dim() == 2:  # [height, width]
+                mask_input = mask.unsqueeze(0)  # 添加批量维度变为 [1, height, width]
+            
+            if enable_flip:
+                if flip_axis == "X":
+                    mask_output = mask_input.flip(2)  # 水平翻转 (宽度维度)
+                else:  # Y轴
+                    mask_output = mask_input.flip(1)  # 垂直翻转 (高度维度)
+            else:
+                mask_output = mask_input
+            
+            # 如果添加了批量维度，移除它以保持输出一致
+            if mask.dim() == 2:
+                mask_output = mask_output.squeeze(0)
+            
+            print(f"Output mask shape: {mask_output.shape}")
+
+        return (image_output, mask_output)
+
+
+
 # 对图像和蒙版进行指定的缩放操作，支持多种缩放模式和插值模式
 INTERPOLATION_MODES = {
     "nearest": "nearest",
@@ -402,7 +674,10 @@ NODE_CLASS_MAPPINGS = {
     "XIS_FromListGet1String": XIS_FromListGet1String,
     "XIS_FromListGet1Int": XIS_FromListGet1Int,
     "XIS_FromListGet1Float": XIS_FromListGet1Float,
-
+    "XIS_ImageMaskMirror": XIS_ImageMaskMirror,
+    "XIS_InvertMask": XIS_InvertMask,
+    "XIS_ResizeToDivisible": XIS_ResizeToDivisible,
+    "XIS_IsThereAnyData": XIS_IsThereAnyData,
 }
 
 # 节点显示名称映射
@@ -420,5 +695,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "XIS_FromListGet1String": "From List Get1 String",
     "XIS_FromListGet1Int": "From List Get1 Int",
     "XIS_FromListGet1Float": "From List Get1 Float",
-
+    "XIS_ImageMaskMirror": "Image Mask Mirror", 
+    "XIS_InvertMask": "Invert Mask",
+    "XIS_ResizeToDivisible": "Resize To Divisible",
+    "XIS_IsThereAnyData": "Is There Any Data",
 }
