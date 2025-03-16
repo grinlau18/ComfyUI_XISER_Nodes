@@ -336,6 +336,7 @@ class XIS_ResizeImageOrMask:
         return {
             "required": {
                 "resize_mode": (["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas"], {"default": "force_resize"}),
+                "scale_condition": (["downscale_only", "upscale_only", "always"], {"default": "always"}),
                 "interpolation": (list(INTERPOLATION_MODES.keys()), {"default": "bilinear"}),
                 "min_unit": ("INT", {"default": 16, "min": 1, "max": 64, "step": 1}),
             },
@@ -354,12 +355,15 @@ class XIS_ResizeImageOrMask:
     FUNCTION = "resize_image_or_mask"
     CATEGORY = "XISER_Nodes"
 
-    def resize_image_or_mask(self, resize_mode: str, interpolation: str, min_unit: int,
+    def resize_image_or_mask(self, resize_mode: str, scale_condition: str, interpolation: str, min_unit: int,
                             image: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None,
                             reference_image: Optional[torch.Tensor] = None, manual_width: Optional[int] = None,
                             manual_height: Optional[int] = None, fill_hex: str = "#000000") -> Tuple:
         if image is None and mask is None:
             raise ValueError("At least one of 'image' or 'mask' must be provided")
+        
+        # 确保 min_unit 不小于 1
+        min_unit = max(1, min_unit)  # 添加保护措施
         
         if reference_image is not None:
             if reference_image.dim() != 4:
@@ -370,8 +374,9 @@ class XIS_ResizeImageOrMask:
         else:
             raise ValueError("Must provide either reference_image or both manual_width and manual_height")
         
-        target_width = (target_width + min_unit - 1) // min_unit * min_unit
-        target_height = (target_height + min_unit - 1) // min_unit * min_unit
+        # 确保目标尺寸有效并按 min_unit 对齐
+        target_width = max(1, (target_width + min_unit - 1) // min_unit * min_unit)
+        target_height = max(1, (target_height + min_unit - 1) // min_unit * min_unit)
         fill_rgb = hex_to_rgb(fill_hex)
 
         def compute_size(orig_w: int, orig_h: int) -> Tuple[int, int, int, int]:
@@ -399,26 +404,39 @@ class XIS_ResizeImageOrMask:
                 h = (h + min_unit - 1) // min_unit * min_unit
                 return w, h, (w - target_width) // 2, (h - target_height) // 2
 
+        def should_resize(orig_w: int, orig_h: int, target_w: int, target_h: int) -> bool:
+            if scale_condition == "always":
+                return True
+            elif scale_condition == "downscale_only":
+                return orig_w > target_w or orig_h > target_h
+            elif scale_condition == "upscale_only":
+                return orig_w < target_w or orig_h < target_h
+            return False
+
         resized_img = None
         if image is not None:
             if image.dim() != 4:
                 raise ValueError(f"Image must be 4D [B, H, W, C], got {image.shape}")
             batch_size, orig_h, orig_w, channels = image.shape
-            w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
-            resized_img = resize_tensor(image, (h, w), INTERPOLATION_MODES[interpolation])
-            if resize_mode == "limited_by_canvas":
-                output = torch.full((batch_size, target_height, target_width, channels), 0, device=image.device, dtype=image.dtype)
-                output.copy_(fill_rgb.expand(batch_size, target_height, target_width, channels))
-                output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_img
-                resized_img = output
-            elif resize_mode == "fill_the_canvas":
-                output = torch.zeros(batch_size, target_height, target_width, channels, device=image.device, dtype=image.dtype)
-                y_start, y_end = max(0, offset_y), min(h, offset_y + target_height)
-                x_start, x_end = max(0, offset_x), min(w, offset_x + target_width)
-                out_h, out_w = y_end - y_start, x_end - x_start
-                output[:, :out_h, :out_w] = resized_img[:, y_start:y_start+out_h, x_start:x_start+out_w]
-                resized_img = output
-            resized_img.clamp_(0, 1)
+            
+            if should_resize(orig_w, orig_h, target_width, target_height):
+                w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
+                resized_img = resize_tensor(image, (h, w), INTERPOLATION_MODES[interpolation])
+                if resize_mode == "limited_by_canvas":
+                    output = torch.full((batch_size, target_height, target_width, channels), 0, device=image.device, dtype=image.dtype)
+                    output.copy_(fill_rgb.expand(batch_size, target_height, target_width, channels))
+                    output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_img
+                    resized_img = output
+                elif resize_mode == "fill_the_canvas":
+                    output = torch.zeros(batch_size, target_height, target_width, channels, device=image.device, dtype=image.dtype)
+                    y_start, y_end = max(0, offset_y), min(h, offset_y + target_height)
+                    x_start, x_end = max(0, offset_x), min(w, offset_x + target_width)
+                    out_h, out_w = y_end - y_start, x_end - x_start
+                    output[:, :out_h, :out_w] = resized_img[:, y_start:y_start+out_h, x_start:x_start+out_w]
+                    resized_img = output
+                resized_img.clamp_(0, 1)
+            else:
+                resized_img = image
 
         resized_mask = None
         if mask is not None:
@@ -426,24 +444,30 @@ class XIS_ResizeImageOrMask:
                 raise ValueError(f"Mask must be 2D [H, W] or 3D [B, H, W], got {mask.shape}")
             mask_input = mask.unsqueeze(0) if mask.dim() == 2 else mask
             batch_size, orig_h, orig_w = mask_input.shape
-            w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
-            resized_mask = resize_tensor(mask_input.unsqueeze(-1), (h, w), INTERPOLATION_MODES[interpolation]).squeeze(-1)
-            if resize_mode == "limited_by_canvas":
-                output = torch.full((batch_size, target_height, target_width), fill_rgb[0], device=mask.device, dtype=mask.dtype)
-                output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_mask
-                resized_mask = output
-            elif resize_mode == "fill_the_canvas":
-                output = torch.zeros(batch_size, target_height, target_width, device=mask.device, dtype=mask.dtype)
-                y_start, y_end = max(0, offset_y), min(h, offset_y + target_height)
-                x_start, x_end = max(0, offset_x), min(w, offset_x + target_width)
-                out_h, out_w = y_end - y_start, x_end - x_start
-                output[:, :out_h, :out_w] = resized_mask[:, y_start:y_start+out_h, x_start:x_start+out_w]
-                resized_mask = output
-            resized_mask.clamp_(0, 1)
+            
+            if should_resize(orig_w, orig_h, target_width, target_height):
+                w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
+                resized_mask = resize_tensor(mask_input.unsqueeze(-1), (h, w), INTERPOLATION_MODES[interpolation]).squeeze(-1)
+                if resize_mode == "limited_by_canvas":
+                    output = torch.full((batch_size, target_height, target_width), fill_rgb[0], device=mask.device, dtype=mask.dtype)
+                    output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_mask
+                    resized_mask = output
+                elif resize_mode == "fill_the_canvas":
+                    output = torch.zeros(batch_size, target_height, target_width, device=mask.device, dtype=mask.dtype)
+                    y_start, y_end = max(0, offset_y), min(h, offset_y + target_height)
+                    x_start, x_end = max(0, offset_x), min(w, offset_x + target_width)
+                    out_h, out_w = y_end - y_start, x_end - x_start
+                    output[:, :out_h, :out_w] = resized_mask[:, y_start:y_start+out_h, x_start:x_start+out_w]
+                    resized_mask = output
+                resized_mask.clamp_(0, 1)
+            else:
+                resized_mask = mask_input
+            
             if mask.dim() == 2:
                 resized_mask = resized_mask.squeeze(0)
 
         return (resized_img, resized_mask, target_width, target_height)
+
 
 # 输入多个提示词并通过开关控制输出
 class XIS_PromptsWithSwitches:
