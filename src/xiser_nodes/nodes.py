@@ -18,6 +18,7 @@ def hex_to_rgb(hex_str: str) -> torch.Tensor:
         raise ValueError("HEX color must be in #RRGGBB format")
     return torch.tensor([int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4)], dtype=torch.float32)
 
+
 # 使用蒙版去底并裁剪，支持蒙版反转和背景颜色填充
 class XIS_CropImage:
     @classmethod
@@ -120,6 +121,82 @@ class XIS_IsThereAnyData:
         float_output = float_input if float_input is not None else default_float
         boolean_output = boolean_input if boolean_input is not None else default_boolean
         return (int_output, float_output, boolean_output)
+
+
+
+class XIS_IfDataIsNone:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "data_type": (["INT", "FLOAT", "BOOLEAN", "STRING", "NUMBER"], {"default": "STRING"}),
+                "default_value": ("STRING", {"default": "0"}),
+            },
+            "optional": {
+                "signal": ("*", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("BOOLEAN", "ANY")
+    RETURN_NAMES = ("is_not_null", "result")
+    FUNCTION = "check_signal"
+    CATEGORY = "XISER_Nodes"
+
+    def check_signal(self, data_type, default_value, signal=None):
+        is_not_null = signal is not None
+        value_to_convert = signal if is_not_null else default_value
+
+        # 如果是列表，逐项转换；否则按单一值处理
+        if isinstance(value_to_convert, (list, tuple)):
+            result = [self.convert_single_item(item, data_type) for item in value_to_convert]
+        else:
+            result = self.convert_single_item(value_to_convert, data_type)
+
+        return (is_not_null, result)
+
+    def convert_single_item(self, value, data_type):
+        if data_type == "INT":
+            return self.to_int(value)
+        elif data_type == "FLOAT":
+            return self.to_float(value)
+        elif data_type == "BOOLEAN":
+            return self.to_boolean(value)
+        elif data_type == "STRING":
+            return self.to_string(value)
+        elif data_type == "NUMBER":
+            return self.to_number(value)
+        return value
+
+    def to_int(self, value):
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return 0
+
+    def to_float(self, value):
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return 0.0
+
+    def to_boolean(self, value):
+        if isinstance(value, bool):
+            return value
+        try:
+            return str(value).lower() in ("true", "1")
+        except:
+            return False
+
+    def to_string(self, value):
+        return str(value)
+
+    def to_number(self, value):
+        try:
+            return float(value) if "." in str(value) else int(value)
+        except (ValueError, TypeError):
+            return 0
+
+
 
 # 将图片或蒙版缩放到最接近的可整除尺寸
 class XIS_ResizeToDivisible:
@@ -547,6 +624,7 @@ NODE_CLASS_MAPPINGS = {
     "XIS_FromListGet1Int": XIS_FromListGet1Int,
     "XIS_FromListGet1Float": XIS_FromListGet1Float,
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
+    "XIS_IfDataIsNone": XIS_IfDataIsNone,
 }
 
 # 节点显示名称映射
@@ -570,4 +648,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "XIS_FromListGet1Int": "From List Get1 Int",
     "XIS_FromListGet1Float": "From List Get1 Float",
     "XIS_ReorderImageMaskGroups": "Reorder Image Mask Groups",
+    "XIS_IfDataIsNone": "If Data Is None",
 }
