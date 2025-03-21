@@ -5,6 +5,10 @@ import torch.nn.functional as F
 from torchvision.transforms.functional import resize
 from typing import List, Union, Tuple, Optional
 import logging
+from PIL import Image, ImageDraw
+import numpy as np
+import comfy.samplers
+  
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -129,7 +133,7 @@ class XIS_IfDataIsNone:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "data_type": (["INT", "FLOAT", "BOOLEAN", "STRING", "NUMBER"], {"default": "STRING"}),
+                "data_type": (["INT", "FLOAT", "BOOLEAN", "STRING"], {"default": "STRING"}),  # 移除 NUMBER，避免类型歧义
                 "default_value": ("STRING", {"default": "0"}),
             },
             "optional": {
@@ -137,8 +141,8 @@ class XIS_IfDataIsNone:
             }
         }
 
-    RETURN_TYPES = ("BOOLEAN", "ANY")
-    RETURN_NAMES = ("is_not_null", "result")
+    RETURN_TYPES = ("BOOLEAN", "INT", "FLOAT", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("is_not_null", "int_output", "float_output", "boolean_output", "string_output")
     FUNCTION = "check_signal"
     CATEGORY = "XISER_Nodes"
 
@@ -152,7 +156,13 @@ class XIS_IfDataIsNone:
         else:
             result = self.convert_single_item(value_to_convert, data_type)
 
-        return (is_not_null, result)
+        # 根据 data_type 返回对应类型的输出，其他端口返回默认值
+        int_output = result if data_type == "INT" else (0 if not isinstance(result, list) else [0] * len(result))
+        float_output = result if data_type == "FLOAT" else (0.0 if not isinstance(result, list) else [0.0] * len(result))
+        boolean_output = result if data_type == "BOOLEAN" else (False if not isinstance(result, list) else [False] * len(result))
+        string_output = result if data_type == "STRING" else ("" if not isinstance(result, list) else [""] * len(result))
+
+        return (is_not_null, int_output, float_output, boolean_output, string_output)
 
     def convert_single_item(self, value, data_type):
         if data_type == "INT":
@@ -163,8 +173,6 @@ class XIS_IfDataIsNone:
             return self.to_boolean(value)
         elif data_type == "STRING":
             return self.to_string(value)
-        elif data_type == "NUMBER":
-            return self.to_number(value)
         return value
 
     def to_int(self, value):
@@ -189,13 +197,6 @@ class XIS_IfDataIsNone:
 
     def to_string(self, value):
         return str(value)
-
-    def to_number(self, value):
-        try:
-            return float(value) if "." in str(value) else int(value)
-        except (ValueError, TypeError):
-            return 0
-
 
 
 # 将图片或蒙版缩放到最接近的可整除尺寸
@@ -626,6 +627,176 @@ class XIS_ReorderImageMaskGroups:
                 output_images[4], output_masks[4])
 
 
+class XIS_CompositorProcessor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),  # 目标图片输入，ComfyUI 的 IMAGE 类型
+                "x": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 x 坐标
+                "y": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 y 坐标
+                "width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放宽度
+                "height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放高度
+                "angle": ("INT", {"default": 0, "min": -360, "max": 360, "step": 1}),  # 旋转角度
+                "canvas_width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板宽度
+                "canvas_height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板高度
+                "background_color": ("STRING", {"default": "#FFFFFF"}),  # 画板底色（HEX 值）
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("output_image",)
+    FUNCTION = "transform_image"
+    CATEGORY = "XISER_Nodes"
+
+    def transform_image(self, image, x, y, width, height, angle, canvas_width, canvas_height, background_color):
+        # 将 ComfyUI 的 IMAGE 类型（torch.Tensor）转换为 PIL 图像
+        image_tensor = image[0]  # 假设批量大小为 1，取第一张图
+        image_np = image_tensor.cpu().numpy() * 255  # 转换为 0-255 范围
+        image_np = image_np.astype(np.uint8)
+        pil_image = Image.fromarray(image_np)
+
+        # 确保 width 和 height 大于 0
+        width = max(1, width)
+        height = max(1, height)
+
+        # 创建画板
+        try:
+            # 验证并转换 HEX 颜色值
+            bg_color = tuple(int(background_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        except ValueError:
+            bg_color = (255, 255, 255)  # 默认白色，如果 HEX 值无效
+        canvas = Image.new("RGB", (canvas_width, canvas_height), bg_color)
+
+        # 缩放目标图片
+        resized_image = pil_image.resize((width, height), Image.Resampling.LANCZOS)
+
+        # 旋转目标图片
+        rotated_image = resized_image.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC)
+
+        # 计算放置位置（x, y 是中心点）
+        rot_width, rot_height = rotated_image.size
+        paste_x = x - rot_width // 2
+        paste_y = y - rot_height // 2
+
+        # 将旋转后的图片粘贴到画板上
+        canvas.paste(rotated_image, (paste_x, paste_y), rotated_image if rotated_image.mode == "RGBA" else None)
+
+        # 将 PIL 图像转换回 ComfyUI 的 IMAGE 类型
+        output_np = np.array(canvas).astype(np.float32) / 255.0  # 转换为 0-1 范围
+        output_tensor = torch.from_numpy(output_np).unsqueeze(0)  # 添加批次维度
+
+        return (output_tensor,)
+
+
+# K采样器设置打包节点
+class XIS_KSamplerSettingsNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        sampler_options = comfy.samplers.SAMPLER_NAMES
+        scheduler_options = comfy.samplers.SCHEDULER_NAMES
+        
+        return {
+            "required": {
+                "steps": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000,
+                    "step": 1,
+                    "display": "number"
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 7.5,
+                    "min": 0.0,
+                    "max": 100.0,
+                    "step": 0.1,
+                    "display": "number"
+                }),
+                "sampler_name": (sampler_options, {
+                    "default": "euler"
+                }),
+                "scheduler": (scheduler_options, {
+                    "default": "normal"
+                }),
+                "start_step": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 10000,
+                    "step": 1,
+                    "display": "number"
+                }),
+                "end_step": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000,
+                    "step": 1,
+                    "display": "number"
+                })
+            },
+            "optional": {
+                "model": ("MODEL",),  # 改为可选输入
+                "vae": ("VAE",),      # 改为可选输入
+                "clip": ("CLIP",),    # 改为可选输入
+            }
+        }
+
+    RETURN_TYPES = ("DICT",)
+    RETURN_NAMES = ("settings_pack",)
+    
+    FUNCTION = "get_settings"
+    CATEGORY = "XISER_Nodes"
+
+    def get_settings(self, steps, cfg, sampler_name, scheduler, start_step, end_step, model=None, vae=None, clip=None):
+        if end_step <= start_step:
+            end_step = start_step + 1
+            
+        settings_pack = {
+            "model": model,
+            "vae": vae,
+            "clip": clip,
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": sampler_name,
+            "scheduler": scheduler,
+            "start_step": start_step,
+            "end_step": end_step
+        }
+        
+        return (settings_pack,)
+
+# K采样器设置解包节点
+class XIS_KSamplerSettingsUnpackNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "settings_pack": ("DICT", {})
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "VAE", "CLIP", "INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS, "INT", "INT")
+    RETURN_NAMES = ("model", "vae", "clip", "steps", "cfg", "sampler_name", "scheduler", "start_step", "end_step")
+    
+    FUNCTION = "unpack_settings"
+    CATEGORY = "XISER_Nodes"
+
+    def unpack_settings(self, settings_pack):
+        model = settings_pack.get("model")  # 无默认值，保持为 None 如果未提供
+        vae = settings_pack.get("vae")      # 无默认值，保持为 None 如果未提供
+        clip = settings_pack.get("clip")    # 无默认值，保持为 None 如果未提供
+        steps = settings_pack.get("steps", 20)
+        cfg = settings_pack.get("cfg", 7.5)
+        sampler_name = settings_pack.get("sampler_name", "euler")
+        scheduler = settings_pack.get("scheduler", "normal")
+        start_step = settings_pack.get("start_step", 0)
+        end_step = settings_pack.get("end_step", 20)
+        
+        if end_step <= start_step:
+            end_step = start_step + 1
+            
+        return (model, vae, clip, steps, cfg, sampler_name, scheduler, start_step, end_step)
+    
+
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
@@ -649,6 +820,9 @@ NODE_CLASS_MAPPINGS = {
     "XIS_FromListGet1Float": XIS_FromListGet1Float,
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
     "XIS_IfDataIsNone": XIS_IfDataIsNone,
+    "XIS_CompositorProcessor": XIS_CompositorProcessor,
+    "XIS_KSamplerSettingsNode": XIS_KSamplerSettingsNode,
+    "XIS_KSamplerSettingsUnpackNode": XIS_KSamplerSettingsUnpackNode,
 }
 
 # 节点显示名称映射
@@ -673,4 +847,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "XIS_FromListGet1Float": "From List Get1 Float",
     "XIS_ReorderImageMaskGroups": "Reorder Image Mask Groups",
     "XIS_IfDataIsNone": "If Data Is None",
+    "XIS_CompositorProcessor": "Compositor Processor",
+    "XIS_KSamplerSettingsNode": "KSampler Settings Node",
+    "XIS_KSamplerSettingsUnpackNode": "KSampler Settings Unpack Node",
 }
