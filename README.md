@@ -10,7 +10,7 @@ A collection of custom nodes for ComfyUI
 
 ## Node usage instructions
 
-1. XIS_CropImage
+## XIS_CropImage
 功能描述
 使用蒙版裁剪图像，并支持蒙版反转和背景颜色填充。节点会根据蒙版的非零区域裁剪图像，并在蒙版为 0 的区域填充指定背景色，还可以添加额外的边框宽度。
 
@@ -39,7 +39,8 @@ plaintext
 
 输出：
 - image: 裁剪后的图像，主体周围填充白色背景，并有 10 像素的边框
-2. XIS_IsThereAnyData
+
+## XIS_IsThereAnyData
 功能描述
 检查是否有信号输入，并根据输入是否存在选择输出值。如果输入端口未连接，则输出默认值；否则输出输入值。
 
@@ -74,7 +75,8 @@ plaintext
 - int_output: 10
 - float_output: 1.2
 - boolean_output: False
-3. XIS_IfDataIsNone
+
+## XIS_IfDataIsNone
 功能描述
 检查输入信号是否为空，并将信号或默认值转换为指定数据类型输出。返回一个布尔值表示信号是否非空，以及对应类型的转换结果。
 
@@ -107,7 +109,8 @@ plaintext
 - float_output: 3.14
 - boolean_output: False
 - string_output: ""
-4. XIS_ResizeToDivisible
+
+## XIS_ResizeToDivisible
 功能描述
 将输入的图像或蒙版缩放到最接近的可被指定除数整除的尺寸。
 
@@ -134,7 +137,8 @@ plaintext
 输出：
 - image_output: 512x704 的图像（最接近 64 的倍数）
 - mask_output: None
-5. XIS_InvertMask
+
+## XIS_InvertMask
 功能描述
 对输入蒙版进行反转处理，支持根据图像生成默认蒙版（全 1）。
 
@@ -159,7 +163,8 @@ plaintext
 
 输出：
 - mask_output: 反转后的 512x512 蒙版
-6. XIS_ImageMaskMirror
+
+## XIS_ImageMaskMirror
 功能描述
 对图像和蒙版进行水平（X 轴）或垂直（Y 轴）镜像翻转。
 
@@ -188,7 +193,8 @@ plaintext
 输出：
 - image_output: 水平翻转的 512x512 图像
 - mask_output: None
-7. XIS_ResizeImageOrMask
+
+## XIS_ResizeImageOrMask
 功能描述
 对图像或蒙版进行缩放，支持多种缩放模式（如强制缩放、按比例缩放等），并可以参考图像或手动指定尺寸。
 
@@ -233,7 +239,8 @@ plaintext
 - resized_mask: None
 - width: 512
 - height: 512
-8. XIS_PromptsWithSwitches
+
+## XIS_PromptsWithSwitches
 功能描述
 输入多个提示词，并通过开关控制哪些提示词输出。返回启用的非空提示词列表和一个布尔值表示是否有有效提示。
 
@@ -262,7 +269,8 @@ plaintext
 输出：
 - prompts: ["cat"]
 - has_prompts: True
-9. XIS_Float_Slider
+
+## XIS_Float_Slider
 功能描述
 通过滑块输入一个浮点数值。
 
@@ -283,7 +291,8 @@ plaintext
 
 输出：
 - value: 0.75
-10. XIS_INT_Slider
+
+## XIS_INT_Slider
 功能描述
 通过滑块输入一个整数值。
 
@@ -304,7 +313,8 @@ plaintext
 
 输出：
 - value: 42
-11. XIS_FromListGet1<Type> (Mask, Image, Latent, Cond, Model, Color, String, Int, Float)
+
+## XIS_FromListGet1<Type> (Mask, Image, Latent, Cond, Model, Color, String, Int, Float)
 功能描述
 从输入列表中获取指定索引的单个元素，支持多种数据类型（如 MASK, IMAGE, LATENT 等）。
 
@@ -328,7 +338,8 @@ plaintext
 
 输出：
 - output: "banana"
-12. XIS_ReorderImageMaskGroups
+
+## XIS_ReorderImageMaskGroups
 功能描述
 重新排序输入的图像和蒙版组，将新的图像-蒙版对插入指定位置。
 
@@ -369,7 +380,8 @@ plaintext
 - mask_4: None
 - image_5: None
 - mask_5: None
-13. XIS_CompositorProcessor
+
+## XIS_CompositorProcessor
 功能描述
 对输入图像进行缩放、旋转并放置到指定画板上，支持中心点定位和背景颜色设置。
 
@@ -406,7 +418,8 @@ plaintext
 
 输出：
 - output_image: 512x512 画板，图像缩放到 128x128 并旋转 45 度，位于中心
-14. XIS_KSamplerSettingsNode
+
+## XIS_KSamplerSettingsNode
 功能描述
 打包 KSampler 的采样设置到一个字典中，方便后续解包使用。
 
@@ -440,7 +453,8 @@ plaintext
 
 输出：
 - settings_pack: {"steps": 30, "cfg": 8.0, "sampler_name": "dpmpp_2m", ...}
-15. XIS_KSamplerSettingsUnpackNode
+
+## XIS_KSamplerSettingsUnpackNode
 功能描述
 从打包的设置字典中解包 KSampler 参数。
 
@@ -472,7 +486,8 @@ plaintext
 - cfg: 8.0
 - sampler_name: "dpmpp_2m"
 - ...
-16. XIS_MaskCompositeOperation
+
+## XIS_MaskCompositeOperation
 功能描述
 对两个掩码执行布尔操作（加、减、交、差），并支持模糊、扩充/缩减、反转处理。如果提供参考图像，会生成叠加图像，掩码为 0 的区域保持原图。
 
