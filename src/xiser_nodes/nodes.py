@@ -5,10 +5,11 @@ import torch.nn.functional as F
 from torchvision.transforms.functional import resize
 from typing import List, Union, Tuple, Optional
 import logging
-from PIL import Image, ImageDraw
 import numpy as np
 import comfy.samplers
-  
+import comfy.utils
+from PIL import Image, ImageFilter, ImageOps
+import cv2
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -197,6 +198,7 @@ class XIS_IfDataIsNone:
 
     def to_string(self, value):
         return str(value)
+
 
 
 # 将图片或蒙版缩放到最接近的可整除尺寸
@@ -797,6 +799,164 @@ class XIS_KSamplerSettingsUnpackNode:
         return (model, vae, clip, steps, cfg, sampler_name, scheduler, start_step, end_step)
     
 
+class XIS_MaskCompositeOperation:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "mask1": ("MASK",),
+                "operation": (["add", "subtract", "intersect", "difference"], {"default": "add"}),
+                "blur_radius": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 100.0, "step": 0.1}),
+                "expand_shrink": ("FLOAT", {"default": 0.0, "min": -100.0, "max": 100.0, "step": 0.1}),
+                "invert_mask": ("BOOLEAN", {"default": False}),
+                "overlay_color": ("STRING", {"default": "#FF0000"}),
+                "opacity": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
+            },
+            "optional": {
+                "mask2": ("MASK", {"default": None}),
+                "reference_image": ("IMAGE", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("MASK", "IMAGE")
+    RETURN_NAMES = ("result_mask", "overlay_image")
+    FUNCTION = "apply_operations"
+    CATEGORY = "XISER_Nodes"
+
+    def apply_operations(self, mask1, operation, blur_radius, expand_shrink, invert_mask, overlay_color, opacity, mask2=None, reference_image=None):
+        # 将 mask1 转换为 NumPy 数组并获取尺寸
+        mask1_np = mask1.squeeze().cpu().numpy()
+        mask1_height, mask1_width = mask1_np.shape
+
+        # 检查 mask2 是否存在且是否为 64x64 全零掩码
+        mask2_is_empty = False
+        if mask2 is not None:
+            mask2_np = mask2.squeeze().cpu().numpy()
+            # 检查是否为 64x64 全零掩码
+            if mask2_np.shape == (64, 64) and np.all(mask2_np == 0):
+                mask2_is_empty = True
+            else:
+                # 如果 mask2 非空且尺寸与 mask1 不一致，缩放到 mask1 尺寸
+                if mask2_np.shape != mask1_np.shape:
+                    mask2_pil = Image.fromarray((mask2_np * 255).astype(np.uint8))
+                    mask2_pil = mask2_pil.resize((mask1_width, mask1_height), Image.LANCZOS)
+                    mask2_np = np.array(mask2_pil).astype(np.float32) / 255.0
+
+        # 如果 mask2 存在且非空，执行蒙版操作
+        if mask2 is not None and not mask2_is_empty:
+            # 执行蒙版操作
+            if operation == "add":
+                result_np = np.clip(mask1_np + mask2_np, 0, 1)
+            elif operation == "subtract":
+                result_np = np.clip(mask1_np - mask2_np, 0, 1)
+            elif operation == "intersect":
+                result_np = np.minimum(mask1_np, mask2_np)
+            elif operation == "difference":
+                result_np = np.abs(mask1_np - mask2_np)
+        else:
+            # 如果 mask2 为 None 或全零掩码，直接使用 mask1
+            result_np = mask1_np
+
+        # 转换为 PIL 图像
+        result = Image.fromarray((result_np * 255).astype(np.uint8))
+
+        # 形态学操作（扩展/收缩）
+        if expand_shrink != 0:
+            result = self.morphological_operation(result, expand_shrink)
+
+        # 模糊处理
+        if blur_radius > 0:
+            result = result.filter(ImageFilter.GaussianBlur(blur_radius))
+
+        # 反向蒙版
+        if invert_mask:
+            result = ImageOps.invert(result)
+
+        # 转换为 PyTorch 张量
+        result_mask = torch.from_numpy(np.array(result).astype(np.float32) / 255.0).unsqueeze(0)
+
+        # 生成叠加图像（仅当 reference_image 存在时）
+        overlay_tensor = None
+        if reference_image is not None:
+            # 转换参考图像为 PIL 格式（取第一张图）
+            ref_img_np = reference_image[0].cpu().numpy()  # [H, W, C]
+            ref_img_pil = Image.fromarray((ref_img_np * 255).astype(np.uint8))
+
+            # 调整参考图尺寸与 mask1 一致
+            if ref_img_pil.size != result.size:
+                ref_img_pil = ref_img_pil.resize((mask1_width, mask1_height), Image.LANCZOS)
+
+            # 创建纯色叠加层并合成
+            overlay_img = self.apply_mask_composite(ref_img_pil, overlay_color, result, opacity)
+            overlay_tensor = torch.from_numpy(np.array(overlay_img).astype(np.float32) / 255.0).unsqueeze(0)
+        else:
+            # 无参考图时返回与掩码尺寸一致的全零张量
+            overlay_tensor = torch.zeros_like(result_mask.unsqueeze(-1).expand(-1, -1, -1, 3))
+
+        return (result_mask, overlay_tensor)
+
+    def morphological_operation(self, image, amount):
+        """使用 OpenCV 实现形态学操作"""
+        np_image = np.array(image)
+        kernel_size = int(abs(amount) * 2 + 1)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        
+        if amount > 0:
+            processed = cv2.dilate(np_image, kernel, iterations=1)
+        else:
+            processed = cv2.erode(np_image, kernel, iterations=1)
+            
+        return Image.fromarray(processed)
+
+    def create_color_layer(self, size, hex_color):
+        """创建指定颜色的图层"""
+        try:
+            rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        except:
+            rgb = (255, 0, 0)  # 默认红色
+        return Image.new("RGB", size, rgb)
+
+    def apply_mask_composite(self, base_img, hex_color, mask, opacity):
+        """应用蒙版合成图像，确保掩码为 0 的区域显示原始图像"""
+        # 创建纯色图层
+        color_layer = self.create_color_layer(base_img.size, hex_color)
+        
+        # 将掩码转换为 L 模式（灰度）
+        mask = mask.convert("L")
+        
+        # 将基础图像和颜色层转换为 RGB 模式
+        base_rgb = base_img.convert("RGB")
+        color_rgb = color_layer.convert("RGB")
+        
+        # 使用 Image.composite，根据掩码合成图像
+        composite = Image.composite(color_rgb, base_rgb, mask)
+        
+        # 应用透明度，仅对掩码非零区域生效
+        final_img = Image.blend(base_rgb, composite, opacity)
+        
+        return final_img
+    
+
+class XIS_IPAStyleSettings:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "option": (["linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output",
+                            "weak middle", "strong middle", "style transfer", "composition", "strong style transfer",
+                            "style and composition", "style transfer precise", "composition precise"],),
+                "slider": ("FLOAT", {"default": 0.5, "min": 0.00, "max": 1.00, "step": 0.01, "display": "slider"}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "FLOAT")
+    FUNCTION = "process"
+    CATEGORY = "XISER_Nodes"
+
+    def process(self, option, slider):
+        return (option, slider)
+
+
 
 # 节点类映射
 NODE_CLASS_MAPPINGS = {
@@ -823,6 +983,8 @@ NODE_CLASS_MAPPINGS = {
     "XIS_CompositorProcessor": XIS_CompositorProcessor,
     "XIS_KSamplerSettingsNode": XIS_KSamplerSettingsNode,
     "XIS_KSamplerSettingsUnpackNode": XIS_KSamplerSettingsUnpackNode,
+    "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
+    "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
 }
 
 # 节点显示名称映射
@@ -850,4 +1012,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "XIS_CompositorProcessor": "Compositor Processor",
     "XIS_KSamplerSettingsNode": "KSampler Settings Node",
     "XIS_KSamplerSettingsUnpackNode": "KSampler Settings Unpack Node",
+    "XIS_MaskCompositeOperation": "Mask Composite Operation",
+    "XIS_IPAStyleSettings": "IPA Style Settings",
 }
