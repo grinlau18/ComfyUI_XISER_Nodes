@@ -9,6 +9,6 @@ Repository = "https://github.com/grinlau18/ComfyUI_XISER_Nodes"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = "@xiser"
+PublisherId = "xiser"
 DisplayName = "ComfyUI_XISER_Nodes"
 Icon = ""
