@@ -1,167 +1,176 @@
-## Node usage instructions
-
 # ComfyUI_XISER_Nodes
 
-This is a custom node package for ComfyUI, offering a variety of nodes for image processing, logic handling, UI control, and more.
+Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), designed to enhance your workflow with powerful tools for image processing, mask manipulation, logic handling, UI control, and more. Whether you're generating art, preparing data for machine learning, or designing creative layouts, these nodes offer flexible and practical solutions.
+
+---
 
 ## Installation
 
-1. Install [ComfyUI](https://docs.comfy.org/get_started).
-2. clone this repository under `ComfyUI/custom_nodes`.
-   Enter the ‘custom_nodes’ folder of ComfyUI using the terminal and then execute the following command to clone the repository:
-```bash
-git clone https://github.com/grinlau18/ComfyUI_XISER_Nodes.git
-```
-4. Restart ComfyUI.
+To get started, follow these steps:
 
+1. Clone this repository into the `custom_nodes` directory of your ComfyUI installation:
+   ```bash
+   git clone https://github.com/grinlau18/ComfyUI_XISER_Nodes.git
+   ```
+2. Restart ComfyUI to load the new nodes.
+3. Look for nodes under the `XISER_Nodes` category in the ComfyUI interface.
 
-## Node List
+**Dependencies**: Requires `torch`, `PIL`, `numpy`, `opencv-python`, and ComfyUI core libraries (typically installed with ComfyUI).
 
-### XIS_ImageStitcher
-功能: 将一张主图与最多四张子图拼接成一张图片，支持垂直或水平布局、主图位置（前或后）、背景颜色和边框大小的自定义。
+---
 
-详细用例:
+## Node Overview
 
-场景: 您正在为社交媒体（如Instagram）制作一个展示旅行照片的拼贴画，想将一张主要风景照与三张细节照片（例如食物、当地建筑、人物特写）组合。
-操作:
-输入一张主图（例如1920x1080的山景照片）。
-添加三张子图（每张640x480，例如美食、寺庙和当地人）。
-选择“垂直布局”，主图放在顶部，子图在下方依次排列。
-设置背景颜色为浅灰色（#D3D3D3），边框大小为20像素，增加视觉分隔。
-结果: 输出一张垂直排列的拼贴画，主图醒目展示旅行主题，下方子图补充细节，适合直接发布到社交媒体。
-用途: 这种拼接适用于制作展示板、相册页面或任何需要将多张图片整合为一个整体的场景。
+Nodes are organized into categories based on their functionality:
 
-### XIS_ResizeToDivisible
-功能: 将图片或蒙版调整到指定除数（例如64）的最近可整除尺寸，适合需要特定输入尺寸的模型。
+- **Image & Mask Processing**: Tools for stitching, resizing, cropping, flipping, and compositing images and masks.
+- **Logic Processing**: Nodes for handling conditional logic and data validation.
+- **UI Control**: Interactive components like sliders and prompt switches.
+- **List Processing**: Utilities for working with lists of various data types.
+- **Other Processing**: Miscellaneous tools for compositing, sampling settings, and prompt handling.
 
-详细用例:
+Below is a detailed breakdown of each node, including its purpose and a practical example.
 
-场景: 您在使用Stable Diffusion生成图像，但模型要求输入尺寸必须是64的倍数。现有图片是500x700，不符合要求。
-操作:
-输入500x700的图片。
-设置除数为64，节点自动将其调整为512x704（最近的可整除尺寸）。
-结果: 输出一张512x704的图片，保证模型正常运行，避免因尺寸不匹配导致的生成瑕疵（如边缘模糊或内容缺失）。
-用途: 这种调整在深度学习预处理中非常常见，尤其是图像生成或超分辨率任务，确保输入兼容模型架构。
+---
 
-### XIS_CropImage
-功能: 使用蒙版裁剪图片，隔离特定区域，支持反转蒙版并用指定颜色填充背景。
+## Detailed Node Descriptions
 
-详细用例:
+### Image & Mask Processing
 
-场景: 您有一张人物照片，想移除杂乱的背景，专注于主体（人物），用于制作证件照或头像。
-操作:
-输入原始图片（例如800x600的人物照）。
-输入蒙版，白色区域覆盖人物，黑色区域为背景。
-设置“反转蒙版”为否，背景填充颜色为白色（#FFFFFF）。
-结果: 输出一张只保留人物的图片，背景被裁剪并填充为纯白色，适合证件照或简洁设计。
-用途: 可用于背景移除、产品摄影（隔离商品）或艺术创作中突出特定元素。
+#### XIS_ImageStitcher
+- **Purpose**: Stitches a main image with up to four sub-images into a single output, with customizable layout (vertical/horizontal), main image position (front/back), background color, and border size.
+- **Inputs**: Main image (required), up to 4 sub-images (optional), layout, position, background color (HEX), border size.
+- **Outputs**: Stitched image.
+- **Example**:
+  - **Scenario**: Create a travel photo collage for Instagram.
+  - **Inputs**: Main image (1920x1080 mountain view), 3 sub-images (640x480: food, temple, local person), vertical layout, main image at top, `#D3D3D3` background, 20px border.
+  - **Output**: A vertical collage (1920x3160) with the mountain view on top and sub-images below, separated by 20px gray borders.
+- **Use Case**: Ideal for photo albums, social media posts, or multi-image presentations.
 
-### XIS_InvertMask
-功能: 反转蒙版的值（0变为1，1变为0）。
+#### XIS_ResizeToDivisible
+- **Purpose**: Resizes an image or mask to the nearest dimensions divisible by a specified number, ensuring compatibility with models requiring specific sizes.
+- **Inputs**: Divisor (e.g., 64), image or mask (optional).
+- **Outputs**: Resized image, resized mask.
+- **Example**:
+  - **Scenario**: Prepare an image for Stable Diffusion, which requires dimensions divisible by 64.
+  - **Inputs**: Image (500x700), divisor = 64.
+  - **Output**: Resized image (512x704).
+- **Use Case**: Preprocessing for AI models like diffusion or super-resolution.
 
-详细用例:
+#### XIS_CropImage
+- **Purpose**: Crops an image using a mask to isolate regions, with options to invert the mask and fill the background with a color.
+- **Inputs**: Image, mask (optional), invert mask (boolean), background color (HEX), padding width.
+- **Outputs**: Cropped image.
+- **Example**:
+  - **Scenario**: Remove a cluttered background from a portrait for a clean avatar.
+  - **Inputs**: Image (800x600 portrait), mask (white = person, black = background), invert mask = false, `#FFFFFF` background.
+  - **Output**: Cropped image with only the person, white background.
+- **Use Case**: Background removal, product photography, or focusing on specific elements.
 
-场景: 您有一个蒙版用于选择图片中的主体（例如一只猫），但现在想对背景应用模糊效果，而不是主体。
-操作:
-输入原始蒙版（白色为猫，黑色为背景）。
-使用此节点反转蒙版，生成新蒙版（白色为背景，黑色为猫）。
-结果: 新蒙版可用于后续节点（例如模糊处理），只对背景应用效果，保持猫的清晰度。
-用途: 在图像分割或特效处理中，反转蒙版常用于切换关注区域，例如背景虚化、前景增强等。
+#### XIS_InvertMask
+- **Purpose**: Inverts a mask’s values (0 to 1, 1 to 0).
+- **Inputs**: Mask, invert (boolean), optional image for reference.
+- **Outputs**: Inverted mask.
+- **Example**:
+  - **Scenario**: Apply a blur effect to the background instead of the subject (a cat).
+  - **Inputs**: Mask (white = cat, black = background), invert = true.
+  - **Output**: Inverted mask (white = background, black = cat).
+- **Use Case**: Switching focus in image editing (e.g., background vs. foreground effects).
 
-### XIS_ImageMaskMirror
-功能: 沿X轴或Y轴翻转图片和/或蒙版。
+#### XIS_ImageMaskMirror
+- **Purpose**: Flips an image and/or mask along the X or Y axis.
+- **Inputs**: Flip axis (X/Y), enable flip (boolean), image or mask (optional).
+- **Outputs**: Flipped image, flipped mask.
+- **Example**:
+  - **Scenario**: Augment training data for a dog detection model.
+  - **Inputs**: Image (1024x768 dog), mask (dog outline), flip axis = X, enable = true.
+  - **Output**: Horizontally flipped image and mask.
+- **Use Case**: Data augmentation, symmetry design, or correcting orientation.
 
-详细用例:
+#### XIS_ResizeImageOrMask
+- **Purpose**: Resizes an image or mask with modes like force resize or proportional scaling, using various interpolation methods.
+- **Inputs**: Resize mode, scale condition, interpolation, min unit, image/mask, reference image or manual dimensions, fill color.
+- **Outputs**: Resized image, resized mask, width, height.
+- **Example**:
+  - **Scenario**: Optimize a high-res image for web display.
+  - **Inputs**: Image (2000x1500), mode = proportional, target width = 800, bilinear interpolation.
+  - **Output**: Resized image (800x600).
+- **Use Case**: Web optimization, model input preparation, or canvas fitting.
 
-场景: 您在为机器学习模型准备训练数据，需要通过水平翻转增加数据集多样性。
-操作:
-输入一张图片（例如狗的侧面照，1024x768）和对应的蒙版（标记狗的轮廓）。
-设置“水平翻转”（X轴），同时翻转图片和蒙版。
-结果: 输出一张狗朝相反方向的图片及其匹配的蒙版，保持一致性。
-用途: 数据增强（机器学习）、对称设计（艺术创作）或纠正拍摄方向。
+#### XIS_ReorderImageMaskGroups
+- **Purpose**: Reorders groups of image-mask pairs, inserting a new pair at a specified position.
+- **Inputs**: Insert order, insert image/mask, up to 4 existing image-mask pairs.
+- **Outputs**: 5 reordered image-mask pairs.
+- **Example**:
+  - **Scenario**: Insert a plant image into a sequence of landscape, animal, and human images.
+  - **Inputs**: Existing pairs (landscape, animal, human), new pair (plant), insert order = 2.
+  - **Output**: Landscape, plant, animal, human, None.
+- **Use Case**: Adjusting batch processing order or prioritizing specific edits.
 
-### XIS_ResizeImageOrMask
-功能: 使用多种模式（强制调整、比例缩放等）和插值方法调整图片或蒙版大小。
+#### XIS_MaskCompositeOperation
+- **Purpose**: Combines masks with operations (add, subtract, intersect), supports blur, morphological ops, and color overlay.
+- **Inputs**: Mask1, operation, blur radius, expand/shrink, invert, overlay color, opacity, mask2, reference image.
+- **Outputs**: Result mask, overlay image.
+- **Example**:
+  - **Scenario**: Highlight overlapping sky and cloud regions in a photo.
+  - **Inputs**: Mask1 (sky), mask2 (clouds), operation = intersect, blur = 3.0, overlay = `#0000FF`, opacity = 0.5.
+  - **Output**: Mask of overlapping area, image with blue overlay.
+- **Use Case**: Segmentation, special effects, or annotation.
 
-详细用例:
+### Logic Processing
 
-场景: 您需要将一张高分辨率图片（2000x1500）调整为适合网络显示的大小，同时保持纵横比。
-操作:
-输入2000x1500的图片。
-选择“scale_proportionally”模式，目标宽度为800。
-使用“双线性插值”确保平滑缩放。
-结果: 输出800x600的图片，保持原始比例，图像质量良好。
-用途: 适用于网页优化、模型输入准备或调整图片以适应特定画布。
+#### XIS_IsThereAnyData
+- **Purpose**: Outputs an input signal (int, float, boolean) if present, or a default value if absent.
+- **Inputs**: Default int/float/boolean, optional int/float/boolean inputs.
+- **Outputs**: Int, float, boolean.
+- **Example**:
+  - **Scenario**: Ensure a generation workflow has a default iteration count.
+  - **Inputs**: Default int = 10, no int input connected.
+  - **Output**: 10 (int).
+- **Use Case**: Robust workflows with optional parameters.
 
-### XIS_ReorderImageMaskGroups
-功能: 在一组图片-蒙版对中插入新对并重新排序。
+#### XIS_IfDataIsNone
+- **Purpose**: Checks if input is null, outputs a value based on type or a default.
+- **Inputs**: Data type, default value, optional signal.
+- **Outputs**: Is not null (boolean), int/float/boolean/string output.
+- **Example**:
+  - **Scenario**: Provide a fallback description if no text is entered.
+  - **Inputs**: Type = STRING, default = "Default Description", signal = None.
+  - **Output**: False, "Default Description" (string).
+- **Use Case**: Handling user input or script fallbacks.
 
-详细用例:
+### UI Control
 
-场景: 您有一个包含三张图片和蒙版的工作流（例如风景、动物、人物），想在中间插入一张新图片（植物）并应用特殊效果。
-操作:
-输入三组现有图片-蒙版对。
-输入新图片-蒙版对（植物），指定插入位置为2。
-结果: 输出四组有序对：风景、植物、动物、人物，植物被正确插入。
-用途: 在批处理或多阶段工作流中调整操作顺序，例如按优先级应用滤镜。
+#### XIS_PromptsWithSwitches
+- **Purpose**: Combines multiple prompts with enable/disable switches.
+- **Inputs**: 5 prompt strings, 5 enable booleans.
+- **Outputs**: Prompt list, enabled status.
+- **Example**:
+  - **Scenario**: Generate art with selective descriptors.
+  - **Inputs**: Prompt1 = "forest" (enabled), Prompt2 = "night" (disabled), Prompt3 = "dreamy" (enabled).
+  - **Output**: ["forest", "dreamy"], True.
+- **Use Case**: Flexible prompt testing for generative AI.
 
-### XIS_MaskCompositeOperation
-功能: 对蒙版执行复合操作（加、减、相交等），支持模糊、形态学操作和颜色叠加。
+### Other Processing
 
-详细用例:
+#### XIS_CompositorProcessor
+- **Purpose**: Scales, rotates, and positions an image on a canvas with a background color.
+- **Inputs**: Image, x/y coordinates, width/height, angle, canvas size, background color.
+- **Outputs**: Processed image.
+- **Example**:
+  - **Scenario**: Create a poster with a rotated portrait.
+  - **Inputs**: Image (800x600), canvas = 1200x800, `#0000FF`, scale to 400x300, rotate 30°, x=100, y=100.
+  - **Output**: 1200x800 image with rotated portrait on blue background.
+- **Use Case**: Poster design, image compositing.
 
-场景: 您有两个蒙版，一个标记天空，一个标记云，想找到两者的重叠区域（云在天空中的部分）并高亮。
-操作:
-输入天空蒙版和云蒙版。
-选择“相交”操作，设置模糊半径为3.0，叠加颜色为蓝色（#0000FF），透明度50%。
-结果: 输出一个新蒙版，仅显示云与天空的重叠部分，边缘柔和，带有蓝色半透明高亮。
-用途: 分割重叠区域、创建特效或辅助图像标注。
+---
 
-### XIS_IsThereAnyData
-功能: 检查输入信号是否存在（支持int、float、boolean），若无则输出默认值。
+## Contributing
 
-详细用例:
+Contributions are welcome! Feel free to:
+- Submit pull requests with new features or bug fixes.
+- Open issues for suggestions or problems.
 
-场景: 在一个生成工作流中，某个可选参数（例如迭代次数）可能未连接，您希望提供默认值以避免中断。
-操作:
-输入一个未连接的整数信号。
-设置默认值为10。
-结果: 输出10，确保工作流继续运行。
-用途: 提高工作流健壮性，处理可选输入的缺失情况。
+## License
 
-### XIS_IfDataIsNone
-功能: 判断输入是否为空，并根据指定类型输出默认值。
-
-详细用例:
-
-场景: 您有一个文本输入字段用于描述图像内容，若用户未填写，则使用默认描述。
-操作:
-输入一个空的字符串信号。
-设置类型为STRING，默认值为“默认描述”。
-结果: 输出“默认描述”，保证后续节点有有效输入。
-用途: 在用户交互或自动化脚本中提供回退选项。
-
-### XIS_PromptsWithSwitches
-功能: 组合多个提示词，每个配有开关以动态启用/禁用。
-
-详细用例:
-
-场景: 您在生成艺术作品，想根据需求选择性使用描述词，例如“森林”、“夜晚”、“梦幻”。
-操作:
-输入三个提示词，分别启用“森林”和“梦幻”，禁用“夜晚”。
-输出列表：["森林", "梦幻"]。
-结果: 生成的图像包含森林和梦幻元素，忽略夜晚。
-用途: 动态调整生成内容，适合测试不同风格或主题。
-
-### XIS_CompositorProcessor
-功能: 在画布上缩放、旋转和定位图片，支持背景颜色设置。
-
-详细用例:
-
-场景: 您想制作一张海报，将一张人物图片旋转并放置在彩色背景的特定位置。
-操作:
-输入一张800x600的人物图片。
-设置画布为1200x800，背景颜色为蓝色（#0000FF）。
-缩放到50%（400x300），旋转30度，定位到画布左上角（x=100, y=100）。
-结果: 输出一张1200x800的海报，人物图片按指定方式放置在蓝色背景上。
-用途: 设计海报、合成图像或准备展示内容。
+This project is licensed under the [MIT License](LICENSE).
