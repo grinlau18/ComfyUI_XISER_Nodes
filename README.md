@@ -1,528 +1,167 @@
-# Xiser_Nodes
-
-A collection of custom nodes for ComfyUI
-
-## Quickstart
-
-1. Install [ComfyUI](https://docs.comfy.org/get_started).
-1. clone this repository under `ComfyUI/custom_nodes`.
-1. Restart ComfyUI.
-
 ## Node usage instructions
 
-## XIS_CropImage
-功能描述
-使用蒙版裁剪图像，并支持蒙版反转和背景颜色填充。节点会根据蒙版的非零区域裁剪图像，并在蒙版为 0 的区域填充指定背景色，还可以添加额外的边框宽度。
-
-输入参数
-image (IMAGE): 输入图像，ComfyUI 的图像张量格式 [B, H, W, C]。
-mask (MASK): 输入蒙版，用于裁剪图像，格式为 [H, W]。
-invert_mask (BOOLEAN, 默认: False): 是否反转蒙版（True 表示反转）。
-background_color (STRING, 默认: "#000000"): 背景颜色，使用 HEX 格式（如 #FFFFFF 为白色）。
-padding_width (INT, 默认: 0, 范围: 0-1024): 添加到裁剪图像周围的边框宽度（像素）。
-输出结果
-image (IMAGE): 裁剪并填充后的图像，格式为 [1, H_new, W_new, C]。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- image: 一张 512x512 的 RGB 图像
-- mask: 一个 512x512 的蒙版，非零区域为主体部分
-- invert_mask: False
-- background_color: "#FFFFFF" (白色)
-- padding_width: 10
-
-输出：
-- image: 裁剪后的图像，主体周围填充白色背景，并有 10 像素的边框
-
-## XIS_IsThereAnyData
-功能描述
-检查是否有信号输入，并根据输入是否存在选择输出值。如果输入端口未连接，则输出默认值；否则输出输入值。
-
-输入参数
-default_int (INT, 默认: 0): 默认整数值。
-default_float (FLOAT, 默认: 0.0): 默认浮点数值。
-default_boolean (BOOLEAN, 默认: False): 默认布尔值。
-int_input (INT, 可选): 输入整数值。
-float_input (FLOAT, 可选): 输入浮点数值。
-boolean_input (BOOLEAN, 可选): 输入布尔值。
-输出结果
-int_output (INT): 整数输出（输入或默认值）。
-float_output (FLOAT): 浮点数输出（输入或默认值）。
-boolean_output (BOOLEAN): 布尔值输出（输入或默认值）。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- default_int: 10
-- default_float: 0.5
-- default_boolean: True
-- int_input: 未连接
-- float_input: 1.2
-- boolean_input: False
-
-输出：
-- int_output: 10
-- float_output: 1.2
-- boolean_output: False
-
-## XIS_IfDataIsNone
-功能描述
-检查输入信号是否为空，并将信号或默认值转换为指定数据类型输出。返回一个布尔值表示信号是否非空，以及对应类型的转换结果。
-
-输入参数
-data_type (STRING, 默认: "STRING", 选项: ["INT", "FLOAT", "BOOLEAN", "STRING"]): 目标数据类型。
-default_value (STRING, 默认: "0"): 默认值，用于信号为空时。
-signal (*, 可选, 默认: None): 输入信号，任意类型。
-输出结果
-is_not_null (BOOLEAN): 输入信号是否非空。
-int_output (INT): 转换为整数的结果（若类型匹配）。
-float_output (FLOAT): 转换为浮点数的结果（若类型匹配）。
-boolean_output (BOOLEAN): 转换为布尔值的结果（若类型匹配）。
-string_output (STRING): 转换为字符串的结果（若类型匹配）。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- data_type: "FLOAT"
-- default_value: "0"
-- signal: 3.14
-
-输出：
-- is_not_null: True
-- int_output: 0
-- float_output: 3.14
-- boolean_output: False
-- string_output: ""
-
-## XIS_ResizeToDivisible
-功能描述
-将输入的图像或蒙版缩放到最接近的可被指定除数整除的尺寸。
-
-输入参数
-divisor (INT, 默认: 64, 范围: 1-1024): 目标尺寸的除数。
-image (IMAGE, 可选): 输入图像。
-mask (MASK, 可选): 输入蒙版。
-输出结果
-image_output (IMAGE): 缩放后的图像。
-mask_output (MASK): 缩放后的蒙版。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- divisor: 64
-- image: 500x700 的图像
-- mask: 未连接
-
-输出：
-- image_output: 512x704 的图像（最接近 64 的倍数）
-- mask_output: None
-
-## XIS_InvertMask
-功能描述
-对输入蒙版进行反转处理，支持根据图像生成默认蒙版（全 1）。
-
-输入参数
-mask (MASK): 输入蒙版。
-invert (BOOLEAN, 默认: True): 是否反转蒙版。
-image (IMAGE, 可选): 可选图像，用于生成默认蒙版。
-输出结果
-mask_output (MASK): 反转后的蒙版。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- mask: 512x512 的蒙版（0-1 范围）
-- invert: True
-- image: 未连接
-
-输出：
-- mask_output: 反转后的 512x512 蒙版
-
-## XIS_ImageMaskMirror
-功能描述
-对图像和蒙版进行水平（X 轴）或垂直（Y 轴）镜像翻转。
-
-输入参数
-flip_axis (STRING, 默认: "X", 选项: ["X", "Y"]): 翻转轴（X 为水平，Y 为垂直）。
-enable_flip (BOOLEAN, 默认: True): 是否启用翻转。
-image (IMAGE, 可选): 输入图像。
-mask (MASK, 可选): 输入蒙版。
-输出结果
-image_output (IMAGE): 翻转后的图像。
-mask_output (MASK): 翻转后的蒙版。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- flip_axis: "X"
-- enable_flip: True
-- image: 512x512 图像
-- mask: 未连接
-
-输出：
-- image_output: 水平翻转的 512x512 图像
-- mask_output: None
-
-## XIS_ResizeImageOrMask
-功能描述
-对图像或蒙版进行缩放，支持多种缩放模式（如强制缩放、按比例缩放等），并可以参考图像或手动指定尺寸。
-
-输入参数
-resize_mode (STRING, 默认: "force_resize", 选项: ["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas"]): 缩放模式。
-scale_condition (STRING, 默认: "always", 选项: ["downscale_only", "upscale_only", "always"]): 缩放条件。
-interpolation (STRING, 默认: "bilinear", 选项: ["nearest", "bilinear", "bicubic", "area", "nearest_exact", "lanczos"]): 插值方法。
-min_unit (INT, 默认: 16, 范围: 1-64): 最小尺寸单位。
-image (IMAGE, 可选): 输入图像。
-mask (MASK, 可选): 输入蒙版。
-reference_image (IMAGE, 可选): 参考图像，用于确定目标尺寸。
-manual_width (INT, 默认: 512, 范围: 1-4096): 手动宽度。
-manual_height (INT, 默认: 512, 范围: 1-4096): 手动高度。
-fill_hex (STRING, 默认: "#000000"): 填充颜色（HEX 格式）。
-输出结果
-resized_image (IMAGE): 缩放后的图像。
-resized_mask (MASK): 缩放后的蒙版。
-width (INT): 输出宽度。
-height (INT): 输出高度。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- resize_mode: "scale_proportionally"
-- scale_condition: "always"
-- interpolation: "bilinear"
-- min_unit: 16
-- image: 800x600 图像
-- mask: 未连接
-- reference_image: 512x512 图像
-- manual_width: 未连接
-- manual_height: 未连接
-- fill_hex: "#000000"
-
-输出：
-- resized_image: 按比例缩放到 512x384 的图像
-- resized_mask: None
-- width: 512
-- height: 512
-
-## XIS_PromptsWithSwitches
-功能描述
-输入多个提示词，并通过开关控制哪些提示词输出。返回启用的非空提示词列表和一个布尔值表示是否有有效提示。
-
-输入参数
-prompt_1 - prompt_5 (STRING, 默认: "", 多行): 提示词 1-5。
-enable_1 - enable_5 (BOOLEAN, 默认: True): 是否启用提示词 1-5。
-输出结果
-prompts (STRING, 列表): 启用的非空提示词列表。
-has_prompts (BOOLEAN): 是否有有效提示词。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- prompt_1: "cat"
-- enable_1: True
-- prompt_2: ""
-- enable_2: True
-- prompt_3: "dog"
-- enable_3: False
-
-输出：
-- prompts: ["cat"]
-- has_prompts: True
-
-## XIS_Float_Slider
-功能描述
-通过滑块输入一个浮点数值。
-
-输入参数
-value (FLOAT, 默认: 0.0, 范围: 0.0-1.0, 步长: 0.01, 显示: 滑块): 输入浮点数。
-输出结果
-value (FLOAT): 输入的浮点数值。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- value: 0.75
-
-输出：
-- value: 0.75
-
-## XIS_INT_Slider
-功能描述
-通过滑块输入一个整数值。
-
-输入参数
-value (INT, 默认: 0, 范围: 0-100, 步长: 1, 显示: 滑块): 输入整数。
-输出结果
-value (INT): 输入的整数值。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- value: 42
-
-输出：
-- value: 42
-
-## XIS_FromListGet1<Type> (Mask, Image, Latent, Cond, Model, Color, String, Int, Float)
-功能描述
-从输入列表中获取指定索引的单个元素，支持多种数据类型（如 MASK, IMAGE, LATENT 等）。
-
-输入参数
-list (<TYPE>, 列表): 输入列表。
-index (INT, 默认: 0): 要获取的元素索引。
-输出结果
-output (<TYPE>): 指定索引处的单个元素。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-节点：XIS_FromListGet1String
-输入：
-- list: ["apple", "banana", "cherry"]
-- index: 1
-
-输出：
-- output: "banana"
-
-## XIS_ReorderImageMaskGroups
-功能描述
-重新排序输入的图像和蒙版组，将新的图像-蒙版对插入指定位置。
-
-输入参数
-insert_order (INT, 默认: 1, 范围: 1-5): 插入位置（1-5）。
-insert_image (IMAGE, 可选): 要插入的图像。
-insert_mask (MASK, 可选): 要插入的蒙版。
-image_1 - image_4 (IMAGE, 可选): 原有图像 1-4。
-mask_1 - mask_4 (MASK, 可选): 原有蒙版 1-4。
-输出结果
-image_1 - image_5 (IMAGE): 重排后的图像。
-mask_1 - mask_5 (MASK): 重排后的蒙版。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- insert_order: 2
-- insert_image: 新图像
-- insert_mask: 新蒙版
-- image_1: 图像 A
-- mask_1: 蒙版 A
-- image_2: 图像 B
-- mask_2: 蒙版 B
-
-输出：
-- image_1: 图像 A
-- mask_1: 蒙版 A
-- image_2: 新图像
-- mask_2: 新蒙版
-- image_3: 图像 B
-- mask_3: 蒙版 B
-- image_4: None
-- mask_4: None
-- image_5: None
-- mask_5: None
-
-## XIS_CompositorProcessor
-功能描述
-对输入图像进行缩放、旋转并放置到指定画板上，支持中心点定位和背景颜色设置。
-
-输入参数
-image (IMAGE): 输入图像。
-x (INT, 默认: 0): 中心点 X 坐标。
-y (INT, 默认: 0): 中心点 Y 坐标。
-width (INT, 默认: 512): 缩放宽度。
-height (INT, 默认: 512): 缩放高度。
-angle (INT, 默认: 0): 旋转角度（度）。
-canvas_width (INT, 默认: 512): 画板宽度。
-canvas_height (INT, 默认: 512): 画板高度。
-background_color (STRING, 默认: "#FFFFFF"): 画板背景颜色（HEX 格式）。
-输出结果
-output_image (IMAGE): 处理后的图像。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- image: 256x256 图像
-- x: 256
-- y: 256
-- width: 128
-- height: 128
-- angle: 45
-- canvas_width: 512
-- canvas_height: 512
-- background_color: "#FFFFFF"
-
-输出：
-- output_image: 512x512 画板，图像缩放到 128x128 并旋转 45 度，位于中心
-
-## XIS_KSamplerSettingsNode
-功能描述
-打包 KSampler 的采样设置到一个字典中，方便后续解包使用。
-
-输入参数
-steps (INT, 默认: 20): 采样步数。
-cfg (FLOAT, 默认: 7.5): CFG 强度。
-sampler_name (STRING, 默认: "euler"): 采样器名称。
-scheduler (STRING, 默认: "normal"): 调度器名称。
-start_step (INT, 默认: 0): 开始步数。
-end_step (INT, 默认: 20): 结束步数。
-model (MODEL, 可选): 模型。
-vae (VAE, 可选): VAE。
-clip (CLIP, 可选): CLIP。
-输出结果
-settings_pack (DICT): 打包的设置字典。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- steps: 30
-- cfg: 8.0
-- sampler_name: "dpmpp_2m"
-- scheduler: "karras"
-- start_step: 0
-- end_step: 30
-
-输出：
-- settings_pack: {"steps": 30, "cfg": 8.0, "sampler_name": "dpmpp_2m", ...}
-
-## XIS_KSamplerSettingsUnpackNode
-功能描述
-从打包的设置字典中解包 KSampler 参数。
-
-输入参数
-settings_pack (DICT): 输入的设置字典。
-输出结果
-model (MODEL): 模型。
-vae (VAE): VAE。
-clip (CLIP): CLIP。
-steps (INT): 采样步数。
-cfg (FLOAT): CFG 强度。
-sampler_name (SAMPLER): 采样器名称。
-scheduler (SCHEDULER): 调度器名称。
-start_step (INT): 开始步数。
-end_step (INT): 结束步数。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- settings_pack: {"steps": 30, "cfg": 8.0, "sampler_name": "dpmpp_2m", ...}
-
-输出：
-- steps: 30
-- cfg: 8.0
-- sampler_name: "dpmpp_2m"
-- ...
-
-## XIS_MaskCompositeOperation
-功能描述
-对两个掩码执行布尔操作（加、减、交、差），并支持模糊、扩充/缩减、反转处理。如果提供参考图像，会生成叠加图像，掩码为 0 的区域保持原图。
-
-输入参数
-mask1 (MASK): 主输入蒙版。
-operation (STRING, 默认: "add", 选项: ["add", "subtract", "intersect", "difference"]): 布尔操作类型。
-blur_radius (FLOAT, 默认: 0.0, 范围: 0.0-100.0): 模糊半径。
-expand_shrink (FLOAT, 默认: 0.0, 范围: -100.0-100.0): 扩充（正）或缩减（负）。
-invert_mask (BOOLEAN, 默认: False): 是否反转结果蒙版。
-overlay_color (STRING, 默认: "#FF0000"): 叠加颜色（HEX 格式）。
-opacity (FLOAT, 默认: 0.5, 范围: 0.0-1.0): 叠加透明度。
-mask2 (MASK, 可选): 第二蒙版（若为 64x64 全零则视为 None）。
-reference_image (IMAGE, 可选): 参考图像。
-输出结果
-result_mask (MASK): 处理后的蒙版。
-overlay_image (IMAGE): 叠加后的图像（若无参考图则为全零张量）。
-使用示例
-plaintext
-
-收起
-
-自动换行
-
-复制
-输入：
-- mask1: 512x512 蒙版
-- operation: "add"
-- blur_radius: 5.0
-- expand_shrink: 10.0
-- invert_mask: False
-- overlay_color: "#00FF00"
-- opacity: 0.7
-- mask2: 256x256 蒙版（会缩放到 512x512）
-- reference_image: 512x512 图像
-
-输出：
-- result_mask: 处理后的 512x512 蒙版
-- overlay_image: 512x512 图像，蒙版非零区域显示绿色（透明度 0.7）
+# ComfyUI_XISER_Nodes
+
+This is a custom node package for ComfyUI, offering a variety of nodes for image processing, logic handling, UI control, and more.
+
+## Installation
+
+1. Install [ComfyUI](https://docs.comfy.org/get_started).
+2. clone this repository under `ComfyUI/custom_nodes`.
+   Enter the ‘custom_nodes’ folder of ComfyUI using the terminal and then execute the following command to clone the repository:
+```bash
+git clone https://github.com/grinlau18/ComfyUI_XISER_Nodes.git
+```
+4. Restart ComfyUI.
+
+
+## Node List
+
+### XIS_ImageStitcher
+功能: 将一张主图与最多四张子图拼接成一张图片，支持垂直或水平布局、主图位置（前或后）、背景颜色和边框大小的自定义。
+
+详细用例:
+
+场景: 您正在为社交媒体（如Instagram）制作一个展示旅行照片的拼贴画，想将一张主要风景照与三张细节照片（例如食物、当地建筑、人物特写）组合。
+操作:
+输入一张主图（例如1920x1080的山景照片）。
+添加三张子图（每张640x480，例如美食、寺庙和当地人）。
+选择“垂直布局”，主图放在顶部，子图在下方依次排列。
+设置背景颜色为浅灰色（#D3D3D3），边框大小为20像素，增加视觉分隔。
+结果: 输出一张垂直排列的拼贴画，主图醒目展示旅行主题，下方子图补充细节，适合直接发布到社交媒体。
+用途: 这种拼接适用于制作展示板、相册页面或任何需要将多张图片整合为一个整体的场景。
+
+### XIS_ResizeToDivisible
+功能: 将图片或蒙版调整到指定除数（例如64）的最近可整除尺寸，适合需要特定输入尺寸的模型。
+
+详细用例:
+
+场景: 您在使用Stable Diffusion生成图像，但模型要求输入尺寸必须是64的倍数。现有图片是500x700，不符合要求。
+操作:
+输入500x700的图片。
+设置除数为64，节点自动将其调整为512x704（最近的可整除尺寸）。
+结果: 输出一张512x704的图片，保证模型正常运行，避免因尺寸不匹配导致的生成瑕疵（如边缘模糊或内容缺失）。
+用途: 这种调整在深度学习预处理中非常常见，尤其是图像生成或超分辨率任务，确保输入兼容模型架构。
+
+### XIS_CropImage
+功能: 使用蒙版裁剪图片，隔离特定区域，支持反转蒙版并用指定颜色填充背景。
+
+详细用例:
+
+场景: 您有一张人物照片，想移除杂乱的背景，专注于主体（人物），用于制作证件照或头像。
+操作:
+输入原始图片（例如800x600的人物照）。
+输入蒙版，白色区域覆盖人物，黑色区域为背景。
+设置“反转蒙版”为否，背景填充颜色为白色（#FFFFFF）。
+结果: 输出一张只保留人物的图片，背景被裁剪并填充为纯白色，适合证件照或简洁设计。
+用途: 可用于背景移除、产品摄影（隔离商品）或艺术创作中突出特定元素。
+
+### XIS_InvertMask
+功能: 反转蒙版的值（0变为1，1变为0）。
+
+详细用例:
+
+场景: 您有一个蒙版用于选择图片中的主体（例如一只猫），但现在想对背景应用模糊效果，而不是主体。
+操作:
+输入原始蒙版（白色为猫，黑色为背景）。
+使用此节点反转蒙版，生成新蒙版（白色为背景，黑色为猫）。
+结果: 新蒙版可用于后续节点（例如模糊处理），只对背景应用效果，保持猫的清晰度。
+用途: 在图像分割或特效处理中，反转蒙版常用于切换关注区域，例如背景虚化、前景增强等。
+
+### XIS_ImageMaskMirror
+功能: 沿X轴或Y轴翻转图片和/或蒙版。
+
+详细用例:
+
+场景: 您在为机器学习模型准备训练数据，需要通过水平翻转增加数据集多样性。
+操作:
+输入一张图片（例如狗的侧面照，1024x768）和对应的蒙版（标记狗的轮廓）。
+设置“水平翻转”（X轴），同时翻转图片和蒙版。
+结果: 输出一张狗朝相反方向的图片及其匹配的蒙版，保持一致性。
+用途: 数据增强（机器学习）、对称设计（艺术创作）或纠正拍摄方向。
+
+### XIS_ResizeImageOrMask
+功能: 使用多种模式（强制调整、比例缩放等）和插值方法调整图片或蒙版大小。
+
+详细用例:
+
+场景: 您需要将一张高分辨率图片（2000x1500）调整为适合网络显示的大小，同时保持纵横比。
+操作:
+输入2000x1500的图片。
+选择“scale_proportionally”模式，目标宽度为800。
+使用“双线性插值”确保平滑缩放。
+结果: 输出800x600的图片，保持原始比例，图像质量良好。
+用途: 适用于网页优化、模型输入准备或调整图片以适应特定画布。
+
+### XIS_ReorderImageMaskGroups
+功能: 在一组图片-蒙版对中插入新对并重新排序。
+
+详细用例:
+
+场景: 您有一个包含三张图片和蒙版的工作流（例如风景、动物、人物），想在中间插入一张新图片（植物）并应用特殊效果。
+操作:
+输入三组现有图片-蒙版对。
+输入新图片-蒙版对（植物），指定插入位置为2。
+结果: 输出四组有序对：风景、植物、动物、人物，植物被正确插入。
+用途: 在批处理或多阶段工作流中调整操作顺序，例如按优先级应用滤镜。
+
+### XIS_MaskCompositeOperation
+功能: 对蒙版执行复合操作（加、减、相交等），支持模糊、形态学操作和颜色叠加。
+
+详细用例:
+
+场景: 您有两个蒙版，一个标记天空，一个标记云，想找到两者的重叠区域（云在天空中的部分）并高亮。
+操作:
+输入天空蒙版和云蒙版。
+选择“相交”操作，设置模糊半径为3.0，叠加颜色为蓝色（#0000FF），透明度50%。
+结果: 输出一个新蒙版，仅显示云与天空的重叠部分，边缘柔和，带有蓝色半透明高亮。
+用途: 分割重叠区域、创建特效或辅助图像标注。
+
+### XIS_IsThereAnyData
+功能: 检查输入信号是否存在（支持int、float、boolean），若无则输出默认值。
+
+详细用例:
+
+场景: 在一个生成工作流中，某个可选参数（例如迭代次数）可能未连接，您希望提供默认值以避免中断。
+操作:
+输入一个未连接的整数信号。
+设置默认值为10。
+结果: 输出10，确保工作流继续运行。
+用途: 提高工作流健壮性，处理可选输入的缺失情况。
+
+### XIS_IfDataIsNone
+功能: 判断输入是否为空，并根据指定类型输出默认值。
+
+详细用例:
+
+场景: 您有一个文本输入字段用于描述图像内容，若用户未填写，则使用默认描述。
+操作:
+输入一个空的字符串信号。
+设置类型为STRING，默认值为“默认描述”。
+结果: 输出“默认描述”，保证后续节点有有效输入。
+用途: 在用户交互或自动化脚本中提供回退选项。
+
+### XIS_PromptsWithSwitches
+功能: 组合多个提示词，每个配有开关以动态启用/禁用。
+
+详细用例:
+
+场景: 您在生成艺术作品，想根据需求选择性使用描述词，例如“森林”、“夜晚”、“梦幻”。
+操作:
+输入三个提示词，分别启用“森林”和“梦幻”，禁用“夜晚”。
+输出列表：["森林", "梦幻"]。
+结果: 生成的图像包含森林和梦幻元素，忽略夜晚。
+用途: 动态调整生成内容，适合测试不同风格或主题。
+
+### XIS_CompositorProcessor
+功能: 在画布上缩放、旋转和定位图片，支持背景颜色设置。
+
+详细用例:
+
+场景: 您想制作一张海报，将一张人物图片旋转并放置在彩色背景的特定位置。
+操作:
+输入一张800x600的人物图片。
+设置画布为1200x800，背景颜色为蓝色（#0000FF）。
+缩放到50%（400x300），旋转30度，定位到画布左上角（x=100, y=100）。
+结果: 输出一张1200x800的海报，人物图片按指定方式放置在蓝色背景上。
+用途: 设计海报、合成图像或准备展示内容。
