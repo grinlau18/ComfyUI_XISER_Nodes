@@ -1,0 +1,20 @@
+from .image_and_mask import NODE_CLASS_MAPPINGS as IMAGE_MASK_MAPPINGS
+from .logic import NODE_CLASS_MAPPINGS as LOGIC_MAPPINGS
+from .ui_control import NODE_CLASS_MAPPINGS as UI_CONTROL_MAPPINGS
+from .sampling import NODE_CLASS_MAPPINGS as SAMPLING_MAPPINGS
+from .list_processing import NODE_CLASS_MAPPINGS as LIST_PROCESSING_MAPPINGS
+from .other import NODE_CLASS_MAPPINGS as OTHER_MAPPINGS
+
+# 合并所有节点的映射
+NODE_CLASS_MAPPINGS = {
+    **IMAGE_MASK_MAPPINGS,
+    **LOGIC_MAPPINGS,
+    **UI_CONTROL_MAPPINGS,
+    **SAMPLING_MAPPINGS,
+    **LIST_PROCESSING_MAPPINGS,
+    **OTHER_MAPPINGS,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    key: cls.__name__.replace("XIS_", "") for key, cls in NODE_CLASS_MAPPINGS.items()
+}

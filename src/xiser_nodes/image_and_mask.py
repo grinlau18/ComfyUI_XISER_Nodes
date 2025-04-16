@@ -1,35 +1,64 @@
-print("Loading XISER Nodes...")
-
 import torch
 import torch.nn.functional as F
-from torchvision.transforms.functional import resize
-from typing import List, Union, Tuple, Optional
-import logging
 import numpy as np
-import comfy.samplers
-import comfy.utils
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image
 import cv2
-import hashlib
+import os
+from typing import Optional, Tuple, Union, List
+from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
 
-# 设置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("XISER_Nodes")
+"""
+Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
+"""
 
-# 通用工具函数
-def hex_to_rgb(hex_str: str) -> torch.Tensor:
-    """将HEX颜色转换为RGB张量（0-1范围）。"""
-    hex_str = hex_str.lstrip('#')
-    if len(hex_str) != 6:
-        raise ValueError("HEX color must be in #RRGGBB format")
-    return torch.tensor([int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4)], dtype=torch.float32)
+class XIS_LoadImage:
+    """
+    加载图像并生成蒙版。如果提供 MaskEditor 蒙版，则使用该蒙版；
+    否则根据图像的 alpha 通道生成反向蒙版，或生成全 1 蒙版。
+    """
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("STRING", {"default": "", "multiline": False}),
+            },
+            "optional": {
+                "mask": ("MASK", {"default": None}),
+            }
+        }
 
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("image", "mask")
+    FUNCTION = "load_image"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
 
+    def load_image(self, image: str, mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        img = Image.open(image).convert("RGBA")
+        image_np = np.array(img).astype(np.float32) / 255.0
+        rgb = image_np[:, :, :3]
+        alpha = image_np[:, :, 3]
 
-# --------------------------------------------------------------------图像及蒙版处理类----------------------------------------------------------------
+        if mask is not None:
+            output_mask = standardize_tensor(mask, expected_dims=3, is_image=False).squeeze(0)
+        else:
+            if np.any(alpha < 1.0):
+                output_mask = 1.0 - alpha
+            else:
+                output_mask = np.ones_like(alpha)
 
+        image_tensor = torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0)
+        mask_tensor = torch.from_numpy(output_mask).unsqueeze(0)
+        return image_tensor, mask_tensor
 
-# 图像拼接节点
+    @classmethod
+    def IS_CHANGED(cls, image: str, mask: Optional[torch.Tensor] = None) -> float:
+        change_id = 0.0
+        if os.path.exists(image):
+            change_id += os.path.getmtime(image)
+        if mask is not None:
+            change_id += hash(mask.cpu().numpy().tobytes())
+        return change_id
+
 class XIS_ImageStitcher:
     @classmethod
     def INPUT_TYPES(cls):
@@ -46,15 +75,16 @@ class XIS_ImageStitcher:
                 "sub_image2": ("IMAGE", {"default": None}),
                 "sub_image3": ("IMAGE", {"default": None}),
                 "sub_image4": ("IMAGE", {"default": None}),
+                "main_mask": ("MASK", {"default": None}),  # 主图掩码，可选
             }
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("stitched_image",)
+    RETURN_TYPES = ("IMAGE", "MASK")
+    RETURN_NAMES = ("stitched_image", "stitched_mask")
     FUNCTION = "stitch_images"
-    CATEGORY = "XISER_Nodes"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
 
-    def stitch_images(self, main_image, layout, main_position, background_color, border_size, sub_image1=None, sub_image2=None, sub_image3=None, sub_image4=None):
+    def stitch_images(self, main_image, layout, main_position, background_color, border_size, sub_image1=None, sub_image2=None, sub_image3=None, sub_image4=None, main_mask=None):
         # 将所有输入图像转换为 PIL 格式
         images = [main_image] + [img for img in [sub_image1, sub_image2, sub_image3, sub_image4] if img is not None]
         pil_images = []
@@ -77,13 +107,32 @@ class XIS_ImageStitcher:
         except:
             bg_color = (0, 0, 0)  # 默认黑色
 
-        # 如果没有副图，直接返回主图（带边框）
+        # 处理主图掩码
+        if main_mask is None:
+            # 如果没有掩码，创建全 1 蒙版
+            main_mask_np = np.ones((h, w), dtype=np.float32)
+        else:
+            # 将 MASK 类型转换为 NumPy 数组
+            main_mask_np = main_mask.squeeze().cpu().numpy().astype(np.float32)
+            mask_h, mask_w = main_mask_np.shape
+            if mask_w != w or mask_h != h:
+                # 缩放到主图尺寸
+                mask_pil = Image.fromarray((main_mask_np * 255).astype(np.uint8))
+                mask_pil = mask_pil.resize((w, h), Image.Resampling.LANCZOS)
+                main_mask_np = np.array(mask_pil).astype(np.float32) / 255.0
+
+        # 如果没有副图，直接返回主图和掩码（带边框）
         if num_sub_imgs == 0:
             total_width = w + 2 * b
             total_height = h + 2 * b
             canvas = Image.new("RGB", (total_width, total_height), bg_color)
             canvas.paste(main_img, (b, b))
             final_img = canvas
+
+            # 掩码画布
+            mask_canvas_np = np.zeros((total_height, total_width), dtype=np.float32)
+            mask_canvas_np[b:b+h, b:b+w] = main_mask_np
+            final_mask = torch.from_numpy(mask_canvas_np).unsqueeze(0)
         else:
             # 副图基础大小
             sub_w = w // num_sub_imgs
@@ -92,12 +141,12 @@ class XIS_ImageStitcher:
             # 根据布局调整副图大小
             if layout == "vertical":
                 sub_w_adjusted = int(sub_w - b * (num_sub_imgs - 1) / num_sub_imgs) if num_sub_imgs > 1 else sub_w
-                sub_w_adjusted = max(1, sub_w_adjusted)  # 确保不小于 1
+                sub_w_adjusted = max(1, sub_w_adjusted)
                 target_long_side = max(sub_w_adjusted, sub_h)
                 target_short_side = sub_h
             else:  # horizontal
                 sub_h_adjusted = int(sub_h - b * (num_sub_imgs - 1) / num_sub_imgs) if num_sub_imgs > 1 else sub_h
-                sub_h_adjusted = max(1, sub_h_adjusted)  # 确保不小于 1
+                sub_h_adjusted = max(1, sub_h_adjusted)
                 target_long_side = max(sub_w, sub_h_adjusted)
                 target_short_side = sub_w
 
@@ -131,47 +180,53 @@ class XIS_ImageStitcher:
             # 根据布局和主图位置计算画布大小和拼接位置
             if layout == "vertical":
                 total_width = w + 2 * b
-                total_height = h + sub_h + 2 * b + b if num_sub_imgs >= 1 else h + 2 * b  # 额外增加 b
+                total_height = h + sub_h + 2 * b + b if num_sub_imgs >= 1 else h + 2 * b
                 canvas = Image.new("RGB", (total_width, total_height), bg_color)
+                mask_canvas_np = np.zeros((total_height, total_width), dtype=np.float32)
 
                 if main_position == "front":
                     # 主图在 x(b), y(b)
                     canvas.paste(main_img, (b, b))
+                    mask_canvas_np[b:b+h, b:b+w] = main_mask_np
                     # 副图在 x(b), y(h+b*2), x(w/n+b*2), y(h+b*2), ...
                     for i, sub_img in enumerate(resized_sub_imgs):
                         canvas.paste(sub_img, (b + i * sub_w_adjusted + i * b, h + 2 * b))
                 else:
                     # 主图在 x(b), y(h/n+b*2)
                     canvas.paste(main_img, (b, sub_h + 2 * b))
+                    mask_canvas_np[sub_h + 2*b:sub_h + 2*b + h, b:b+w] = main_mask_np
                     # 副图在 x(b), y(b), x(w/n+b*2), y(b), ...
                     for i, sub_img in enumerate(resized_sub_imgs):
                         canvas.paste(sub_img, (b + i * sub_w_adjusted + i * b, b))
 
             else:  # layout == "horizontal"
-                total_width = w + sub_w + 2 * b + b if num_sub_imgs >= 1 else w + 2 * b  # 额外增加 b
+                total_width = w + sub_w + 2 * b + b if num_sub_imgs >= 1 else w + 2 * b
                 total_height = h + 2 * b
                 canvas = Image.new("RGB", (total_width, total_height), bg_color)
+                mask_canvas_np = np.zeros((total_height, total_width), dtype=np.float32)
 
                 if main_position == "front":
                     # 主图在 x(b), y(b)
                     canvas.paste(main_img, (b, b))
+                    mask_canvas_np[b:b+h, b:b+w] = main_mask_np
                     # 副图在 x(w+b*2), y(b), x(w+b*2), y(h/n+b*2), ...
                     for i, sub_img in enumerate(resized_sub_imgs):
                         canvas.paste(sub_img, (w + 2 * b, b + i * sub_h_adjusted + i * b))
                 else:
                     # 主图在 x(w/n+b*2), y(b)
                     canvas.paste(main_img, (sub_w + 2 * b, b))
+                    mask_canvas_np[b:b+h, sub_w + 2*b:sub_w + 2*b + w] = main_mask_np
                     # 副图在 x(b), y(b), x(b), y(h/n+b*2), ...
                     for i, sub_img in enumerate(resized_sub_imgs):
                         canvas.paste(sub_img, (b, b + i * sub_h_adjusted + i * b))
 
             final_img = canvas
+            final_mask = torch.from_numpy(mask_canvas_np).unsqueeze(0)
 
-        # 转换为 ComfyUI 的 IMAGE 类型
+        # 转换为 ComfyUI 的 IMAGE 和 MASK 类型
         output_np = np.array(final_img).astype(np.float32) / 255.0
         output_tensor = torch.from_numpy(output_np).unsqueeze(0)
-        return (output_tensor,)
-
+        return (output_tensor, final_mask)
 
 # 将图片或蒙版缩放到最接近的可整除尺寸
 class XIS_ResizeToDivisible:
@@ -218,7 +273,6 @@ class XIS_ResizeToDivisible:
         lower = quotient * divisor
         upper = (quotient + 1) * divisor
         return lower if abs(value - lower) < abs(value - upper) else upper
-
 
 # 使用蒙版去底并裁剪，支持蒙版反转和背景颜色填充
 class XIS_CropImage:
@@ -375,23 +429,6 @@ class XIS_ImageMaskMirror:
             mask_output = mask_output.squeeze(0) if mask.dim() == 2 else mask_output
         return (image_output, mask_output)
 
-
-# 对图像和蒙版进行指定的缩放操作
-def resize_tensor(tensor: torch.Tensor, size: Tuple[int, int], mode: str = "nearest") -> torch.Tensor:
-    """调整张量尺寸，支持多种插值模式。"""
-    if tensor.dim() not in (3, 4):
-        raise ValueError(f"Tensor must be 3D or 4D, got {tensor.shape}")
-    needs_squeeze = tensor.dim() == 3 and tensor.shape[-1] in (1, 3, 4)
-    if needs_squeeze:
-        tensor = tensor.unsqueeze(0)
-    tensor_permuted = tensor.permute(0, 3, 1, 2)
-    if mode == "lanczos":
-        resized = resize(tensor_permuted, size=list(size), interpolation=3, antialias=True)
-    else:
-        resized = F.interpolate(tensor_permuted, size=size, mode=mode, align_corners=False if mode in ["bilinear", "bicubic"] else None)
-    output = resized.permute(0, 2, 3, 1)
-    return output.squeeze(0) if needs_squeeze else output
-
 INTERPOLATION_MODES = {
     "nearest": "nearest",
     "bilinear": "bilinear",
@@ -401,6 +438,7 @@ INTERPOLATION_MODES = {
     "lanczos": "lanczos",
 }
 
+# 图像或蒙版缩放节点，支持多种缩放模式和插值方法
 class XIS_ResizeImageOrMask:
     @classmethod
     def INPUT_TYPES(cls):
@@ -715,617 +753,14 @@ class XIS_MaskCompositeOperation:
         
         return processed  # 在调用处 clip   
 
-
-# --------------------------------------------------------------------逻辑处理类----------------------------------------------------------------
-
-
-# 判断是否有信号接入，否则输出默认值
-class XIS_IsThereAnyData:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "default_int": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "step": 1}),
-                "default_float": ("FLOAT", {"default": 0.0, "min": -1e10, "max": 1e10, "step": 0.01}),
-                "default_boolean": ("BOOLEAN", {"default": False}),
-            },
-            "optional": {
-                "int_input": ("INT",),
-                "float_input": ("FLOAT",),
-                "boolean_input": ("BOOLEAN",),
-            }
-        }
-
-    RETURN_TYPES = ("INT", "FLOAT", "BOOLEAN")
-    RETURN_NAMES = ("int_output", "float_output", "boolean_output")
-    FUNCTION = "select_value"
-    CATEGORY = "XISER_Nodes/Logic"
-
-    def select_value(self, default_int, default_float, default_boolean, 
-                     int_input=None, float_input=None, boolean_input=None):
-        int_output = int_input if int_input is not None else default_int
-        float_output = float_input if float_input is not None else default_float
-        boolean_output = boolean_input if boolean_input is not None else default_boolean
-        return (int_output, float_output, boolean_output)
-
-
-# 判断数据是否为空
-class XIS_IfDataIsNone:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "data_type": (["INT", "FLOAT", "BOOLEAN", "STRING"], {"default": "STRING"}),  # 移除 NUMBER，避免类型歧义
-                "default_value": ("STRING", {"default": "0"}),
-            },
-            "optional": {
-                "signal": ("*", {"default": None}),
-            }
-        }
-
-    RETURN_TYPES = ("BOOLEAN", "INT", "FLOAT", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("is_not_null", "int_output", "float_output", "boolean_output", "string_output")
-    FUNCTION = "check_signal"
-    CATEGORY = "XISER_Nodes/Logic"
-
-    def check_signal(self, data_type, default_value, signal=None):
-        is_not_null = signal is not None
-        value_to_convert = signal if is_not_null else default_value
-
-        # 如果是列表，逐项转换；否则按单一值处理
-        if isinstance(value_to_convert, (list, tuple)):
-            result = [self.convert_single_item(item, data_type) for item in value_to_convert]
-        else:
-            result = self.convert_single_item(value_to_convert, data_type)
-
-        # 根据 data_type 返回对应类型的输出，其他端口返回默认值
-        int_output = result if data_type == "INT" else (0 if not isinstance(result, list) else [0] * len(result))
-        float_output = result if data_type == "FLOAT" else (0.0 if not isinstance(result, list) else [0.0] * len(result))
-        boolean_output = result if data_type == "BOOLEAN" else (False if not isinstance(result, list) else [False] * len(result))
-        string_output = result if data_type == "STRING" else ("" if not isinstance(result, list) else [""] * len(result))
-
-        return (is_not_null, int_output, float_output, boolean_output, string_output)
-
-    def convert_single_item(self, value, data_type):
-        if data_type == "INT":
-            return self.to_int(value)
-        elif data_type == "FLOAT":
-            return self.to_float(value)
-        elif data_type == "BOOLEAN":
-            return self.to_boolean(value)
-        elif data_type == "STRING":
-            return self.to_string(value)
-        return value
-
-    def to_int(self, value):
-        try:
-            return int(float(value))
-        except (ValueError, TypeError):
-            return 0
-
-    def to_float(self, value):
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return 0.0
-
-    def to_boolean(self, value):
-        if isinstance(value, bool):
-            return value
-        try:
-            return str(value).lower() in ("true", "1")
-        except:
-            return False
-
-    def to_string(self, value):
-        return str(value)
-
-
-# --------------------------------------------------------------------UI控制类----------------------------------------------------------------
-
-
-
-# 输入多个提示词并通过开关控制输出
-class XIS_PromptsWithSwitches:
-    @classmethod
-    def INPUT_TYPES(cls):
-        input_config = {}
-        for i in range(1, 6):
-            input_config[f"prompt_{i}"] = ("STRING", {"default": "", "multiline": True})
-            input_config[f"enable_{i}"] = ("BOOLEAN", {"default": True})
-        return {"required": {}, "optional": input_config}
-
-    RETURN_TYPES = ("STRING", "BOOLEAN")
-    OUTPUT_IS_LIST = (True, False)
-    FUNCTION = "process_prompts"
-    CATEGORY = "XISER_Nodes/UIControl"
-
-    def process_prompts(self, **kwargs):
-        prompts = []
-        for i in range(1, 6):
-            prompt_key = f"prompt_{i}"
-            enable_key = f"enable_{i}"
-            prompt = kwargs.get(prompt_key, "")
-            enable = kwargs.get(enable_key, True)
-            if enable and prompt.strip():
-                prompts.append(prompt)
-        if not prompts:
-            return (["No prompts to display."], False)
-        return (prompts, True)
-
-# 输入浮点数并通过滑块控制
-class XIS_Float_Slider:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "value": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "display": "slider"}),
-            }
-        }
-
-    RETURN_TYPES = ("FLOAT",)
-    FUNCTION = "process_float_slider"
-    CATEGORY = "XISER_Nodes/UIControl"
-
-    def process_float_slider(self, value):
-        return (value,)
-
-# 输入整数并通过滑块控制
-class XIS_INT_Slider:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "value": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1, "display": "slider"}),
-            }
-        }
-
-    RETURN_TYPES = ("INT",)
-    FUNCTION = "process_int_slider"
-    CATEGORY = "XISER_Nodes/UIControl"
-
-    def process_int_slider(self, value):
-        return (value,)
-
-
-# --------------------------------------------------------------------其他处理类----------------------------------------------------------------
-
-
-# 从列表中获取单个元素
-class GetSingleFromListMeta(type):
-    def __new__(cls, name, bases, attrs):
-        attrs.update({
-            "RETURN_TYPES": (attrs["TYPE"].upper(),),
-            "CATEGORY": "XISER_Nodes/ListProcessing",
-            "FUNCTION": "get_one",
-            "INPUT_IS_LIST": True,
-            "INPUT_TYPES": classmethod(lambda cls: {
-                "required": {
-                    "list": (attrs["TYPE"].upper(), {"forceInput": True}),
-                    "index": ("INT", {"default": 0, "min": -2147483648})
-                }
-            })
-        })
-
-        def get_one(self, list, index):
-            if not list:
-                raise ValueError("Input list cannot be empty")
-            index = index[0] % len(list)
-            return (list[index],)
-
-        attrs["get_one"] = get_one
-        return super().__new__(cls, name, bases, attrs)
-
-class XIS_FromListGet1Mask(metaclass=GetSingleFromListMeta): TYPE = "MASK"
-class XIS_FromListGet1Image(metaclass=GetSingleFromListMeta): TYPE = "IMAGE"
-class XIS_FromListGet1Latent(metaclass=GetSingleFromListMeta): TYPE = "LATENT"
-class XIS_FromListGet1Cond(metaclass=GetSingleFromListMeta): TYPE = "CONDITIONING"
-class XIS_FromListGet1Model(metaclass=GetSingleFromListMeta): TYPE = "MODEL"
-class XIS_FromListGet1Color(metaclass=GetSingleFromListMeta): TYPE = "COLOR"
-class XIS_FromListGet1String(metaclass=GetSingleFromListMeta): TYPE = "STRING"
-class XIS_FromListGet1Int(metaclass=GetSingleFromListMeta): TYPE = "INT"
-class XIS_FromListGet1Float(metaclass=GetSingleFromListMeta): TYPE = "FLOAT"
-
-
-
-# Compositor 处理器
-class XIS_CompositorProcessor:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "image": ("IMAGE",),  # 目标图片输入，ComfyUI 的 IMAGE 类型
-                "x": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 x 坐标
-                "y": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 y 坐标
-                "width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放宽度
-                "height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放高度
-                "angle": ("INT", {"default": 0, "min": -360, "max": 360, "step": 1}),  # 旋转角度
-                "canvas_width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板宽度
-                "canvas_height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板高度
-                "background_color": ("STRING", {"default": "#FFFFFF"}),  # 画板底色（HEX 值）
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("output_image",)
-    FUNCTION = "transform_image"
-    CATEGORY = "XISER_Nodes"
-
-    def transform_image(self, image, x, y, width, height, angle, canvas_width, canvas_height, background_color):
-        # 将 ComfyUI 的 IMAGE 类型（torch.Tensor）转换为 PIL 图像
-        image_tensor = image[0]  # 假设批量大小为 1，取第一张图
-        image_np = image_tensor.cpu().numpy() * 255  # 转换为 0-255 范围
-        image_np = image_np.astype(np.uint8)
-        pil_image = Image.fromarray(image_np)
-
-        # 确保 width 和 height 大于 0
-        width = max(1, width)
-        height = max(1, height)
-
-        # 创建画板
-        try:
-            # 验证并转换 HEX 颜色值
-            bg_color = tuple(int(background_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-        except ValueError:
-            bg_color = (255, 255, 255)  # 默认白色，如果 HEX 值无效
-        canvas = Image.new("RGB", (canvas_width, canvas_height), bg_color)
-
-        # 缩放目标图片
-        resized_image = pil_image.resize((width, height), Image.Resampling.LANCZOS)
-
-        # 旋转目标图片
-        rotated_image = resized_image.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC)
-
-        # 计算放置位置（x, y 是中心点）
-        rot_width, rot_height = rotated_image.size
-        paste_x = x - rot_width // 2
-        paste_y = y - rot_height // 2
-
-        # 将旋转后的图片粘贴到画板上
-        canvas.paste(rotated_image, (paste_x, paste_y), rotated_image if rotated_image.mode == "RGBA" else None)
-
-        # 将 PIL 图像转换回 ComfyUI 的 IMAGE 类型
-        output_np = np.array(canvas).astype(np.float32) / 255.0  # 转换为 0-1 范围
-        output_tensor = torch.from_numpy(output_np).unsqueeze(0)  # 添加批次维度
-
-        return (output_tensor,)
-
-
-# K采样器设置打包节点
-class XIS_KSamplerSettingsNode:
-    @classmethod
-    def INPUT_TYPES(cls):
-        sampler_options = comfy.samplers.SAMPLER_NAMES
-        scheduler_options = comfy.samplers.SCHEDULER_NAMES
-        
-        return {
-            "required": {
-                "steps": ("INT", {
-                    "default": 20,
-                    "min": 1,
-                    "max": 10000,
-                    "step": 1,
-                    "display": "number"
-                }),
-                "cfg": ("FLOAT", {
-                    "default": 7.5,
-                    "min": 0.0,
-                    "max": 100.0,
-                    "step": 0.1,
-                    "display": "number"
-                }),
-                "sampler_name": (sampler_options, {
-                    "default": "euler"
-                }),
-                "scheduler": (scheduler_options, {
-                    "default": "normal"
-                }),
-                "start_step": ("INT", {
-                    "default": 0,
-                    "min": 0,
-                    "max": 10000,
-                    "step": 1,
-                    "display": "number"
-                }),
-                "end_step": ("INT", {
-                    "default": 20,
-                    "min": 1,
-                    "max": 10000,
-                    "step": 1,
-                    "display": "number"
-                })
-            },
-            "optional": {
-                "model": ("MODEL",),  # 改为可选输入
-                "vae": ("VAE",),      # 改为可选输入
-                "clip": ("CLIP",),    # 改为可选输入
-            }
-        }
-
-    RETURN_TYPES = ("DICT",)
-    RETURN_NAMES = ("settings_pack",)
-    
-    FUNCTION = "get_settings"
-    CATEGORY = "XISER_Nodes"
-
-    def get_settings(self, steps, cfg, sampler_name, scheduler, start_step, end_step, model=None, vae=None, clip=None):
-        if end_step <= start_step:
-            end_step = start_step + 1
-            
-        settings_pack = {
-            "model": model,
-            "vae": vae,
-            "clip": clip,
-            "steps": steps,
-            "cfg": cfg,
-            "sampler_name": sampler_name,
-            "scheduler": scheduler,
-            "start_step": start_step,
-            "end_step": end_step
-        }
-        
-        return (settings_pack,)
-
-
-# K采样器设置解包节点
-class XIS_KSamplerSettingsUnpackNode:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "settings_pack": ("DICT", {})
-            }
-        }
-
-    RETURN_TYPES = ("MODEL", "VAE", "CLIP", "INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS, "INT", "INT")
-    RETURN_NAMES = ("model", "vae", "clip", "steps", "cfg", "sampler_name", "scheduler", "start_step", "end_step")
-    
-    FUNCTION = "unpack_settings"
-    CATEGORY = "XISER_Nodes"
-
-    def unpack_settings(self, settings_pack):
-        model = settings_pack.get("model")  # 无默认值，保持为 None 如果未提供
-        vae = settings_pack.get("vae")      # 无默认值，保持为 None 如果未提供
-        clip = settings_pack.get("clip")    # 无默认值，保持为 None 如果未提供
-        steps = settings_pack.get("steps", 20)
-        cfg = settings_pack.get("cfg", 7.5)
-        sampler_name = settings_pack.get("sampler_name", "euler")
-        scheduler = settings_pack.get("scheduler", "normal")
-        start_step = settings_pack.get("start_step", 0)
-        end_step = settings_pack.get("end_step", 20)
-        
-        if end_step <= start_step:
-            end_step = start_step + 1
-            
-        return (model, vae, clip, steps, cfg, sampler_name, scheduler, start_step, end_step)
-    
-
-# K采样器设置节点
-class XIS_IPAStyleSettings:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "option": (["linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output",
-                            "weak middle", "strong middle", "style transfer", "composition", "strong style transfer",
-                            "style and composition", "style transfer precise", "composition precise"],),
-                "slider": ("FLOAT", {"default": 0.5, "min": 0.00, "max": 1.00, "step": 0.01, "display": "slider"}),
-            }
-        }
-
-    RETURN_TYPES = ("STRING", "FLOAT")
-    FUNCTION = "process"
-    CATEGORY = "XISER_Nodes"
-
-    def process(self, option, slider):
-        return (option, slider)
-
-
-# 提示词处理器      
-class XIS_PromptProcessor:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "positive_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入自定义正向提示词"}),
-                "positive_prompt2": ("STRING", {"default": "", "multiline": True, "placeholder": "输入生成的反推提示词"}),
-                "negative_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "输入反向提示词"}),
-                "merge_positive": ("BOOLEAN", {
-                    "default": True,
-                    "label_on": "已使用自动反推词",
-                    "label_off": "已关闭自动反推词"
-                }),
-            }
-        }
-
-    RETURN_TYPES = ("STRING", "STRING", "BOOLEAN")
-    RETURN_NAMES = ("combined_prompt", "negative_prompt", "merge_status")
-
-    FUNCTION = "process_prompt"
-
-    CATEGORY = "XISER_Nodes"
-
-    def process_prompt(self, positive_prompt1, positive_prompt2, negative_prompt, merge_positive):
-        # 扩展结束符号集合
-        end_symbols = {".", "。", ",", "，", ")", "!", "！", "?", "？", ";", "；"}
-
-        # 处理合并逻辑
-        if merge_positive and positive_prompt2 and positive_prompt2 != "none":
-            # 如果 positive_prompt1 为空，直接使用 positive_prompt2
-            if not positive_prompt1.strip():
-                combined_prompt = positive_prompt2.strip()
-            else:
-                # 去除首尾空白
-                prompt1_stripped = positive_prompt1.strip()
-                # 检查 positive_prompt1 的结尾是否有结束符号
-                if prompt1_stripped[-1] not in end_symbols:
-                    # 如果没有结束符号，添加“.”并换行
-                    combined_prompt = f"{prompt1_stripped}.\n{positive_prompt2.strip()}"
-                else:
-                    # 如果已有结束符号，仅换行合并
-                    combined_prompt = f"{prompt1_stripped}\n{positive_prompt2.strip()}"
-        else:
-            # 如果不合并，仅使用 positive_prompt1 并去除空白
-            combined_prompt = positive_prompt1.strip()
-
-        # 返回三个输出值
-        return (combined_prompt, negative_prompt, merge_positive)
-
-    @classmethod
-    def IS_CHANGED(cls, positive_prompt1, positive_prompt2, negative_prompt, merge_positive):
-        # 根据所有输入参数生成唯一的哈希值
-        input_hash = hashlib.sha256(
-            f"{positive_prompt1}_{positive_prompt2}_{negative_prompt}_{merge_positive}".encode()
-        ).hexdigest()
-        return input_hash
-
-    def __init__(self):
-        pass
-
-
-# 处理分辨率选择
-class XIS_ResolutionSelector:
-    @classmethod
-    def INPUT_TYPES(cls):
-        # 丰富预设分辨率选项
-        resolution_options = [
-            "256x256 (1:1)", "512x512 (1:1)", "768x768 (1:1)", "1024x1024 (1:1)", "2048x2048 (1:1)",
-            "640x480 (4:3)", "800x600 (4:3)", "1024x768 (4:3)", "1280x960 (4:3)",
-            "1280x720 (16:9)", "1920x1080 (16:9)", "2560x1440 (16:9)", "3840x2160 (16:9)",
-            "720x1280 (9:16)", "1080x1920 (9:16)", "1440x2560 (9:16)", "2160x3840 (9:16)",
-            "800x1200 (2:3)", "1200x1800 (2:3)", "1200x800 (3:2)", "1800x1200 (3:2)",
-            "960x540 (16:9)", "854x480 (16:9)"
-        ]
-        
-        return {
-            "required": {
-                "resolution": (resolution_options, {"default": "512x512 (1:1)"}),  # 下拉菜单选择分辨率
-                "use_custom_resolution": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "使用自定义分辨率",
-                    "label_off": "使用预设分辨率"
-                }),  # 是否使用自定义分辨率
-                "custom_width": ("INT", {
-                    "default": 512,
-                    "min": 1,
-                    "max": 8192,
-                    "step": 1,
-                    "display": "number"
-                }),  # 自定义宽度
-                "custom_height": ("INT", {
-                    "default": 512,
-                    "min": 1,
-                    "max": 8192,
-                    "step": 1,
-                    "display": "number"
-                }),  # 自定义高度
-                "swap_orientation": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "已切换横竖方向",
-                    "label_off": "未切换横竖方向"
-                })  # 是否切换横竖方向
-            }
-        }
-
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("width", "height")
-
-    FUNCTION = "select_resolution"
-
-    CATEGORY = "XISER_Nodes"
-
-    def select_resolution(self, resolution, use_custom_resolution, custom_width, custom_height, swap_orientation):
-        # 解析预设分辨率
-        if not use_custom_resolution:
-            # 从字符串中提取宽度和高度
-            width_str, height_str = resolution.split(" ")[0].split("x")
-            width = int(width_str)
-            height = int(height_str)
-        else:
-            # 使用自定义分辨率
-            width = custom_width
-            height = custom_height
-
-        # 如果需要切换横竖方向
-        if swap_orientation:
-            width, height = height, width
-
-        # 返回最终的宽度和高度
-        return (width, height)
-
-    @classmethod
-    def IS_CHANGED(cls, resolution, use_custom_resolution, custom_width, custom_height, swap_orientation):
-        # 根据所有输入参数生成唯一的哈希值
-        input_hash = hashlib.sha256(
-            f"{resolution}_{use_custom_resolution}_{custom_width}_{custom_height}_{swap_orientation}".encode()
-        ).hexdigest()
-        return input_hash
-
-    def __init__(self):
-        pass
-
-
-
-# 节点类映射
 NODE_CLASS_MAPPINGS = {
-    "XIS_CropImage": XIS_CropImage,
-    "XIS_IsThereAnyData": XIS_IsThereAnyData,
+    "XIS_LoadImage": XIS_LoadImage,
+    "XIS_ImageStitcher": XIS_ImageStitcher,
     "XIS_ResizeToDivisible": XIS_ResizeToDivisible,
+    "XIS_CropImage": XIS_CropImage,
     "XIS_InvertMask": XIS_InvertMask,
     "XIS_ImageMaskMirror": XIS_ImageMaskMirror,
     "XIS_ResizeImageOrMask": XIS_ResizeImageOrMask,
-    "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
-    "XIS_Float_Slider": XIS_Float_Slider,
-    "XIS_INT_Slider": XIS_INT_Slider,
-    "XIS_FromListGet1Mask": XIS_FromListGet1Mask,
-    "XIS_FromListGet1Image": XIS_FromListGet1Image,
-    "XIS_FromListGet1Latent": XIS_FromListGet1Latent,
-    "XIS_FromListGet1Cond": XIS_FromListGet1Cond,
-    "XIS_FromListGet1Model": XIS_FromListGet1Model,
-    "XIS_FromListGet1Color": XIS_FromListGet1Color,
-    "XIS_FromListGet1String": XIS_FromListGet1String,
-    "XIS_FromListGet1Int": XIS_FromListGet1Int,
-    "XIS_FromListGet1Float": XIS_FromListGet1Float,
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
-    "XIS_IfDataIsNone": XIS_IfDataIsNone,
-    "XIS_CompositorProcessor": XIS_CompositorProcessor,
-    "XIS_KSamplerSettingsNode": XIS_KSamplerSettingsNode,
-    "XIS_KSamplerSettingsUnpackNode": XIS_KSamplerSettingsUnpackNode,
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
-    "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
-    "XIS_PromptProcessor": XIS_PromptProcessor,
-    "XIS_ResolutionSelector": XIS_ResolutionSelector,
-    "XIS_ImageStitcher": XIS_ImageStitcher,
-}
-
-# 节点显示名称映射
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "XIS_CropImage": "Crop Image",
-    "XIS_IsThereAnyData": "Is There Any Data",
-    "XIS_ResizeToDivisible": "Resize To Divisible",
-    "XIS_InvertMask": "Invert Mask",
-    "XIS_ImageMaskMirror": "Image Mask Mirror",
-    "XIS_ResizeImageOrMask": "Resize Image or Mask",
-    "XIS_PromptsWithSwitches": "Prompts With Switches",
-    "XIS_Float_Slider": "Float Slider",
-    "XIS_INT_Slider": "INT Slider",
-    "XIS_FromListGet1Mask": "From List Get1 Mask",
-    "XIS_FromListGet1Image": "From List Get1 Image",
-    "XIS_FromListGet1Latent": "From List Get1 Latent",
-    "XIS_FromListGet1Cond": "From List Get1 Cond",
-    "XIS_FromListGet1Model": "From List Get1 Model",
-    "XIS_FromListGet1Color": "From List Get1 Color",
-    "XIS_FromListGet1String": "From List Get1 String",
-    "XIS_FromListGet1Int": "From List Get1 Int",
-    "XIS_FromListGet1Float": "From List Get1 Float",
-    "XIS_ReorderImageMaskGroups": "Reorder Image Mask Groups",
-    "XIS_IfDataIsNone": "If Data Is None",
-    "XIS_CompositorProcessor": "Compositor Processor",
-    "XIS_KSamplerSettingsNode": "KSampler Settings Node",
-    "XIS_KSamplerSettingsUnpackNode": "KSampler Settings Unpack Node",
-    "XIS_MaskCompositeOperation": "Mask Composite Operation",
-    "XIS_IPAStyleSettings": "IPA Style Settings",
-    "XIS_PromptProcessor": "Prompt Processor",
-    "XIS_ResolutionSelector": "Resolution Selector",
-    "XIS_ImageStitcher": "Image Stitcher",
 }

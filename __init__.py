@@ -8,9 +8,8 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "0.0.2"
+__version__ = "1.0.3"
 
-from .src.xiser_nodes.nodes import NODE_CLASS_MAPPINGS
-from .src.xiser_nodes.nodes import NODE_DISPLAY_NAME_MAPPINGS
+from .src.xiser_nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
 WEB_DIRECTORY = "./web"

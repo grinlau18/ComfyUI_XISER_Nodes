@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "Custom nodes for customizing workflows"
-version = "1.0.2"
+version = "1.0.3"
 license = {file = "LICENSE"}
 
 [project.urls]
@@ -9,6 +9,6 @@ Repository = "https://github.com/grinlau18/ComfyUI_XISER_Nodes"
 #  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
-PublisherId = "@xiser"
+PublisherId = "xiser"
 DisplayName = "ComfyUI_XISER_Nodes"
 Icon = ""
