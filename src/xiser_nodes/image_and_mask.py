@@ -752,6 +752,74 @@ class XIS_MaskCompositeOperation:
             processed = cv2.erode(np_image, kernel, iterations=1, borderType=cv2.BORDER_REPLICATE)
         
         return processed  # 在调用处 clip   
+    
+class XIS_MaskBatchProcessor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "masks": ("MASK",),
+                "operation": (["union", "intersection", "subtract"], {"default": "union"}),
+                "invert_output": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("processed_mask",)
+    FUNCTION = "process_masks"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
+
+    def process_masks(self, masks, operation, invert_output):
+        """
+        Process a batch of masks with specified operation.
+        
+        Args:
+            masks: Tensor of shape (B, H, W) or (B, 1, H, W)
+            operation: One of 'union', 'intersection', 'subtract'
+            invert_output: If True, invert the final mask (0->1, 1->0)
+        
+        Returns:
+            Processed mask tensor of shape (1, H, W) with continuous values
+        """
+        # Ensure masks are in correct format (B, H, W)
+        if masks.dim() == 4:
+            masks = masks.squeeze(1)  # Convert (B, 1, H, W) to (B, H, W)
+        
+        # Convert to float32 for high precision
+        masks = masks.to(torch.float32)
+        
+        # Clamp input masks to [0, 1] to ensure valid range
+        masks = torch.clamp(masks, 0.0, 1.0)
+        
+        if masks.shape[0] == 0:
+            raise ValueError("Empty mask batch received")
+        
+        if operation == "union":
+            # Union: Take maximum across batch dimension
+            result = torch.max(masks, dim=0)[0]
+        
+        elif operation == "intersection":
+            # Intersection: Take minimum across batch dimension
+            result = torch.min(masks, dim=0)[0]
+        
+        elif operation == "subtract":
+            # Subtract: Start with first mask, subtract others
+            result = masks[0].clone()
+            for i in range(1, masks.shape[0]):
+                result = result * (1.0 - masks[i])
+        
+        # Invert the result if requested
+        if invert_output:
+            result = 1.0 - result
+        
+        # Clamp result to [0, 1] to ensure valid mask values
+        result = torch.clamp(result, 0.0, 1.0)
+        
+        # Add batch and channel dimensions for ComfyUI compatibility
+        result = result.unsqueeze(0).unsqueeze(1)  # Shape: (1, 1, H, W)
+        
+        return (result,)
+
 
 NODE_CLASS_MAPPINGS = {
     "XIS_LoadImage": XIS_LoadImage,
@@ -763,4 +831,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_ResizeImageOrMask": XIS_ResizeImageOrMask,
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
+    "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
 }
