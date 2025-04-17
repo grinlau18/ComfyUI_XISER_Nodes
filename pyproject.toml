@@ -1,6 +1,6 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
-description = "Custom nodes for customizing workflows"
+description = "Custom nodes for customizing workflows. Including image and mask processing, text processing, logical processing and more."
 version = "1.0.3"
 license = {file = "LICENSE"}
 
