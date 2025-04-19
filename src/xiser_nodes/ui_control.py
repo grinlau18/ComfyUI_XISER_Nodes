@@ -1,8 +1,8 @@
-# src/xiser_nodes/ui_control.py
 from typing import List, Tuple
 from .utils import logger
+import os
 
-# 输入多个提示词并通过开关控制输出
+# 输入多个提示词并通过开关控制
 class XIS_PromptsWithSwitches:
     @classmethod
     def INPUT_TYPES(cls):
@@ -64,6 +64,8 @@ class XIS_INT_Slider:
     def process_int_slider(self, value):
         return (value,)
 
+
+# 节点映射
 NODE_CLASS_MAPPINGS = {
     "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
     "XIS_Float_Slider": XIS_Float_Slider,
