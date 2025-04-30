@@ -1,0 +1,5 @@
+# 忽略所有 .pyc 文件
+*.pyc
+
+# 忽略 Python 缓存目录
+__pycache__/

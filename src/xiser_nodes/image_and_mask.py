@@ -6,6 +6,8 @@ import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
+from nodes import MAX_RESOLUTION
+
 
 """
 Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
@@ -819,6 +821,86 @@ class XIS_MaskBatchProcessor:
         result = result.unsqueeze(0).unsqueeze(1)  # Shape: (1, 1, H, W)
         
         return (result,)
+    
+
+# 批量处理图像，支持最多 8 张图像
+class XIS_ImageBatchRGBA:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image1": ("IMAGE",),
+            },
+            "optional": {
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "image4": ("IMAGE",),
+                "image5": ("IMAGE",),
+                "image6": ("IMAGE",),
+                "image7": ("IMAGE",),
+                "image8": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image_batch",)
+    FUNCTION = "batch_rgba"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
+
+    def batch_rgba(self, image1, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None):
+        # 收集所有输入图像
+        images = [image1]
+        for img in [image2, image3, image4, image5, image6, image7, image8]:
+            if img is not None:
+                images.append(img)
+
+        # 存储转换后的 RGBA 图像
+        rgba_images = []
+        max_height = 0
+        max_width = 0
+
+        # 第一遍：获取最大尺寸并验证输入
+        for img in images:
+            if not isinstance(img, torch.Tensor) or img.ndim != 4:
+                raise ValueError("Input image must be a 4D torch tensor (batch, height, width, channels)")
+            batch_size, height, width, channels = img.shape
+            if height > MAX_RESOLUTION or width > MAX_RESOLUTION:
+                raise ValueError(f"Image dimensions exceed maximum resolution of {MAX_RESOLUTION}")
+            max_height = max(max_height, height)
+            max_width = max(max_width, width)
+
+        # 第二遍：处理每张图像
+        for img in images:
+            batch_size, height, width, channels = img.shape
+            img_np = img.cpu().numpy()
+
+            for i in range(batch_size):
+                # 提取单张图像并转换为 0-255 范围
+                single_img = (img_np[i] * 255).clip(0, 255).astype(np.uint8)
+
+                # 创建 PIL 图像并转换为 RGBA
+                if channels == 4:
+                    pil_img = Image.fromarray(single_img, mode="RGBA")
+                elif channels == 3:
+                    pil_img = Image.fromarray(single_img, mode="RGB").convert("RGBA")
+                elif channels == 1:
+                    pil_img = Image.fromarray(single_img[:, :, 0], mode="L").convert("RGBA")
+                else:
+                    raise ValueError(f"Unsupported number of channels: {channels}")
+
+                # 创建目标尺寸的空白 RGBA 图像（透明背景）
+                padded_img = Image.new("RGBA", (max_width, max_height), (0, 0, 0, 0))
+                # 将原图粘贴到左上角
+                padded_img.paste(pil_img, (0, 0))
+
+                # 转换回 NumPy 数组
+                rgba_np = np.array(padded_img).astype(np.float32) / 255.0
+                rgba_images.append(rgba_np)
+
+        # 将所有图像堆叠为批量
+        batch_tensor = torch.from_numpy(np.stack(rgba_images, axis=0))
+
+        return (batch_tensor,)
 
 
 NODE_CLASS_MAPPINGS = {
@@ -832,4 +914,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
+    "XIS_ImageBatchRGBA": XIS_ImageBatchRGBA,
 }
