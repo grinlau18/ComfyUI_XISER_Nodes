@@ -27,7 +27,7 @@ class XISER_Canvas:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "images": ("XIS_IMAGES", {"default": None}),
+                "pack_images": ("XIS_IMAGES", {"default": None}),
                 "board_width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
                 "board_height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
                 "border_width": ("INT", {"default": 40, "min": 10, "max": 200, "step": 1}),
@@ -39,7 +39,7 @@ class XISER_Canvas:
     RETURN_TYPES = ("IMAGE", "STRING", "MASK",)
     RETURN_NAMES = ("canvas_image", "image_paths", "masks",)
     FUNCTION = "render"
-    CATEGORY = "XISER"
+    CATEGORY = "XISER_Nodes/Canvas"
     OUTPUT_NODE = False
 
     def _generate_base64_chunks(self, pil_img, format="PNG", quality=10, chunk_size=512*1024):

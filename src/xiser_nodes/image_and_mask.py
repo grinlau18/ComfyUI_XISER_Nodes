@@ -843,9 +843,9 @@ class XIS_ImagesToCanvas:
         }
 
     RETURN_TYPES = ("XIS_IMAGES",)
-    RETURN_NAMES = ("images",)
+    RETURN_NAMES = ("pack_images",)
     FUNCTION = "pack_images"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Canvas"
 
     def pack_images(self, image1, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None):
         # 确保 image1 不为 None
