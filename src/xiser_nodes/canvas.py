@@ -27,7 +27,7 @@ class XISER_Canvas:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "images": ("IMAGE", {"default": None}),
+                "images": ("XIS_IMAGES", {"default": None}),
                 "board_width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
                 "board_height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
                 "border_width": ("INT", {"default": 40, "min": 10, "max": 200, "step": 1}),
@@ -59,7 +59,6 @@ class XISER_Canvas:
 
     def _resize_image_to_fit(self, pil_img, max_width, max_height):
         img_width, img_height = pil_img.size
-        # 使用统一的缩放比例，保持宽高比
         scale = min(max_width / img_width, max_height / img_height, 1.0)
         new_width = int(img_width * scale)
         new_height = int(img_height * scale)
@@ -85,45 +84,37 @@ class XISER_Canvas:
     def render(self, images, board_width: int, board_height: int, border_width: int, canvas_color: str, image_states: str):
         logger.debug(f"Rendering with inputs: board_width={board_width}, board_height={board_height}, border_width={border_width}, canvas_color={canvas_color}")
 
+        # 处理输入的 XIS_IMAGES 类型数据
         if images is None:
-            images_tensor = None
-            images_list = []
-        elif isinstance(images, list):
-            if not images:
-                images_tensor = None
-                images_list = []
-            else:
-                if not all(isinstance(img, torch.Tensor) for img in images):
-                    logger.error(f"Invalid images in list: expected list of torch.Tensor, got {[type(img) for img in images]}")
-                    raise ValueError("All elements in 'images' list must be torch.Tensor")
-                images_list = images
-                normalized_images = []
-                for img in images:
-                    if img.shape[-1] == 3:
-                        alpha = torch.ones_like(img[..., :1])
-                        img = torch.cat([img, alpha], dim=-1)
-                    elif img.shape[-1] != 4:
-                        logger.error(f"Image has invalid channels: {img.shape[-1]}")
-                        raise ValueError(f"Image has invalid channels: {img.shape[-1]}")
-                    normalized_images.append(img)
-                images_tensor = torch.stack(normalized_images, dim=0) if len(normalized_images) > 0 else None
-        elif isinstance(images, torch.Tensor):
-            if images.shape[-1] == 3:
-                alpha = torch.ones_like(images[..., :1])
-                images_tensor = torch.cat([images, alpha], dim=-1)
-            elif images.shape[-1] == 4:
-                images_tensor = images
-            else:
-                logger.error(f"Image tensor has invalid channels: {images.shape[-1]}")
-                raise ValueError(f"Image tensor has invalid channels: {images.shape[-1]}")
-            images_list = [images_tensor[i] for i in range(images_tensor.shape[0])]
-        else:
-            logger.error(f"Invalid images input: expected torch.Tensor or list, got {type(images)}")
-            raise ValueError("Input 'images' must be a torch.Tensor, list, or None")
+            logger.error("images input cannot be None")
+            raise ValueError("images input must be provided")
+        
+        if not isinstance(images, list):
+            logger.error(f"Invalid images input: expected list, got {type(images)}")
+            raise ValueError("images input must be a list of torch.Tensor")
 
-        if images_tensor is not None and images_tensor.shape[0] > 8:
-            logger.error(f"Too many images: {images_tensor.shape[0]}, maximum 8 allowed")
+        images_list = []
+        for img in images:
+            if not isinstance(img, torch.Tensor):
+                logger.error(f"Invalid image in list: expected torch.Tensor, got {type(img)}")
+                raise ValueError("All elements in images list must be torch.Tensor")
+            # 确保图像是 (H, W, 4) 格式（RGBA）
+            if img.shape[-1] != 4:
+                logger.error(f"Image has invalid channels: {img.shape[-1]}")
+                raise ValueError(f"Image has invalid channels: {img.shape[-1]}")
+            images_list.append(img)
+
+        if not images_list:
+            logger.error("No valid images provided")
+            raise ValueError("At least one image must be provided")
+
+        if len(images_list) > 8:
+            logger.error(f"Too many images: {len(images_list)}, maximum 8 allowed")
             raise ValueError("Maximum 8 images allowed")
+
+        # 移除 torch.stack 操作，仅使用 images_list
+        # images_tensor = torch.stack(images_list, dim=0) if len(images_list) > 0 else None
+
         if canvas_color not in ["black", "white", "transparent"]:
             logger.error(f"Invalid canvas_color: {canvas_color}")
             raise ValueError(f"Invalid canvas_color: {canvas_color}")
@@ -136,7 +127,7 @@ class XISER_Canvas:
             "board_height": board_height,
             "border_width": border_width,
             "canvas_color": canvas_color,
-            "image_count": len(images_list) if images_list else 0
+            "image_count": len(images_list)
         }
         image_changed = False
         if self.properties.get("last_params") != current_params:
@@ -144,6 +135,7 @@ class XISER_Canvas:
             image_changed = True
         if images_list:
             try:
+                # 修改哈希计算方式，直接基于 images_list
                 image_hashes = [hash(img.cpu().numpy().tobytes()) for img in images_list]
                 combined_hash = hash(tuple(image_hashes))
                 if self.properties.get("last_image_hash") != combined_hash:
@@ -217,45 +209,40 @@ class XISER_Canvas:
                 img_path = os.path.join(self.output_dir, path)
                 img = Image.open(img_path).convert("RGBA")
                 img_width, img_height = img.size
-                scale_x = state.get("scaleX", 1)
-                scale_y = state.get("scaleY", 1)
-                # 强制保持宽高比，使用统一的缩放比例
-                scale = min(scale_x, scale_y)
-                rotation = state.get("rotation", 0)
-                x = state.get("x", border_width + board_width / 2) - border_width
-                y = state.get("y", border_width + board_height / 2) - border_width
 
-                # 调整图像大小，保持宽高比
+                # 确保等比缩放
+                scale = state.get("scaleX", 1)
                 new_width = int(img_width * scale)
                 new_height = int(img_height * scale)
                 img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
                 # 提取 Alpha 通道
-                alpha = img.split()[3]  # RGBA 的第 4 个通道是 Alpha
-                # 创建与画布大小相同的空白 mask
-                mask = Image.new("L", (board_width, board_height), 0)  # 单通道，初始值为 0
+                alpha = img.split()[3]
+                mask = Image.new("L", (board_width, board_height), 0)
 
                 # 应用旋转
+                rotation = state.get("rotation", 0)
                 if rotation != 0:
                     img = img.rotate(-rotation, expand=True)
                     alpha = alpha.rotate(-rotation, expand=True)
 
                 img_width, img_height = img.size
+                x = state.get("x", border_width + board_width / 2) - border_width
+                y = state.get("y", border_width + board_height / 2) - border_width
                 paste_x = int(x - img_width / 2)
                 paste_y = int(y - img_height / 2)
 
-                # 直接粘贴图像和 mask，不进行裁剪
+                # 完整粘贴图像和 mask，不进行裁剪
                 canvas_pil.paste(img, (paste_x, paste_y), img)
                 mask.paste(alpha, (paste_x, paste_y))
 
                 # 将 mask 转换为 torch.Tensor，形状为 (H, W)
                 mask_array = np.array(mask, dtype=np.float32) / 255.0
-                mask_tensor = torch.from_numpy(mask_array)  # (H, W)
+                mask_tensor = torch.from_numpy(mask_array)
                 mask_list.append(mask_tensor)
 
             except Exception as e:
                 logger.error(f"Failed to apply image {i+1}: {e}")
-                # 如果失败，添加一个全零的 mask，保持列表长度一致
                 mask_array = np.zeros((board_height, board_width), dtype=np.float32)
                 mask_tensor = torch.from_numpy(mask_array)
                 mask_list.append(mask_tensor)
@@ -263,9 +250,8 @@ class XISER_Canvas:
 
         # 将 mask_list 转换为单一的 torch.Tensor，形状为 (N, H, W)
         if mask_list:
-            masks_tensor = torch.stack(mask_list, dim=0)  # (N, H, W)
+            masks_tensor = torch.stack(mask_list, dim=0)
         else:
-            # 如果没有 mask，返回一个空的 tensor，形状为 (0, H, W)
             masks_tensor = torch.zeros((0, board_height, board_width), dtype=torch.float32)
 
         canvas_array = np.array(canvas_pil).astype(np.float32) / 255.0

@@ -29,7 +29,7 @@ app.registerExtension({
                 height: 100%;
                 min-width: 200px;
                 min-height: 200px;
-                overflow: visible; /* 允许内容超出 */
+                overflow: visible;
             }
             .xiser-canvas-stage {
                 position: relative;
@@ -39,11 +39,11 @@ app.registerExtension({
                 background: transparent;
                 min-width: 200px;
                 min-height: 200px;
-                overflow: visible; /* 允许内容超出 */
+                overflow: visible;
             }
             .xiser-node {
                 resize: none !important;
-                overflow: visible !important; /* 允许内容超出 */
+                overflow: visible !important;
                 user-select: none;
                 position: relative;
             }
@@ -57,7 +57,7 @@ app.registerExtension({
                 height: 100%;
                 min-height: 100px;
                 background: transparent;
-                overflow: visible; /* 允许内容超出 */
+                overflow: visible;
             }
             .xiser-status-text {
                 position: absolute;
@@ -108,6 +108,31 @@ app.registerExtension({
             }
             .xiser-redo-button:hover {
                 background-color: #0b7dda;
+            }
+            .xiser-layer-panel {
+                position: absolute;
+                top: 50px;
+                left: 10px;
+                background-color: rgba(0, 0, 0, 0.8);
+                color: #fff;
+                padding: 10px;
+                font-family: Arial, sans-serif;
+                font-size: 12px;
+                z-index: 10;
+                max-height: 200px;
+                overflow-y: auto;
+            }
+            .xiser-layer-item {
+                padding: 5px;
+                cursor: pointer;
+                border-bottom: 1px solid #444;
+            }
+            .xiser-layer-item:hover {
+                background-color: #555;
+            }
+            .xiser-layer-item.selected {
+                background-color: #2196F3;
+                color: #fff;
             }
         `;
         document.head.appendChild(style);
@@ -241,6 +266,11 @@ app.registerExtension({
         };
         boardContainer.appendChild(redoButton);
 
+        // 添加图层选择面板
+        const layerPanel = document.createElement("div");
+        layerPanel.className = "xiser-layer-panel";
+        boardContainer.appendChild(layerPanel);
+
         const stageContainer = document.createElement("div");
         stageContainer.className = "xiser-canvas-stage";
         boardContainer.appendChild(stageContainer);
@@ -255,8 +285,8 @@ app.registerExtension({
 
         const stage = new Konva.Stage({
             container: stageContainer,
-            width: (boardWidth + 2 * borderWidth) * 0.5,
-            height: (boardHeight + 2 * borderWidth) * 0.5
+            width: boardWidth + 2 * borderWidth,
+            height: boardHeight + 2 * borderWidth
         });
 
         const canvasLayer = new Konva.Layer();
@@ -265,10 +295,10 @@ app.registerExtension({
         stage.add(imageLayer);
 
         const canvasRect = new Konva.Rect({
-            x: borderWidth * 0.5,
-            y: borderWidth * 0.5,
-            width: boardWidth * 0.5,
-            height: boardHeight * 0.5,
+            x: borderWidth,
+            y: borderWidth,
+            width: boardWidth,
+            height: boardHeight,
             fill: canvasColor,
             stroke: "#808080",
             strokeWidth: 2
@@ -285,6 +315,11 @@ app.registerExtension({
         // 操作历史记录（撤销/重做）
         const history = [];
         let historyIndex = -1;
+        // 当前选中图层及其原始 zIndex
+        let selectedLayer = null;
+        let originalZIndex = null;
+        // 图层列表项
+        let layerItems = [];
 
         function saveHistory() {
             const currentState = initialStates.map(state => ({ ...state }));
@@ -322,12 +357,11 @@ app.registerExtension({
         function applyStates() {
             imageNodes.forEach((node, i) => {
                 const state = initialStates[i] || {};
-                const maxWidth = (boardWidth * 0.5) * 0.8;
-                const maxHeight = (boardHeight * 0.5) * 0.8;
-                // 使用统一的缩放比例，保持宽高比
+                const maxWidth = boardWidth * 0.8;
+                const maxHeight = boardHeight * 0.8;
                 const scale = Math.min(1, maxWidth / node.width(), maxHeight / node.height());
-                node.x((state.x || borderWidth + boardWidth / 2) * 0.5);
-                node.y((state.y || borderWidth + boardHeight / 2) * 0.5);
+                node.x(state.x || borderWidth + boardWidth / 2);
+                node.y(state.y || borderWidth + boardHeight / 2);
                 node.scaleX(scale * (state.scaleX || 1));
                 node.scaleY(scale * (state.scaleY || 1));
                 node.rotation(state.rotation || 0);
@@ -348,6 +382,81 @@ app.registerExtension({
             node.setProperty("image_states", initialStates);
             imageLayer.batchDraw();
             saveHistory();
+            // 重置选中状态
+            deselectLayer();
+        }
+
+        // 更新图层选择面板（倒序显示）
+        function updateLayerPanel() {
+            layerPanel.innerHTML = ""; // 清空面板
+            layerItems = [];
+            // 倒序遍历 imageNodes，使得最上层图层显示在列表顶部
+            for (let index = imageNodes.length - 1; index >= 0; index--) {
+                const item = document.createElement("div");
+                item.className = "xiser-layer-item";
+                // 显示为 "图层 N"，N 与 imageNodes 索引一致
+                item.innerText = `图层 ${index + 1}`;
+                // 存储原始 imageNodes 索引
+                item.dataset.index = index;
+                layerPanel.appendChild(item);
+                layerItems.push(item);
+
+                // 点击列表项切换选中状态
+                item.addEventListener("click", () => {
+                    const currentIndex = parseInt(item.dataset.index);
+                    if (selectedLayer === imageNodes[currentIndex]) {
+                        // 再次点击，取消选中
+                        deselectLayer();
+                    } else {
+                        // 选中新图层
+                        selectLayer(currentIndex);
+                    }
+                });
+            }
+        }
+
+        // 选中图层
+        function selectLayer(index) {
+            if (index < 0 || index >= imageNodes.length) return;
+            const node = imageNodes[index];
+
+            // 取消之前的选中状态
+            deselectLayer();
+
+            // 记录原始 zIndex 并将图层移到顶层
+            selectedLayer = node;
+            originalZIndex = node.zIndex();
+            node.moveToTop();
+            transformer.moveToTop();
+
+            // 显示控制框
+            transformer.nodes([node]);
+            imageLayer.batchDraw();
+
+            // 高亮列表项
+            layerItems.forEach(item => item.classList.remove("selected"));
+            // 由于列表是倒序的，计算对应的列表项索引
+            const listItemIndex = imageNodes.length - 1 - index;
+            if (layerItems[listItemIndex]) {
+                layerItems[listItemIndex].classList.add("selected");
+            }
+        }
+
+        // 取消选中图层
+        function deselectLayer() {
+            if (!selectedLayer) return;
+
+            // 恢复原始 zIndex
+            selectedLayer.zIndex(originalZIndex);
+            selectedLayer = null;
+            originalZIndex = null;
+
+            // 隐藏控制框
+            transformer.nodes([]);
+            imageLayer.batchDraw();
+
+            // 取消列表项高亮
+            layerItems.forEach(item => item.classList.remove("selected"));
         }
 
         async function loadImages(imagePaths, states, base64Chunks = [], retryCount = 0, maxRetries = 3) {
@@ -389,6 +498,7 @@ app.registerExtension({
             if (imagesToLoad.length === 0) {
                 statusText.innerText = `已加载 ${imageNodes.length} 张图像`;
                 statusText.style.color = "#0f0";
+                updateLayerPanel();
                 return;
             }
 
@@ -435,12 +545,11 @@ app.registerExtension({
                     }
 
                     const state = states[i] || {};
-                    const maxWidth = (boardWidth * 0.5) * 0.8;
-                    const maxHeight = (boardHeight * 0.5) * 0.8;
-                    // 使用统一的缩放比例，保持宽高比
+                    const maxWidth = boardWidth * 0.8;
+                    const maxHeight = boardHeight * 0.8;
                     const scale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
-                    const posX = (state.x !== undefined ? state.x : borderWidth + boardWidth / 2) * 0.5;
-                    const posY = (state.y !== undefined ? state.y : borderWidth + boardHeight / 2) * 0.5;
+                    const posX = state.x !== undefined ? state.x : borderWidth + boardWidth / 2;
+                    const posY = state.y !== undefined ? state.y : borderWidth + boardHeight / 2;
                     const konvaImg = new Konva.Image({
                         image: img,
                         x: posX,
@@ -456,16 +565,18 @@ app.registerExtension({
                     imageLayer.add(konvaImg);
                     imageNodes.push(konvaImg);
                     initialStates[i] = initialStates[i] || {
-                        x: konvaImg.x() / 0.5,
-                        y: konvaImg.y() / 0.5,
+                        x: konvaImg.x(),
+                        y: konvaImg.y(),
                         scaleX: konvaImg.scaleX() / scale,
                         scaleY: konvaImg.scaleY() / scale,
                         rotation: konvaImg.rotation()
                     };
-                    konvaImg.on("dragend transformend", async () => {
+
+                    // 统一更新状态的函数
+                    const updateImageState = async () => {
                         initialStates[i] = {
-                            x: konvaImg.x() / 0.5,
-                            y: konvaImg.y() / 0.5,
+                            x: konvaImg.x(),
+                            y: konvaImg.y(),
                             scaleX: konvaImg.scaleX() / scale,
                             scaleY: konvaImg.scaleY() / scale,
                             rotation: konvaImg.rotation()
@@ -479,7 +590,11 @@ app.registerExtension({
                         }
                         imageLayer.batchDraw();
                         saveHistory();
-                    });
+                    };
+
+                    // 监听拖拽和变换结束事件
+                    konvaImg.on("dragend transformend", updateImageState);
+
                     loadedCount++;
                     statusText.innerText = `加载图像... ${loadedCount}/${images.length}`;
                 } catch (e) {
@@ -489,6 +604,9 @@ app.registerExtension({
                     continue;
                 }
             }
+
+            // 更新图层面板
+            updateLayerPanel();
 
             transformer.nodes([]);
             imageLayer.add(transformer);
@@ -509,29 +627,72 @@ app.registerExtension({
 
         transformer = new Konva.Transformer({
             nodes: [],
-            keepRatio: true, // 强制保持宽高比
+            keepRatio: true,
             enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
             rotateEnabled: true
         });
         imageLayer.add(transformer);
 
+        // 点击事件：支持点击图层选中，点击外部取消选中
         stage.on("click tap", (e) => {
-            if (e.target === canvasRect || e.target === stage) {
-                transformer.nodes([]);
-                imageLayer.batchDraw();
+            const target = e.target;
+            // 点击画板或空白处，取消选中
+            if (target === canvasRect || target === stage) {
+                deselectLayer();
                 return;
             }
-            if (imageNodes.includes(e.target)) {
-                transformer.nodes([e.target]);
-                imageLayer.batchDraw();
+            // 点击图层
+            if (imageNodes.includes(target)) {
+                const index = imageNodes.indexOf(target);
+                if (selectedLayer === target) {
+                    // 如果点击的是当前选中图层，保持选中状态
+                    return;
+                }
+                // 选中新图层
+                selectLayer(index);
             }
         });
 
         stage.on("mousedown", (e) => {
             if (imageNodes.includes(e.target)) {
-                transformer.nodes([e.target]);
-                imageLayer.batchDraw();
+                const index = imageNodes.indexOf(e.target);
+                selectLayer(index);
             }
+        });
+
+        // 鼠标滚轮缩放
+        stage.on("wheel", (e) => {
+            e.evt.preventDefault();
+            const scaleBy = 1.01;
+            const target = transformer.nodes()[0];
+            if (!target || !imageNodes.includes(target)) return;
+
+            const oldScale = target.scaleX();
+            const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+
+            target.scaleX(newScale);
+            target.scaleY(newScale);
+
+            const index = imageNodes.indexOf(target);
+            if (index !== -1) {
+                const maxWidth = boardWidth * 0.8;
+                const maxHeight = boardHeight * 0.8;
+                const scale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
+
+                initialStates[index] = {
+                    x: target.x(),
+                    y: target.y(),
+                    scaleX: target.scaleX() / scale,
+                    scaleY: target.scaleY() / scale,
+                    rotation: target.rotation()
+                };
+                node.properties.image_states = initialStates;
+                node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
+                node.setProperty("image_states", initialStates);
+                saveHistory();
+            }
+
+            imageLayer.batchDraw();
         });
 
         node.addDOMWidget("canvas", "Canvas", mainContainer, {
@@ -568,8 +729,8 @@ app.registerExtension({
             }
         });
 
-        const nodeWidth = (boardWidth + 2 * borderWidth) * 0.5 + 20;
-        const nodeHeight = (boardHeight + 2 * borderWidth) * 0.5 + 182;
+        const nodeWidth = boardWidth + 2 * borderWidth + 20;
+        const nodeHeight = boardHeight + 2 * borderWidth + 202;
         node.setSize([nodeWidth, nodeHeight]);
         node.resizable = false;
         node.isResizable = () => false;
@@ -633,34 +794,30 @@ app.registerExtension({
                 node.inputs.border_width.value = borderWidth;
                 node.inputs.canvas_color.value = canvasColorValue;
 
-                const displayScale = 0.5;
-                const displayBoardWidth = boardWidth * displayScale;
-                const displayBoardHeight = boardHeight * displayScale;
-                const displayBorderWidth = borderWidth * displayScale;
-
-                const containerWidth = boardContainer.offsetWidth || (displayBoardWidth + 2 * displayBorderWidth);
-                const containerHeight = boardContainer.offsetHeight || (displayBoardHeight + 2 * displayBorderWidth);
-                stage.width(Math.max(containerWidth, 200));
-                stage.height(Math.max(containerHeight, 200));
+                const containerWidth = boardContainer.offsetWidth || (boardWidth + 2 * borderWidth);
+                const containerHeight = boardContainer.offsetHeight || (boardHeight + 2 * borderWidth);
+                stage.width(containerWidth);
+                stage.height(containerHeight);
                 canvasRect.setAttrs({
-                    x: displayBorderWidth,
-                    y: displayBorderWidth,
-                    width: displayBoardWidth,
-                    height: displayBoardHeight,
+                    x: borderWidth,
+                    y: borderWidth,
+                    width: boardWidth,
+                    height: boardHeight,
                     fill: canvasColor
                 });
 
+                // 调整图像位置以适应新画板尺寸
                 imageNodes.forEach((node, i) => {
                     const state = initialStates[i] || {};
                     const imgWidth = node.width();
                     const imgHeight = node.height();
-                    const maxWidth = displayBoardWidth * 0.8;
-                    const maxHeight = displayBoardHeight * 0.8;
+                    const maxWidth = boardWidth * 0.8;
+                    const maxHeight = boardHeight * 0.8;
                     const scale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
                     const oldCenterX = state.x || borderWidth + boardWidth / 2;
                     const oldCenterY = state.y || borderWidth + boardHeight / 2;
-                    const newX = displayBorderWidth + (oldCenterX - borderWidth) * (displayBoardWidth / (uiConfig.board_width || boardWidth));
-                    const newY = displayBorderWidth + (oldCenterY - borderWidth) * (displayBoardHeight / (uiConfig.board_height || boardHeight));
+                    const newX = borderWidth + (oldCenterX - borderWidth) * (boardWidth / (uiConfig.board_width || boardWidth));
+                    const newY = borderWidth + (oldCenterY - borderWidth) * (boardHeight / (uiConfig.board_height || boardHeight));
                     node.x(newX);
                     node.y(newY);
                     node.scaleX(scale * (state.scaleX || 1));
@@ -669,17 +826,17 @@ app.registerExtension({
                     node.offsetX(imgWidth / 2);
                     node.offsetY(imgHeight / 2);
                     initialStates[i] = {
-                        x: node.x() / displayScale,
-                        y: node.y() / displayScale,
+                        x: node.x(),
+                        y: node.y(),
                         scaleX: node.scaleX() / scale,
                         scaleY: node.scaleY() / scale,
                         rotation: node.rotation()
                     };
                 });
 
-                const nodeWidth = displayBoardWidth + 2 * displayBorderWidth + 20;
-                const nodeHeight = displayBoardHeight + 2 * displayBorderWidth + 202;
-                node.setSize([Math.max(nodeWidth, 220), Math.max(nodeHeight, 382)]);
+                const nodeWidth = boardWidth + 2 * borderWidth + 20;
+                const nodeHeight = boardHeight + 2 * borderWidth + 206;
+                node.setSize([nodeWidth, nodeHeight]);
 
                 node.properties.ui_config = {
                     board_width: boardWidth,
@@ -696,6 +853,9 @@ app.registerExtension({
                 canvasLayer.batchDraw();
                 imageLayer.batchDraw();
                 stage.batchDraw();
+
+                // 更新图层面板
+                updateLayerPanel();
             } catch (e) {
                 log.error("Error in updateSize:", e);
                 statusText.innerText = "更新画板失败";
@@ -740,7 +900,7 @@ app.registerExtension({
                         loadImages(imagePaths, states, base64Chunks);
                     }
                 }
-            }, 3000);
+            }, 1000);
         }
         startPolling();
 
