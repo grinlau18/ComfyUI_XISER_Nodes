@@ -6,6 +6,8 @@ import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
+from nodes import MAX_RESOLUTION
+
 
 """
 Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
@@ -819,6 +821,79 @@ class XIS_MaskBatchProcessor:
         result = result.unsqueeze(0).unsqueeze(1)  # Shape: (1, 1, H, W)
         
         return (result,)
+    
+
+# 批量处理图像，支持最多 8 张图像
+class XIS_ImagesToCanvas:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image1": ("IMAGE", {"default": None}),
+            },
+            "optional": {
+                "image2": ("IMAGE", {"default": None}),
+                "image3": ("IMAGE", {"default": None}),
+                "image4": ("IMAGE", {"default": None}),
+                "image5": ("IMAGE", {"default": None}),
+                "image6": ("IMAGE", {"default": None}),
+                "image7": ("IMAGE", {"default": None}),
+                "image8": ("IMAGE", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("XIS_IMAGES",)
+    RETURN_NAMES = ("pack_images",)
+    FUNCTION = "pack_images"
+    CATEGORY = "XISER_Nodes/Canvas"
+
+    def pack_images(self, image1, image2=None, image3=None, image4=None, image5=None, image6=None, image7=None, image8=None):
+        # 确保 image1 不为 None
+        if image1 is None:
+            logger.error("image1 cannot be None")
+            raise ValueError("image1 must be provided")
+
+        # 收集所有图像输入
+        input_images = [image1, image2, image3, image4, image5, image6, image7, image8]
+        # 过滤掉 None 的输入
+        images = [img for img in input_images if img is not None]
+
+        # 验证图像数量
+        if len(images) > 8:
+            logger.error(f"Too many images: {len(images)}, maximum 8 allowed")
+            raise ValueError("Maximum 8 images allowed")
+
+        # 规范化图像：将 RGB 转换为 RGBA
+        normalized_images = []
+        for img in images:
+            if not isinstance(img, torch.Tensor):
+                logger.error(f"Invalid image type: expected torch.Tensor, got {type(img)}")
+                raise ValueError("All images must be torch.Tensor")
+
+            # 确保图像维度正确
+            if len(img.shape) == 3:  # (H, W, C)
+                img = img.unsqueeze(0)  # 转换为 (1, H, W, C)
+            elif len(img.shape) != 4:  # (N, H, W, C)
+                logger.error(f"Invalid image dimensions: {img.shape}")
+                raise ValueError(f"Image has invalid dimensions: {img.shape}")
+
+            # 处理每个批次中的图像
+            for i in range(img.shape[0]):
+                single_img = img[i]  # (H, W, C)
+                if single_img.shape[-1] == 3:  # RGB
+                    alpha = torch.ones_like(single_img[..., :1])  # 添加全 1 的 Alpha 通道
+                    single_img = torch.cat([single_img, alpha], dim=-1)  # 转换为 RGBA
+                elif single_img.shape[-1] != 4:  # 不是 RGBA
+                    logger.error(f"Image has invalid channels: {single_img.shape[-1]}")
+                    raise ValueError(f"Image has invalid channels: {single_img.shape[-1]}")
+                normalized_images.append(single_img)
+
+        if not normalized_images:
+            logger.error("No valid images provided after processing")
+            raise ValueError("No valid images provided")
+
+        logger.info(f"Packed {len(normalized_images)} images for canvas")
+        return (normalized_images,)
 
 
 NODE_CLASS_MAPPINGS = {
@@ -832,4 +907,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_ReorderImageMaskGroups": XIS_ReorderImageMaskGroups,
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
+    "XIS_ImagesToCanvas": XIS_ImagesToCanvas,
 }

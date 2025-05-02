@@ -1,6 +1,6 @@
 # ComfyUI_XISER_Nodes
 
-Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI), designed to enhance your workflow with powerful tools for image processing, mask manipulation, logic handling, UI control, and more. Whether you're generating art, preparing data for machine learning, or designing creative layouts, these nodes offer flexible and practical solutions.
+Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This custom node provides efficient composition tools that can place images in layers on the drawing board, edit the images in the layers, and output the merged image and layer masks. It also includes some efficiency - enhancing image and mask processing, prompt editing, logic processing, UI controls, dynamic sampling, etc.
 
 ---
 
