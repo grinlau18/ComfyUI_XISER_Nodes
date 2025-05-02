@@ -1,9 +1,8 @@
 import { app } from "/scripts/app.js";
 
 // 日志级别控制
-const LOG_LEVEL = (typeof process !== "undefined" && process.env && process.env.DEBUG) ? "debug" : "info";
+const LOG_LEVEL = "info"; // 移除动态调试开关，仅保留 info 和 error
 const log = {
-    debug: (...args) => { if (LOG_LEVEL === "debug") console.log(...args); },
     info: (...args) => { if (LOG_LEVEL !== "error") console.log(...args); },
     error: (...args) => console.error(...args)
 };
@@ -153,7 +152,7 @@ app.registerExtension({
 
         const originalOnNodeExecuted = app.graph.onNodeExecuted || (() => {});
         app.graph.onNodeExecuted = function (node) {
-            log.debug("Global onNodeExecuted triggered for node:", node.id);
+            log.info("Global onNodeExecuted triggered for node:", node.id);
             originalOnNodeExecuted.apply(this, arguments);
             if (node._onNodeExecuted) {
                 node._onNodeExecuted(node);
@@ -173,7 +172,6 @@ app.registerExtension({
                 }
                 node.widgets.splice(i, 1);
             }
-            log.debug("Cleared all widgets");
         }
         node.widgets = [];
 
@@ -218,9 +216,7 @@ app.registerExtension({
             updateSize();
         }, { values: ["black", "white", "transparent"] });
 
-        node.addWidget("hidden", "image_states", JSON.stringify(imageStates), (value) => {
-            log.debug(`Image states updated in widget: ${value}`);
-        }, { serialize: true });
+        node.addWidget("hidden", "image_states", JSON.stringify(imageStates), (value) => {}, { serialize: true });
 
         const mainContainer = document.createElement("div");
         mainContainer.className = "xiser-main-container";
@@ -266,7 +262,6 @@ app.registerExtension({
         };
         boardContainer.appendChild(redoButton);
 
-        // 添加图层选择面板
         const layerPanel = document.createElement("div");
         layerPanel.className = "xiser-layer-panel";
         boardContainer.appendChild(layerPanel);
@@ -310,15 +305,11 @@ app.registerExtension({
         let transformer = null;
         let lastImagePaths = [];
         let loadedImageUrls = new Map();
-        // 图像缓存
         const imageCache = new Map();
-        // 操作历史记录（撤销/重做）
         const history = [];
         let historyIndex = -1;
-        // 当前选中图层及其原始 zIndex
         let selectedLayer = null;
         let originalZIndex = null;
-        // 图层列表项
         let layerItems = [];
 
         function saveHistory() {
@@ -326,7 +317,7 @@ app.registerExtension({
             history.splice(historyIndex + 1);
             history.push(currentState);
             historyIndex++;
-            if (history.length > 20) { // 限制历史记录长度
+            if (history.length > 20) {
                 history.shift();
                 historyIndex--;
             }
@@ -382,80 +373,62 @@ app.registerExtension({
             node.setProperty("image_states", initialStates);
             imageLayer.batchDraw();
             saveHistory();
-            // 重置选中状态
             deselectLayer();
         }
 
-        // 更新图层选择面板（倒序显示）
         function updateLayerPanel() {
-            layerPanel.innerHTML = ""; // 清空面板
+            layerPanel.innerHTML = "";
             layerItems = [];
-            // 倒序遍历 imageNodes，使得最上层图层显示在列表顶部
             for (let index = imageNodes.length - 1; index >= 0; index--) {
                 const item = document.createElement("div");
                 item.className = "xiser-layer-item";
-                // 显示为 "图层 N"，N 与 imageNodes 索引一致
                 item.innerText = `图层 ${index + 1}`;
-                // 存储原始 imageNodes 索引
                 item.dataset.index = index;
                 layerPanel.appendChild(item);
                 layerItems.push(item);
 
-                // 点击列表项切换选中状态
                 item.addEventListener("click", () => {
                     const currentIndex = parseInt(item.dataset.index);
                     if (selectedLayer === imageNodes[currentIndex]) {
-                        // 再次点击，取消选中
                         deselectLayer();
                     } else {
-                        // 选中新图层
                         selectLayer(currentIndex);
                     }
                 });
             }
         }
 
-        // 选中图层
         function selectLayer(index) {
             if (index < 0 || index >= imageNodes.length) return;
             const node = imageNodes[index];
 
-            // 取消之前的选中状态
             deselectLayer();
 
-            // 记录原始 zIndex 并将图层移到顶层
             selectedLayer = node;
             originalZIndex = node.zIndex();
             node.moveToTop();
             transformer.moveToTop();
 
-            // 显示控制框
             transformer.nodes([node]);
             imageLayer.batchDraw();
 
-            // 高亮列表项
             layerItems.forEach(item => item.classList.remove("selected"));
-            // 由于列表是倒序的，计算对应的列表项索引
             const listItemIndex = imageNodes.length - 1 - index;
             if (layerItems[listItemIndex]) {
                 layerItems[listItemIndex].classList.add("selected");
             }
         }
 
-        // 取消选中图层
         function deselectLayer() {
             if (!selectedLayer) return;
 
-            // 恢复原始 zIndex
             selectedLayer.zIndex(originalZIndex);
             selectedLayer = null;
             originalZIndex = null;
 
-            // 隐藏控制框
             transformer.nodes([]);
             imageLayer.batchDraw();
 
-            // 取消列表项高亮
             layerItems.forEach(item => item.classList.remove("selected"));
         }
 
@@ -468,11 +441,9 @@ app.registerExtension({
             }
 
             if (states.length !== imagePaths.length) {
+                states = states.slice(0, imagePaths.length);
                 while (states.length < imagePaths.length) {
                     states.push({ x: borderWidth + boardWidth / 2, y: borderWidth + boardHeight / 2, scaleX: 1, scaleY: 1, rotation: 0 });
-                }
-                while (states.length > imagePaths.length) {
-                    states.pop();
                 }
             }
 
@@ -484,8 +455,7 @@ app.registerExtension({
             }));
 
             const currentFilenames = images.map(img => img.filename);
-            const existingFilenames = imageNodes.map(node => node.attrs.filename);
-            const imagesToLoad = images.filter(img => !existingFilenames.includes(img.filename));
+            const imagesToLoad = images.filter(img => !imageNodes.some(node => node.attrs.filename === img.filename));
             const imagesToRemove = imageNodes.filter(node => !currentFilenames.includes(node.attrs.filename));
 
             imagesToRemove.forEach(node => {
@@ -508,21 +478,15 @@ app.registerExtension({
             let loadedCount = imageNodes.length;
             for (let i = 0; i < images.length; i++) {
                 const imgData = images[i];
-                const existingNode = imageNodes.find(node => node.attrs.filename === imgData.filename);
-                if (existingNode) continue;
+                if (imageNodes.some(node => node.attrs.filename === imgData.filename)) continue;
 
                 try {
-                    let img;
-                    if (imageCache.has(imgData.filename)) {
-                        img = imageCache.get(imgData.filename);
-                        log.debug(`Using cached image for ${imgData.filename}`);
-                    } else {
+                    let img = imageCache.get(imgData.filename);
+                    if (!img) {
                         img = new Image();
                         let imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
                         const response = await fetch(imgUrl, { method: 'HEAD' });
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                        }
+                        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         img.src = imgUrl;
                         await new Promise((resolve, reject) => {
                             img.onload = () => {
@@ -531,15 +495,11 @@ app.registerExtension({
                                 resolve();
                             };
                             img.onerror = () => {
-                                const errorMsg = `Failed to load image ${i+1}: ${imgData.filename}, URL: ${imgUrl}`;
-                                log.error(errorMsg);
+                                log.error(`Failed to load image ${i+1}: ${imgData.filename}, URL: ${imgUrl}`);
                                 if (retryCount < maxRetries) {
                                     setTimeout(() => loadImages([imgData.filename], [states[i]], base64Chunks, retryCount + 1, maxRetries), 1000);
-                                    resolve();
-                                } else {
-                                    log.error(`Image ${i+1} failed after ${maxRetries} retries: ${imgData.filename}`);
-                                    resolve();
                                 }
+                                resolve();
                             };
                         });
                     }
@@ -548,12 +508,10 @@ app.registerExtension({
                     const maxWidth = boardWidth * 0.8;
                     const maxHeight = boardHeight * 0.8;
                     const scale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
-                    const posX = state.x !== undefined ? state.x : borderWidth + boardWidth / 2;
-                    const posY = state.y !== undefined ? state.y : borderWidth + boardHeight / 2;
                     const konvaImg = new Konva.Image({
                         image: img,
-                        x: posX,
-                        y: posY,
+                        x: state.x || borderWidth + boardWidth / 2,
+                        y: state.y || borderWidth + boardHeight / 2,
                         scaleX: scale * (state.scaleX || 1),
                         scaleY: scale * (state.scaleY || 1),
                         rotation: state.rotation || 0,
@@ -572,8 +530,7 @@ app.registerExtension({
                         rotation: konvaImg.rotation()
                     };
 
-                    // 统一更新状态的函数
-                    const updateImageState = async () => {
+                    const updateImageState = () => {
                         initialStates[i] = {
                             x: konvaImg.x(),
                             y: konvaImg.y(),
@@ -583,16 +540,11 @@ app.registerExtension({
                         };
                         node.properties.image_states = initialStates;
                         node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-                        try {
-                            await node.setProperty("image_states", initialStates);
-                        } catch (e) {
-                            log.error("Failed to sync image_states:", e);
-                        }
+                        node.setProperty("image_states", initialStates);
                         imageLayer.batchDraw();
                         saveHistory();
                     };
 
-                    // 监听拖拽和变换结束事件
                     konvaImg.on("dragend transformend", updateImageState);
 
                     loadedCount++;
@@ -605,9 +557,7 @@ app.registerExtension({
                 }
             }
 
-            // 更新图层面板
             updateLayerPanel();
-
             transformer.nodes([]);
             imageLayer.add(transformer);
             imageLayer.batchDraw();
@@ -622,7 +572,7 @@ app.registerExtension({
         }
 
         if (imagePaths.length > 0) {
-            await loadImages(imagePaths, imageStates);
+            loadImages(imagePaths, imageStates);
         }
 
         transformer = new Konva.Transformer({
@@ -633,22 +583,15 @@ app.registerExtension({
         });
         imageLayer.add(transformer);
 
-        // 点击事件：支持点击图层选中，点击外部取消选中
         stage.on("click tap", (e) => {
             const target = e.target;
-            // 点击画板或空白处，取消选中
             if (target === canvasRect || target === stage) {
                 deselectLayer();
                 return;
             }
-            // 点击图层
             if (imageNodes.includes(target)) {
                 const index = imageNodes.indexOf(target);
-                if (selectedLayer === target) {
-                    // 如果点击的是当前选中图层，保持选中状态
-                    return;
-                }
-                // 选中新图层
+                if (selectedLayer === target) return;
                 selectLayer(index);
             }
         });
@@ -660,10 +603,9 @@ app.registerExtension({
             }
         });
 
-        // 鼠标滚轮缩放
         stage.on("wheel", (e) => {
             e.evt.preventDefault();
-            const scaleBy = 1.01;
+            const scaleBy = 1.1; // 提高缩放灵敏度
             const target = transformer.nodes()[0];
             if (!target || !imageNodes.includes(target)) return;
 
@@ -678,7 +620,6 @@ app.registerExtension({
                 const maxWidth = boardWidth * 0.8;
                 const maxHeight = boardHeight * 0.8;
                 const scale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
-
                 initialStates[index] = {
                     x: target.x(),
                     y: target.y(),
@@ -730,7 +671,7 @@ app.registerExtension({
         });
 
         const nodeWidth = boardWidth + 2 * borderWidth + 20;
-        const nodeHeight = boardHeight + 2 * borderWidth + 202;
+        const nodeHeight = boardHeight + 2 * borderWidth + 206;
         node.setSize([nodeWidth, nodeHeight]);
         node.resizable = false;
         node.isResizable = () => false;
@@ -747,7 +688,6 @@ app.registerExtension({
                 node.properties.image_states = initialStates;
                 const serializedStates = JSON.stringify(initialStates);
                 node.widgets.find(w => w.name === "image_states").value = serializedStates;
-                node.widgets_values[4] = serializedStates;
                 node.setProperty("image_states", initialStates);
                 if (app.queuePrompt) {
                     app.queuePrompt();
@@ -784,18 +724,13 @@ app.registerExtension({
                 });
                 node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(initialStates)];
 
-                node.inputs = node.inputs || {};
-                node.inputs.board_width = node.inputs.board_width || { value: boardWidth, type: "INT" };
-                node.inputs.board_height = node.inputs.board_height || { value: boardHeight, type: "INT" };
-                node.inputs.border_width = node.inputs.border_width || { value: borderWidth, type: "INT" };
-                node.inputs.canvas_color = node.inputs.canvas_color || { value: canvasColorValue, type: "STRING" };
                 node.inputs.board_width.value = boardWidth;
                 node.inputs.board_height.value = boardHeight;
                 node.inputs.border_width.value = borderWidth;
                 node.inputs.canvas_color.value = canvasColorValue;
 
-                const containerWidth = boardContainer.offsetWidth || (boardWidth + 2 * borderWidth);
-                const containerHeight = boardContainer.offsetHeight || (boardHeight + 2 * borderWidth);
+                const containerWidth = boardWidth + 2 * borderWidth;
+                const containerHeight = boardHeight + 2 * borderWidth;
                 stage.width(containerWidth);
                 stage.height(containerHeight);
                 canvasRect.setAttrs({
@@ -806,7 +741,6 @@ app.registerExtension({
                     fill: canvasColor
                 });
 
-                // 调整图像位置以适应新画板尺寸
                 imageNodes.forEach((node, i) => {
                     const state = initialStates[i] || {};
                     const imgWidth = node.width();
@@ -814,10 +748,8 @@ app.registerExtension({
                     const maxWidth = boardWidth * 0.8;
                     const maxHeight = boardHeight * 0.8;
                     const scale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
-                    const oldCenterX = state.x || borderWidth + boardWidth / 2;
-                    const oldCenterY = state.y || borderWidth + boardHeight / 2;
-                    const newX = borderWidth + (oldCenterX - borderWidth) * (boardWidth / (uiConfig.board_width || boardWidth));
-                    const newY = borderWidth + (oldCenterY - borderWidth) * (boardHeight / (uiConfig.board_height || boardHeight));
+                    const newX = state.x || borderWidth + boardWidth / 2;
+                    const newY = state.y || borderWidth + boardHeight / 2;
                     node.x(newX);
                     node.y(newY);
                     node.scaleX(scale * (state.scaleX || 1));
@@ -854,7 +786,6 @@ app.registerExtension({
                 imageLayer.batchDraw();
                 stage.batchDraw();
 
-                // 更新图层面板
                 updateLayerPanel();
             } catch (e) {
                 log.error("Error in updateSize:", e);
@@ -869,7 +800,6 @@ app.registerExtension({
             pollInterval = setInterval(() => {
                 let newImagePaths = [];
                 let states = node.properties?.image_states || [];
-                let base64Chunks = [];
 
                 if (node.outputs && node.outputs[1] && node.outputs[1].value) {
                     if (typeof node.outputs[1].value === "string") {
@@ -888,7 +818,6 @@ app.registerExtension({
                     lastImagePaths = newImagePaths.slice();
                     if (newImagePaths.length > 0) {
                         imagePaths = newImagePaths;
-                        node.properties.ui_config = node.properties.ui_config || {};
                         node.properties.ui_config.image_paths = imagePaths;
                         node.properties.image_states = states;
                         if (states.length === 0 && initialStates.length === 0) {
@@ -897,7 +826,7 @@ app.registerExtension({
                         } else {
                             initialStates = states;
                         }
-                        loadImages(imagePaths, states, base64Chunks);
+                        loadImages(imagePaths, initialStates);
                     }
                 }
             }, 1000);
@@ -906,7 +835,6 @@ app.registerExtension({
 
         node._onNodeExecuted = function () {
             let states = node.properties?.image_states || [];
-            let base64Chunks = [];
             let newImagePaths = [];
 
             if (node.outputs && node.outputs[1] && node.outputs[1].value) {
@@ -923,7 +851,6 @@ app.registerExtension({
 
             if (newImagePaths.length > 0) {
                 imagePaths = newImagePaths;
-                node.properties.ui_config = node.properties.ui_config || {};
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
                 if (states.length === 0 && initialStates.length === 0) {
@@ -933,7 +860,7 @@ app.registerExtension({
                     initialStates = states;
                 }
                 lastImagePaths = imagePaths.slice();
-                loadImages(imagePaths, states, base64Chunks);
+                loadImages(imagePaths, initialStates);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -943,7 +870,6 @@ app.registerExtension({
 
         node.onExecuted = function (message) {
             let states = [];
-            let base64Chunks = [];
             let newImagePaths = [];
 
             if (message && message.image_paths) {
@@ -956,7 +882,6 @@ app.registerExtension({
 
             if (message) {
                 states = message.image_states || [];
-                base64Chunks = message.image_base64_chunks || [];
             }
 
             if (newImagePaths.length === 0 && node.outputs && node.outputs[1] && node.outputs[1].value) {
@@ -973,7 +898,6 @@ app.registerExtension({
 
             if (newImagePaths.length > 0) {
                 imagePaths = newImagePaths;
-                node.properties.ui_config = node.properties.ui_config || {};
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
                 if (states.length === 0 && initialStates.length === 0) {
@@ -983,7 +907,7 @@ app.registerExtension({
                     initialStates = states;
                 }
                 lastImagePaths = imagePaths.slice();
-                loadImages(imagePaths, states, base64Chunks);
+                loadImages(imagePaths, states);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
