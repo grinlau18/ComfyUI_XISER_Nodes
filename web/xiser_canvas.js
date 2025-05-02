@@ -605,7 +605,7 @@ app.registerExtension({
 
         stage.on("wheel", (e) => {
             e.evt.preventDefault();
-            const scaleBy = 1.1; // 提高缩放灵敏度
+            const scaleBy = 1.01; // 提高缩放灵敏度
             const target = transformer.nodes()[0];
             if (!target || !imageNodes.includes(target)) return;
 
