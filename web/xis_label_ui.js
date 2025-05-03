@@ -1,15 +1,16 @@
 import { app } from "/scripts/app.js";
 
-// 环境标志（生产环境禁用日志）
-const isProduction = false;
-
 // 资源加载状态
 const loadedResources = new Set();
 
-// 加载函数（优化：缓存检查、Promise、减少日志）
+/**
+ * 加载JavaScript脚本，支持缓存和CDN回退
+ * @param {string} src - 脚本URL
+ * @param {string} [fallbackSrc] - 回退CDN URL
+ * @returns {Promise<void>} 加载完成或失败的Promise
+ */
 function loadScript(src, fallbackSrc) {
     if (loadedResources.has(src)) {
-        !isProduction && console.debug(`脚本已加载: ${src}`);
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
@@ -18,13 +19,10 @@ function loadScript(src, fallbackSrc) {
         script.src = src;
         script.onload = () => {
             loadedResources.add(src);
-            !isProduction && console.log(`成功加载脚本: ${src}`);
             resolve();
         };
         script.onerror = () => {
-            !isProduction && console.error(`加载失败: ${src}`);
             if (fallbackSrc) {
-                !isProduction && console.log(`尝试 CDN: ${fallbackSrc}`);
                 loadScript(fallbackSrc).then(resolve).catch(reject);
             } else {
                 reject(new Error(`加载脚本失败: ${src}`));
@@ -34,14 +32,18 @@ function loadScript(src, fallbackSrc) {
     });
 }
 
+/**
+ * 加载CSS样式表，支持缓存和CDN回退
+ * @param {string} href - CSS URL
+ * @param {string} [fallbackHref] - 回退CDN URL
+ * @returns {Promise<void>} 加载完成或失败的Promise
+ */
 function loadCss(href, fallbackHref) {
     if (loadedResources.has(href)) {
-        !isProduction && console.debug(`CSS 已加载: ${href}`);
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
         if (!navigator.onLine) {
-            !isProduction && console.warn(`无网络连接，跳过加载: ${href}，使用回退字体`);
             loadedResources.add(href);
             resolve();
             return;
@@ -52,16 +54,12 @@ function loadCss(href, fallbackHref) {
         link.href = href;
         link.onload = () => {
             loadedResources.add(href);
-            !isProduction && console.log(`成功加载 CSS: ${href}`);
             resolve();
         };
         link.onerror = () => {
-            !isProduction && console.error(`加载失败: ${href}`);
             if (fallbackHref) {
-                !isProduction && console.log(`尝试 CDN: ${fallbackHref}`);
                 loadCss(fallbackHref).then(resolve).catch(reject);
             } else {
-                !isProduction && console.warn(`无备用 CSS，跳过: ${href}，使用回退字体`);
                 loadedResources.add(href);
                 resolve();
             }
@@ -70,7 +68,10 @@ function loadCss(href, fallbackHref) {
     });
 }
 
-// 异步加载所有资源
+/**
+ * 异步加载CodeMirror相关资源
+ * @returns {Promise<void>} 所有资源加载完成的Promise
+ */
 async function loadCodeMirrorResources() {
     const resources = [
         {
@@ -100,21 +101,16 @@ async function loadCodeMirrorResources() {
         }
     ];
 
-    try {
-        await Promise.all(
-            resources.map(res =>
-                res.type === "script"
-                    ? loadScript(res.src, res.fallback)
-                    : loadCss(res.src, res.fallback)
-            )
-        );
-        !isProduction && console.log("所有 CodeMirror 资源加载完成");
-    } catch (e) {
-        !isProduction && console.error("加载 CodeMirror 资源失败:", e);
-    }
+    await Promise.all(
+        resources.map(res =>
+            res.type === "script"
+                ? loadScript(res.src, res.fallback)
+                : loadCss(res.src, res.fallback)
+        )
+    );
 }
 
-// 单例 CodeMirror 编辑器
+// 单例CodeMirror编辑器
 let codeMirrorInstance = null;
 
 // 防抖函数
@@ -127,14 +123,18 @@ function debounce(fn, wait) {
 }
 
 app.registerExtension({
-    name: "MyCustomNodes.XIS_Label",
+    name: "ComfyUI.XISER.Label",
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "XIS_Label") return;
 
         // 加载资源（仅一次）
         await loadCodeMirrorResources();
 
-        // 解析 HTML 格式（优化：离线 DOM、缓存）
+        /**
+         * 解析HTML格式的文本数据，转换为结构化行数据
+         * @param {string} html - 输入的HTML字符串
+         * @returns {Object} 包含行数据的对象，格式为 { lines: Array }
+         */
         function parseHtmlFormat(html) {
             const defaultData = {
                 lines: [
@@ -143,7 +143,7 @@ app.registerExtension({
                 ]
             };
             try {
-                // 清理 HTML，添加中性父容器
+                // 清理HTML，限制允许的标签，添加中性父容器
                 const cleanedHtml = `<div style="margin:0;padding:0;">${html || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'}</div>`;
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(cleanedHtml, "text/html");
@@ -151,12 +151,13 @@ app.registerExtension({
                 const lines = [];
                 const processedNodes = new Set();
                 const blockTags = ["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "SPAN"];
+                const allowedTags = ["P", "DIV", "SPAN", "BR"];
 
                 const processNode = (node, depth = 0) => {
                     if (processedNodes.has(node) || depth > 50) return;
                     processedNodes.add(node);
 
-                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+                    if (node.nodeType !== Node.ELEMENT_NODE || !allowedTags.includes(node.tagName)) return;
 
                     if (node.tagName === "BR") {
                         lines.push({
@@ -175,30 +176,26 @@ app.registerExtension({
                     }
 
                     const text = node.textContent.trim();
-                    if ((text || blockTags.includes(node.tagName)) && !["SCRIPT", "STYLE"].includes(node.tagName)) {
+                    if ((text || blockTags.includes(node.tagName))) {
                         const inlineStyles = node.style;
                         const computedStyles = getComputedStyle(node);
                         const isBlock = blockTags.includes(node.tagName) || computedStyles.display === "block";
                         const fontSize = parseInt(inlineStyles.fontSize || computedStyles.fontSize) || 24;
-                        // 解析 margin-left
                         let marginLeft = parseInt(inlineStyles.marginLeft) || 0;
                         if (!marginLeft && node.getAttribute("style")) {
                             const styleMatch = node.getAttribute("style").match(/margin-left:\s*(\d+)px/i);
                             marginLeft = styleMatch ? parseInt(styleMatch[1]) : 0;
                         }
-                        // 解析 margin-top
                         let marginTop = parseInt(inlineStyles.marginTop) || 0;
                         if (!marginTop && node.getAttribute("style")) {
                             const styleMatch = node.getAttribute("style").match(/margin-top:\s*(\d+)px/i);
                             marginTop = styleMatch ? parseInt(styleMatch[1]) : 0;
                         }
-                        // 解析 margin-bottom
                         let marginBottom = parseInt(inlineStyles.marginBottom) || 0;
                         if (!marginBottom && node.getAttribute("style")) {
                             const styleMatch = node.getAttribute("style").match(/margin-bottom:\s*(\d+)px/i);
                             marginBottom = styleMatch ? parseInt(styleMatch[1]) : 0;
                         }
-                        !isProduction && console.debug(`解析行: text=${text}, margin_left=${marginLeft}, margin_top=${marginTop}, margin_bottom=${marginBottom}, inlineStyles.marginLeft=${inlineStyles.marginLeft}, inlineStyles.marginTop=${inlineStyles.marginTop}, inlineStyles.marginBottom=${inlineStyles.marginBottom}, styleAttr=${node.getAttribute("style")}`);
                         lines.push({
                             text: text,
                             font_size: fontSize,
@@ -219,12 +216,15 @@ app.registerExtension({
                 container.childNodes.forEach(child => processNode(child));
                 return lines.length ? { lines } : defaultData;
             } catch (e) {
-                !isProduction && console.error("解析 HTML 格式错误:", e);
                 return defaultData;
             }
         }
 
-        // 更新 textData 背景色
+        /**
+         * 更新节点的textData和背景色，并缓存解析结果
+         * @param {Object} node - 节点对象
+         * @param {string} newColor - 新背景色
+         */
         function updateTextDataBackground(node, newColor) {
             let textData = node.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
             if (textData.includes('<div style="background')) {
@@ -233,28 +233,37 @@ app.registerExtension({
                 const container = doc.body.firstElementChild || doc.body;
                 container.style.background = newColor;
                 textData = container.outerHTML;
-                node.properties.textData = textData;
-                delete node.properties.parsedTextData;
-                !isProduction && console.log("更新 textData 背景色:", newColor);
             }
+            node.properties.textData = textData;
+            node.properties.parsedTextData = parseHtmlFormat(textData);
             app.canvas.setDirty(true);
         }
 
-        // 绘制节点（优化：支持 Pass 和 Mute 状态）
+        /**
+         * 更新节点的textData，并缓存解析结果
+         * @param {Object} node - 节点对象
+         * @param {string} newText - 新文本数据
+         */
+        function updateTextData(node, newText) {
+            node.properties.textData = newText;
+            node.properties.parsedTextData = parseHtmlFormat(newText);
+            app.canvas.setDirty(true);
+        }
+
+        // 绘制节点
         const fontCache = new Map();
         nodeType.prototype.onDrawForeground = function (ctx) {
             try {
-                let textData = this.properties.parsedTextData || parseHtmlFormat(this.properties?.textData);
-                this.properties.parsedTextData = textData;
+                if (!this.properties.parsedTextData) {
+                    this.properties.parsedTextData = parseHtmlFormat(this.properties?.textData);
+                }
+                const textData = this.properties.parsedTextData;
 
-                // 检查节点状态
                 const isMuteMode = this.mode === 2;
                 const isPassMode = this.mode === 4 || this.flags?.bypassed === true;
-                const baseColor = this.color || "#333355";
+                const baseColor = this.properties.color || "#333355";
                 const backgroundColor = isPassMode ? "rgba(128, 0, 128, 0.5)" : baseColor;
                 const alpha = (isMuteMode || isPassMode) ? 0.5 : 1.0;
-
-                !isProduction && console.debug(`绘制节点: mode=${this.mode}, flags=${JSON.stringify(this.flags)}, backgroundColor=${backgroundColor}, alpha=${alpha}`);
 
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = backgroundColor;
@@ -263,6 +272,7 @@ app.registerExtension({
                 const margin = 20;
                 let currentY = margin - 30;
                 const lineHeightFactor = 1.2;
+                const maxWidth = this.size[0] - 2 * margin; // 可用宽度
 
                 textData.lines.forEach(line => {
                     ctx.fillStyle = line.color || "#FFFFFF";
@@ -270,50 +280,96 @@ app.registerExtension({
                     const fontKey = `${fontWeight}_${line.font_size}`;
                     let font = fontCache.get(fontKey);
                     if (!font) {
-                        font = `${fontWeight} ${line.font_size}px Arial`;
+                        font = `${fontWeight} ${line.font_size}px 'Fira Code', monospace`;
                         fontCache.set(fontKey, font);
                     }
                     ctx.font = font;
                     ctx.textAlign = "left";
                     ctx.textBaseline = "top";
 
-                    // 计算 xPos
-                    let xPos = margin + (line.margin_left || 0);
-                    let textWidth = line.text ? ctx.measureText(line.text).width : 0;
-                    if (line.text_align === "center") {
-                        xPos = (this.size[0] - textWidth) / 2;
-                    } else if (line.text_align === "right") {
-                        xPos = this.size[0] - margin - textWidth - (line.margin_left || 0);
-                    }
-                    xPos = Math.max(margin, Math.min(xPos, this.size[0] - margin - textWidth));
-
-                    // 应用 margin-top
+                    // 应用margin-top
                     currentY += (line.margin_top || 0);
 
-                    !isProduction && console.debug(`渲染行: text=${line.text}, margin_left=${line.margin_left}, margin_top=${line.margin_top}, margin_bottom=${line.margin_bottom}, xPos=${xPos}, yPos=${currentY}`);
-
-                    if ((line.text_decoration || "none").includes("underline") && line.text) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = line.color || "#FFFFFF";
-                        ctx.lineWidth = 1;
-                        ctx.moveTo(xPos, currentY + line.font_size);
-                        ctx.lineTo(xPos + textWidth, currentY + line.font_size);
-                        ctx.stroke();
+                    // 如果文本为空或仅为换行符，直接处理
+                    if (!line.text) {
+                        currentY += (line.font_size || 24) * lineHeightFactor;
+                        currentY += (line.margin_bottom || 0);
+                        return;
                     }
 
-                    if (line.text) {
-                        ctx.fillText(line.text, xPos, currentY);
-                    }
+                    // 计算换行
+                    const words = line.text.split(/(\s+)/); // 按空格和空白字符分割
+                    let currentLine = "";
+                    const wrappedLines = [];
+                    let currentWidth = 0;
 
-                    // 更新 currentY，考虑 font_size 和 margin-bottom
-                    currentY += (line.font_size || 24) * lineHeightFactor;
-                    currentY += (line.margin_bottom || 0);
+                    for (const word of words) {
+                        const wordWidth = ctx.measureText(word).width;
+                        if (currentWidth + wordWidth <= maxWidth) {
+                            currentLine += word;
+                            currentWidth += wordWidth;
+                        } else {
+                            if (currentLine) wrappedLines.push(currentLine);
+                            // 对于长单词或中文，按字符分割
+                            if (wordWidth > maxWidth) {
+                                let tempWord = "";
+                                let tempWidth = 0;
+                                for (const char of word) {
+                                    const charWidth = ctx.measureText(char).width;
+                                    if (tempWidth + charWidth <= maxWidth) {
+                                        tempWord += char;
+                                        tempWidth += charWidth;
+                                    } else {
+                                        if (tempWord) wrappedLines.push(tempWord);
+                                        tempWord = char;
+                                        tempWidth = charWidth;
+                                    }
+                                }
+                                if (tempWord) wrappedLines.push(tempWord);
+                                currentLine = "";
+                                currentWidth = 0;
+                            } else {
+                                currentLine = word;
+                                currentWidth = wordWidth;
+                            }
+                        }
+                    }
+                    if (currentLine) wrappedLines.push(currentLine);
+
+                    // 渲染每一行
+                    wrappedLines.forEach((wrappedText, index) => {
+                        const textWidth = ctx.measureText(wrappedText).width;
+                        let xPos = margin + (line.margin_left || 0);
+                        if (line.text_align === "center") {
+                            xPos = (this.size[0] - textWidth) / 2;
+                        } else if (line.text_align === "right") {
+                            xPos = this.size[0] - margin - textWidth - (line.margin_left || 0);
+                        }
+                        xPos = Math.max(margin, Math.min(xPos, this.size[0] - margin - textWidth));
+
+                        // 下划线
+                        if ((line.text_decoration || "none").includes("underline") && wrappedText) {
+                            ctx.beginPath();
+                            ctx.strokeStyle = line.color || "#FFFFFF";
+                            ctx.lineWidth = 1;
+                            ctx.moveTo(xPos, currentY + line.font_size);
+                            ctx.lineTo(xPos + textWidth, currentY + line.font_size);
+                            ctx.stroke();
+                        }
+
+                        ctx.fillText(wrappedText, xPos, currentY);
+                        currentY += (line.font_size || 24) * lineHeightFactor;
+
+                        // 仅在最后一行应用margin-bottom
+                        if (index === wrappedLines.length - 1) {
+                            currentY += (line.margin_bottom || 0);
+                        }
+                    });
                 });
 
                 // 动态调整节点高度
                 this.size[1] = Math.max(this.size[1], currentY + margin);
             } catch (e) {
-                !isProduction && console.error("渲染错误:", e);
             } finally {
                 ctx.globalAlpha = 1.0;
             }
@@ -321,36 +377,33 @@ app.registerExtension({
 
         // 监听模式变化
         nodeType.prototype.onModeChange = function (newMode, oldMode) {
-            !isProduction && console.log(`模式变化: oldMode=${oldMode}, newMode=${newMode}, flags=${JSON.stringify(this.flags)}`);
             this.setDirtyCanvas(true, true);
             app.canvas.setDirty(true);
         };
 
-        // 监听颜色变化（优化：防抖）
+        // 监听颜色变化
         nodeType.prototype.onPropertyChanged = debounce(function (property, value) {
             if (property === "color" && value) {
+                this.properties.color = value;
                 updateTextDataBackground(this, value);
-                !isProduction && console.log("节点颜色变化:", value);
                 this.setDirtyCanvas(true, true);
                 app.canvas.setDirty(true);
             }
             return true;
         }, 100);
 
-        // 右键菜单（优化：复用编辑器、清理模态框）
+        // 右键菜单
         nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
             options.push({
                 content: "编辑文本",
                 callback: async () => {
-                    !isProduction && console.log("打开 CodeMirror 编辑器 XIS_Label:", this.id);
-
                     const modal = document.createElement("div");
                     modal.style.position = "fixed";
                     modal.style.top = "50%";
                     modal.style.left = "50%";
                     modal.style.transform = "translate(-50%, -50%)";
-                    modal.style.width = "600px";
-                    modal.style.height = "400px";
+                    modal.style.width = "min(90vw, 600px)";
+                    modal.style.height = "min(90vh, 400px)";
                     modal.style.background = "#1A1A1A";
                     modal.style.border = "none";
                     modal.style.borderRadius = "8px";
@@ -384,7 +437,6 @@ app.registerExtension({
                     buttonDiv.appendChild(cancelButton);
                     modal.appendChild(buttonDiv);
 
-                    // 样式（集中管理，Grok 风格）
                     const style = document.createElement("style");
                     style.textContent = `
                         .save-button, .cancel-button {
@@ -434,16 +486,13 @@ app.registerExtension({
                                 lineWrapping: true,
                                 extraKeys: { "Ctrl-S": () => saveButton.click() }
                             });
-                            !isProduction && console.log("CodeMirror 初始化成功，主题：dracula");
                         } else {
                             codeMirrorInstance.setValue(defaultText);
                             codeMirrorInstance.getWrapperElement().parentNode.removeChild(codeMirrorInstance.getWrapperElement());
                             editorDiv.appendChild(codeMirrorInstance.getWrapperElement());
-                            !isProduction && console.log("复用 CodeMirror 实例，主题：dracula");
                         }
                         editor = codeMirrorInstance;
                     } else {
-                        !isProduction && console.error("CodeMirror 未加载，使用 textarea 回退");
                         const textarea = document.createElement("textarea");
                         textarea.style.width = "100%";
                         textarea.style.height = "100%";
@@ -461,16 +510,12 @@ app.registerExtension({
                     const saveHandler = () => {
                         try {
                             const newText = editor.getValue ? editor.getValue() : editor.value;
-                            this.properties.textData = newText;
-                            delete this.properties.parsedTextData;
+                            updateTextData(this, newText);
                             this.setDirtyCanvas(true, true);
-                            app.canvas.setDirty(true);
-                            !isProduction && console.log("保存 textData:", newText);
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
                             if (editor !== codeMirrorInstance) editor.remove();
                         } catch (e) {
-                            !isProduction && console.error("保存错误:", e);
                         }
                     };
 
@@ -479,21 +524,24 @@ app.registerExtension({
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
                             if (editor !== codeMirrorInstance) editor.remove();
+                            if (codeMirrorInstance && !document.body.contains(codeMirrorInstance.getWrapperElement())) {
+                                codeMirrorInstance = null;
+                            }
                         } catch (e) {
-                            !isProduction && console.error("取消错误:", e);
                         }
                     };
 
                     saveButton.onclick = saveHandler;
                     cancelButton.onclick = cancelHandler;
+                    modal.addEventListener("keydown", (e) => {
+                        if (e.key === "Escape") cancelHandler();
+                    });
                 }
             });
 
             options.push({
                 content: "Change Color",
                 callback: () => {
-                    !isProduction && console.log("打开颜色选择器 XIS_Label:", this.id);
-
                     const modal = document.createElement("div");
                     modal.style.position = "fixed";
                     modal.style.top = "50%";
@@ -512,7 +560,7 @@ app.registerExtension({
 
                     const colorInput = document.createElement("input");
                     colorInput.type = "color";
-                    colorInput.value = this.color || "#333355";
+                    colorInput.value = this.properties.color || "#333355";
                     colorInput.style.width = "100%";
                     colorInput.style.padding = "5px";
                     modal.appendChild(colorInput);
@@ -560,16 +608,12 @@ app.registerExtension({
 
                     const saveColorHandler = () => {
                         try {
-                            this.color = colorInput.value;
+                            this.properties.color = colorInput.value;
                             updateTextDataBackground(this, colorInput.value);
-                            delete this.properties.parsedTextData;
                             this.setDirtyCanvas(true, true);
-                            app.canvas.setDirty(true);
-                            !isProduction && console.log("保存节点颜色:", colorInput.value);
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
                         } catch (e) {
-                            !isProduction && console.error("保存颜色错误:", e);
                         }
                     };
 
@@ -578,12 +622,14 @@ app.registerExtension({
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
                         } catch (e) {
-                            !isProduction && console.error("取消颜色错误:", e);
                         }
                     };
 
                     saveButton.onclick = saveColorHandler;
                     cancelButton.onclick = cancelColorHandler;
+                    modal.addEventListener("keydown", (e) => {
+                        if (e.key === "Escape") cancelColorHandler();
+                    });
                 }
             });
         };

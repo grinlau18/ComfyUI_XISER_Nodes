@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 
 // 日志级别控制
-const LOG_LEVEL = "info"; // 移除动态调试开关，仅保留 info 和 error
+const LOG_LEVEL = "info";
 const log = {
     info: (...args) => { if (LOG_LEVEL !== "error") console.log(...args); },
     error: (...args) => console.error(...args)
@@ -50,13 +50,14 @@ app.registerExtension({
                 display: none !important;
             }
             .xiser-main-container {
-                position: relative;
+                position: absolute; /* 修改为绝对定位 */
                 display: block;
                 width: 100%;
                 height: 100%;
                 min-height: 100px;
                 background: transparent;
                 overflow: visible;
+                z-index: 1000; /* 确保画板在顶层 */
             }
             .xiser-status-text {
                 position: absolute;
@@ -162,8 +163,6 @@ app.registerExtension({
     async nodeCreated(node) {
         if (node.comfyClass !== "XISER_Canvas") return;
 
-        log.info("XISER_Canvas node created:", node.id);
-
         if (node.widgets && node.widgets.length > 0) {
             for (let i = node.widgets.length - 1; i >= 0; i--) {
                 const widget = node.widgets[i];
@@ -218,91 +217,37 @@ app.registerExtension({
 
         node.addWidget("hidden", "image_states", JSON.stringify(imageStates), (value) => {}, { serialize: true });
 
-        const mainContainer = document.createElement("div");
-        mainContainer.className = "xiser-main-container";
+        // 创建占位 DOM，避免节点高度塌缩
+        const placeholder = document.createElement("div");
+        placeholder.style.width = `${boardWidth + 2 * borderWidth + 20}px`;
+        placeholder.style.height = `${boardHeight + 2 * borderWidth + 206}px`;
+        placeholder.style.background = "transparent";
+        node.addDOMWidget("placeholder", "Placeholder", placeholder, { serialize: false });
 
-        const boardContainer = document.createElement("div");
-        boardContainer.className = "xiser-canvas-container";
-        boardContainer.style.backgroundColor = borderColor;
+        const nodeWidth = boardWidth + 2 * borderWidth + 20;
+        const nodeHeight = boardHeight + 2 * borderWidth + 206;
+        node.setSize([nodeWidth, nodeHeight]);
+        node.resizable = false;
+        node.isResizable = () => false;
 
-        const statusText = document.createElement("div");
-        statusText.className = "xiser-status-text";
-        statusText.innerText = "等待图像...";
-        boardContainer.appendChild(statusText);
-
-        const triggerButton = document.createElement("button");
-        triggerButton.className = "xiser-trigger-button";
-        triggerButton.innerText = "运行节点";
-        triggerButton.onclick = () => {
-            triggerPrompt();
-        };
-        boardContainer.appendChild(triggerButton);
-
-        const resetButton = document.createElement("button");
-        resetButton.className = "xiser-reset-button";
-        resetButton.innerText = "重置画板";
-        resetButton.onclick = () => {
-            resetCanvas();
-        };
-        boardContainer.appendChild(resetButton);
-
-        const undoButton = document.createElement("button");
-        undoButton.className = "xiser-undo-button";
-        undoButton.innerText = "撤销";
-        undoButton.onclick = () => {
-            undo();
-        };
-        boardContainer.appendChild(undoButton);
-
-        const redoButton = document.createElement("button");
-        redoButton.className = "xiser-redo-button";
-        redoButton.innerText = "重做";
-        redoButton.onclick = () => {
-            redo();
-        };
-        boardContainer.appendChild(redoButton);
-
-        const layerPanel = document.createElement("div");
-        layerPanel.className = "xiser-layer-panel";
-        boardContainer.appendChild(layerPanel);
-
-        const stageContainer = document.createElement("div");
-        stageContainer.className = "xiser-canvas-stage";
-        boardContainer.appendChild(stageContainer);
-        mainContainer.appendChild(boardContainer);
-
-        if (!window.Konva) {
-            log.error("Konva.js not loaded, aborting stage creation");
-            statusText.innerText = "错误：Konva.js 未加载";
-            statusText.style.color = "#f00";
-            return;
+        if (node.getHTMLElement) {
+            const element = node.getHTMLElement();
+            if (element) {
+                element.classList.add("xiser-node");
+            }
         }
 
-        const stage = new Konva.Stage({
-            container: stageContainer,
-            width: boardWidth + 2 * borderWidth,
-            height: boardHeight + 2 * borderWidth
-        });
-
-        const canvasLayer = new Konva.Layer();
-        const imageLayer = new Konva.Layer();
-        stage.add(canvasLayer);
-        stage.add(imageLayer);
-
-        const canvasRect = new Konva.Rect({
-            x: borderWidth,
-            y: borderWidth,
-            width: boardWidth,
-            height: boardHeight,
-            fill: canvasColor,
-            stroke: "#808080",
-            strokeWidth: 2
-        });
-        canvasLayer.add(canvasRect);
-
+        // 画板相关变量，延迟到 onNodeExecuted 初始化
+        let mainContainer = null;
+        let boardContainer = null;
+        let stage = null;
+        let canvasLayer = null;
+        let imageLayer = null;
+        let canvasRect = null;
+        let statusText = null;
+        let transformer = null;
         let imageNodes = [];
         let initialStates = imageStates.slice();
-        let transformer = null;
         let lastImagePaths = [];
         let loadedImageUrls = new Map();
         const imageCache = new Map();
@@ -311,6 +256,135 @@ app.registerExtension({
         let selectedLayer = null;
         let originalZIndex = null;
         let layerItems = [];
+        let resizeObserver = null;
+        let mutationObserver = null;
+
+        function triggerPrompt() {
+            try {
+                node.properties.image_states = initialStates;
+                const serializedStates = JSON.stringify(initialStates);
+                node.widgets.find(w => w.name === "image_states").value = serializedStates;
+                node.setProperty("image_states", initialStates);
+                if (app.queuePrompt) {
+                    app.queuePrompt();
+                }
+            } catch (e) {
+                log.error("Failed to queue prompt:", e);
+            }
+        }
+
+        function updateSize() {
+            try {
+                boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
+                boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
+                borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
+                canvasColorValue = canvasColorValue || "black";
+
+                canvasColor = {
+                    "black": "rgb(0, 0, 0)",
+                    "white": "rgb(255, 255, 255)",
+                    "transparent": "rgba(0, 0, 0, 0)"
+                }[canvasColorValue] || "rgb(0, 0, 0)";
+                borderColor = {
+                    "black": "rgb(25, 25, 25)",
+                    "white": "rgb(230, 230, 230)",
+                    "transparent": "rgba(0, 0, 0, 0)"
+                }[canvasColorValue] || "rgb(25, 25, 25)";
+
+                node.widgets.forEach(widget => {
+                    if (widget.name === "board_width") widget.value = boardWidth;
+                    if (widget.name === "board_height") widget.value = boardHeight;
+                    if (widget.name === "border_width") widget.value = borderWidth;
+                    if (widget.name === "canvas_color") widget.value = canvasColorValue;
+                    if (widget.name === "image_states") widget.value = JSON.stringify(initialStates);
+                });
+                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(initialStates)];
+
+                if (node.inputs) {
+                    node.inputs.board_width = node.inputs.board_width || { value: boardWidth, type: "INT" };
+                    node.inputs.board_height = node.inputs.board_height || { value: boardHeight, type: "INT" };
+                    node.inputs.border_width = node.inputs.border_width || { value: borderWidth, type: "INT" };
+                    node.inputs.canvas_color = node.inputs.canvas_color || { value: canvasColorValue, type: "STRING" };
+
+                    node.inputs.board_width.value = boardWidth;
+                    node.inputs.board_height.value = boardHeight;
+                    node.inputs.border_width.value = borderWidth;
+                    node.inputs.canvas_color.value = canvasColorValue;
+                } else {
+                    log.warn("node.inputs is undefined in updateSize, skipping input updates");
+                }
+
+                const containerWidth = boardWidth + 2 * borderWidth;
+                const containerHeight = boardHeight + 2 * borderWidth;
+                if (stage) {
+                    stage.width(containerWidth);
+                    stage.height(containerHeight);
+                    canvasRect.setAttrs({
+                        x: borderWidth,
+                        y: borderWidth,
+                        width: boardWidth,
+                        height: boardHeight,
+                        fill: canvasColor
+                    });
+
+                    imageNodes.forEach((node, i) => {
+                        const state = initialStates[i] || {};
+                        const imgWidth = node.width();
+                        const imgHeight = node.height();
+                        const maxWidth = boardWidth * 0.8;
+                        const maxHeight = boardHeight * 0.8;
+                        const scale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
+                        const newX = state.x || borderWidth + boardWidth / 2;
+                        const newY = state.y || borderWidth + boardHeight / 2;
+                        node.x(newX);
+                        node.y(newY);
+                        node.scaleX(scale * (state.scaleX || 1));
+                        node.scaleY(scale * (state.scaleY || 1));
+                        node.rotation(state.rotation || 0);
+                        node.offsetX(imgWidth / 2);
+                        node.offsetY(imgHeight / 2);
+                        initialStates[i] = {
+                            x: node.x(),
+                            y: node.y(),
+                            scaleX: node.scaleX() / scale,
+                            scaleY: node.scaleY() / scale,
+                            rotation: node.rotation()
+                        };
+                    });
+
+                    canvasLayer.batchDraw();
+                    imageLayer.batchDraw();
+                    stage.batchDraw();
+                }
+
+                const nodeWidth = boardWidth + 2 * borderWidth + 20;
+                const nodeHeight = boardHeight + 2 * borderWidth + 206;
+                node.setSize([nodeWidth, nodeHeight]);
+                placeholder.style.width = `${nodeWidth}px`;
+                placeholder.style.height = `${nodeHeight}px`;
+
+                node.properties.ui_config = {
+                    board_width: boardWidth,
+                    board_height: boardHeight,
+                    border_width: borderWidth,
+                    canvas_color: canvasColor,
+                    border_color: borderColor,
+                    image_paths: imagePaths
+                };
+                node.properties.image_states = initialStates;
+                node.setProperty("ui_config", node.properties.ui_config);
+                node.setProperty("image_states", initialStates);
+
+                updateLayerPanel();
+                updateCanvasPosition(); // 更新画板位置
+            } catch (e) {
+                log.error("Error in updateSize:", e);
+                if (statusText) {
+                    statusText.innerText = "更新画板失败";
+                    statusText.style.color = "#f00";
+                }
+            }
+        }
 
         function saveHistory() {
             const currentState = initialStates.map(state => ({ ...state }));
@@ -377,6 +451,8 @@ app.registerExtension({
         }
 
         function updateLayerPanel() {
+            if (!boardContainer) return;
+            const layerPanel = boardContainer.querySelector(".xiser-layer-panel");
             layerPanel.innerHTML = "";
             layerItems = [];
             for (let index = imageNodes.length - 1; index >= 0; index--) {
@@ -571,227 +647,76 @@ app.registerExtension({
             saveHistory();
         }
 
-        if (imagePaths.length > 0) {
-            loadImages(imagePaths, imageStates);
-        }
-
-        transformer = new Konva.Transformer({
-            nodes: [],
-            keepRatio: true,
-            enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
-            rotateEnabled: true
-        });
-        imageLayer.add(transformer);
-
-        stage.on("click tap", (e) => {
-            const target = e.target;
-            if (target === canvasRect || target === stage) {
-                deselectLayer();
-                return;
-            }
-            if (imageNodes.includes(target)) {
-                const index = imageNodes.indexOf(target);
-                if (selectedLayer === target) return;
-                selectLayer(index);
-            }
-        });
-
-        stage.on("mousedown", (e) => {
-            if (imageNodes.includes(e.target)) {
-                const index = imageNodes.indexOf(e.target);
-                selectLayer(index);
-            }
-        });
-
-        stage.on("wheel", (e) => {
-            e.evt.preventDefault();
-            const scaleBy = 1.01; // 提高缩放灵敏度
-            const target = transformer.nodes()[0];
-            if (!target || !imageNodes.includes(target)) return;
-
-            const oldScale = target.scaleX();
-            const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-
-            target.scaleX(newScale);
-            target.scaleY(newScale);
-
-            const index = imageNodes.indexOf(target);
-            if (index !== -1) {
-                const maxWidth = boardWidth * 0.8;
-                const maxHeight = boardHeight * 0.8;
-                const scale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
-                initialStates[index] = {
-                    x: target.x(),
-                    y: target.y(),
-                    scaleX: target.scaleX() / scale,
-                    scaleY: target.scaleY() / scale,
-                    rotation: target.rotation()
-                };
-                node.properties.image_states = initialStates;
-                node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-                node.setProperty("image_states", initialStates);
-                saveHistory();
-            }
-
-            imageLayer.batchDraw();
-        });
-
-        node.addDOMWidget("canvas", "Canvas", mainContainer, {
-            serialize: true,
-            getValue() {
-                return {
-                    board_width: boardWidth,
-                    board_height: boardHeight,
-                    border_width: borderWidth,
-                    canvas_color: canvasColor,
-                    border_color: borderColor,
-                    image_paths: imagePaths,
-                    image_states: initialStates
-                };
-            },
-            setValue(value) {
-                try {
-                    boardWidth = value.board_width || boardWidth;
-                    boardHeight = value.board_height || boardHeight;
-                    borderWidth = value.border_width || borderWidth;
-                    canvasColor = value.canvas_color || canvasColor;
-                    borderColor = value.border_color || borderColor;
-                    imagePaths = value.image_paths || imagePaths;
-                    initialStates = value.image_states || initialStates;
-                    updateSize();
-                    if (imagePaths.length > 0) {
-                        loadImages(imagePaths, initialStates);
-                    }
-                } catch (e) {
-                    log.error("Error in setValue:", e);
-                    statusText.innerText = "设置画板值失败";
-                    statusText.style.color = "#f00";
-                }
-            }
-        });
-
-        const nodeWidth = boardWidth + 2 * borderWidth + 20;
-        const nodeHeight = boardHeight + 2 * borderWidth + 206;
-        node.setSize([nodeWidth, nodeHeight]);
-        node.resizable = false;
-        node.isResizable = () => false;
-
-        if (node.getHTMLElement) {
+        // 动态更新画板位置
+        function updateCanvasPosition() {
+            if (!mainContainer) return;
             const element = node.getHTMLElement();
-            if (element) {
-                element.classList.add("xiser-node");
-            }
+            if (!element) return;
+
+            const canvas = app.canvas;
+            const canvasRect = canvas.canvas.getBoundingClientRect();
+            const nodeRect = element.getBoundingClientRect();
+            const scale = canvas.ds.scale;
+            const offsetX = canvas.ds.offset[0];
+            const offsetY = canvas.ds.offset[1];
+
+            // 计算画板在画布中的绝对位置
+            const left = nodeRect.left - canvasRect.left;
+            const top = nodeRect.top - canvasRect.top;
+
+            // 考虑画布缩放和平移
+            const adjustedLeft = left / scale - offsetX;
+            const adjustedTop = top / scale - offsetY;
+
+            mainContainer.style.left = `${adjustedLeft}px`;
+            mainContainer.style.top = `${adjustedTop}px`;
+            mainContainer.style.transform = `scale(${scale})`;
+            mainContainer.style.transformOrigin = "top left";
+            mainContainer.style.width = `${node.size[0]}px`;
+            mainContainer.style.height = `${node.size[1]}px`;
         }
 
-        function triggerPrompt() {
-            try {
-                node.properties.image_states = initialStates;
-                const serializedStates = JSON.stringify(initialStates);
-                node.widgets.find(w => w.name === "image_states").value = serializedStates;
-                node.setProperty("image_states", initialStates);
-                if (app.queuePrompt) {
-                    app.queuePrompt();
+        // 设置位置监听
+        function setupPositionObservers() {
+            const element = node.getHTMLElement();
+            if (!element) return;
+
+            // ResizeObserver 监听节点尺寸变化
+            resizeObserver = new ResizeObserver(() => {
+                updateCanvasPosition();
+            });
+            resizeObserver.observe(element);
+
+            // MutationObserver 监听节点样式变化（例如位置）
+            mutationObserver = new MutationObserver(() => {
+                updateCanvasPosition();
+            });
+            mutationObserver.observe(element, {
+                attributes: true,
+                attributeFilter: ["style", "class"]
+            });
+
+            // 监听画布缩放和移动
+            const originalSetZoom = app.canvas.setZoom;
+            app.canvas.setZoom = function (value) {
+                originalSetZoom.apply(this, arguments);
+                updateCanvasPosition();
+            };
+
+            const originalSetDirty = app.canvas.setDirty;
+            app.canvas.setDirty = function () {
+                originalSetDirty.apply(this, arguments);
+                updateCanvasPosition();
+            };
+
+            // 监听节点移动
+            const originalOnNodeMoved = app.graph.onNodeMoved || (() => {});
+            app.graph.onNodeMoved = function (movedNode) {
+                if (movedNode.id === node.id) {
+                    updateCanvasPosition();
                 }
-            } catch (e) {
-                log.error("Failed to queue prompt:", e);
-            }
-        }
-
-        function updateSize() {
-            try {
-                boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
-                boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
-                borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
-                canvasColorValue = canvasColorValue || "black";
-
-                canvasColor = {
-                    "black": "rgb(0, 0, 0)",
-                    "white": "rgb(255, 255, 255)",
-                    "transparent": "rgba(0, 0, 0, 0)"
-                }[canvasColorValue] || "rgb(0, 0, 0)";
-                borderColor = {
-                    "black": "rgb(25, 25, 25)",
-                    "white": "rgb(230, 230, 230)",
-                    "transparent": "rgba(0, 0, 0, 0)"
-                }[canvasColorValue] || "rgb(25, 25, 25)";
-
-                node.widgets.forEach(widget => {
-                    if (widget.name === "board_width") widget.value = boardWidth;
-                    if (widget.name === "board_height") widget.value = boardHeight;
-                    if (widget.name === "border_width") widget.value = borderWidth;
-                    if (widget.name === "canvas_color") widget.value = canvasColorValue;
-                    if (widget.name === "image_states") widget.value = JSON.stringify(initialStates);
-                });
-                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(initialStates)];
-
-                node.inputs.board_width.value = boardWidth;
-                node.inputs.board_height.value = boardHeight;
-                node.inputs.border_width.value = borderWidth;
-                node.inputs.canvas_color.value = canvasColorValue;
-
-                const containerWidth = boardWidth + 2 * borderWidth;
-                const containerHeight = boardHeight + 2 * borderWidth;
-                stage.width(containerWidth);
-                stage.height(containerHeight);
-                canvasRect.setAttrs({
-                    x: borderWidth,
-                    y: borderWidth,
-                    width: boardWidth,
-                    height: boardHeight,
-                    fill: canvasColor
-                });
-
-                imageNodes.forEach((node, i) => {
-                    const state = initialStates[i] || {};
-                    const imgWidth = node.width();
-                    const imgHeight = node.height();
-                    const maxWidth = boardWidth * 0.8;
-                    const maxHeight = boardHeight * 0.8;
-                    const scale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
-                    const newX = state.x || borderWidth + boardWidth / 2;
-                    const newY = state.y || borderWidth + boardHeight / 2;
-                    node.x(newX);
-                    node.y(newY);
-                    node.scaleX(scale * (state.scaleX || 1));
-                    node.scaleY(scale * (state.scaleY || 1));
-                    node.rotation(state.rotation || 0);
-                    node.offsetX(imgWidth / 2);
-                    node.offsetY(imgHeight / 2);
-                    initialStates[i] = {
-                        x: node.x(),
-                        y: node.y(),
-                        scaleX: node.scaleX() / scale,
-                        scaleY: node.scaleY() / scale,
-                        rotation: node.rotation()
-                    };
-                });
-
-                const nodeWidth = boardWidth + 2 * borderWidth + 20;
-                const nodeHeight = boardHeight + 2 * borderWidth + 206;
-                node.setSize([nodeWidth, nodeHeight]);
-
-                node.properties.ui_config = {
-                    board_width: boardWidth,
-                    board_height: boardHeight,
-                    border_width: borderWidth,
-                    canvas_color: canvasColor,
-                    border_color: borderColor,
-                    image_paths: imagePaths
-                };
-                node.properties.image_states = initialStates;
-                node.setProperty("ui_config", node.properties.ui_config);
-                node.setProperty("image_states", initialStates);
-
-                canvasLayer.batchDraw();
-                imageLayer.batchDraw();
-                stage.batchDraw();
-
-                updateLayerPanel();
-            } catch (e) {
-                log.error("Error in updateSize:", e);
-                statusText.innerText = "更新画板失败";
-                statusText.style.color = "#f00";
-            }
+                originalOnNodeMoved.apply(this, arguments);
+            };
         }
 
         let pollInterval = null;
@@ -831,9 +756,162 @@ app.registerExtension({
                 }
             }, 1000);
         }
-        startPolling();
 
         node._onNodeExecuted = function () {
+            log.info("XISER_Canvas node executed with ID:", node.id);
+
+            // 仅在第一次执行时初始化画板
+            if (!mainContainer) {
+                if (!window.Konva) {
+                    log.error("Konva.js not loaded, aborting stage creation");
+                    return;
+                }
+
+                mainContainer = document.createElement("div");
+                mainContainer.className = "xiser-main-container";
+                document.body.appendChild(mainContainer);
+
+                boardContainer = document.createElement("div");
+                boardContainer.className = "xiser-canvas-container";
+                boardContainer.style.backgroundColor = borderColor;
+
+                statusText = document.createElement("div");
+                statusText.className = "xiser-status-text";
+                statusText.innerText = "等待图像...";
+                boardContainer.appendChild(statusText);
+
+                const triggerButton = document.createElement("button");
+                triggerButton.className = "xiser-trigger-button";
+                triggerButton.innerText = "运行节点";
+                triggerButton.onclick = () => {
+                    triggerPrompt();
+                };
+                boardContainer.appendChild(triggerButton);
+
+                const resetButton = document.createElement("button");
+                resetButton.className = "xiser-reset-button";
+                resetButton.innerText = "重置画板";
+                resetButton.onclick = () => {
+                    resetCanvas();
+                };
+                boardContainer.appendChild(resetButton);
+
+                const undoButton = document.createElement("button");
+                undoButton.className = "xiser-undo-button";
+                undoButton.innerText = "撤销";
+                undoButton.onclick = () => {
+                    undo();
+                };
+                boardContainer.appendChild(undoButton);
+
+                const redoButton = document.createElement("button");
+                redoButton.className = "xiser-redo-button";
+                redoButton.innerText = "重做";
+                redoButton.onclick = () => {
+                    redo();
+                };
+                boardContainer.appendChild(redoButton);
+
+                const layerPanel = document.createElement("div");
+                layerPanel.className = "xiser-layer-panel";
+                boardContainer.appendChild(layerPanel);
+
+                const stageContainer = document.createElement("div");
+                stageContainer.className = "xiser-canvas-stage";
+                boardContainer.appendChild(stageContainer);
+                mainContainer.appendChild(boardContainer);
+
+                stage = new Konva.Stage({
+                    container: stageContainer,
+                    width: boardWidth + 2 * borderWidth,
+                    height: boardHeight + 2 * borderWidth
+                });
+
+                canvasLayer = new Konva.Layer();
+                imageLayer = new Konva.Layer();
+                stage.add(canvasLayer);
+                stage.add(imageLayer);
+
+                canvasRect = new Konva.Rect({
+                    x: borderWidth,
+                    y: borderWidth,
+                    width: boardWidth,
+                    height: boardHeight,
+                    fill: canvasColor,
+                    stroke: "#808080",
+                    strokeWidth: 2
+                });
+                canvasLayer.add(canvasRect);
+
+                transformer = new Konva.Transformer({
+                    nodes: [],
+                    keepRatio: true,
+                    enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
+                    rotateEnabled: true
+                });
+                imageLayer.add(transformer);
+
+                stage.on("click tap", (e) => {
+                    const target = e.target;
+                    if (target === canvasRect || target === stage) {
+                        deselectLayer();
+                        return;
+                    }
+                    if (imageNodes.includes(target)) {
+                        const index = imageNodes.indexOf(target);
+                        if (selectedLayer === target) return;
+                        selectLayer(index);
+                    }
+                });
+
+                stage.on("mousedown", (e) => {
+                    if (imageNodes.includes(e.target)) {
+                        const index = imageNodes.indexOf(e.target);
+                        selectLayer(index);
+                    }
+                });
+
+                stage.on("wheel", (e) => {
+                    e.evt.preventDefault();
+                    const scaleBy = 1.01;
+                    const target = transformer.nodes()[0];
+                    if (!target || !imageNodes.includes(target)) return;
+
+                    const oldScale = target.scaleX();
+                    const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+
+                    target.scaleX(newScale);
+                    target.scaleY(newScale);
+
+                    const index = imageNodes.indexOf(target);
+                    if (index !== -1) {
+                        const maxWidth = boardWidth * 0.8;
+                        const maxHeight = boardHeight * 0.8;
+                        const scale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
+                        initialStates[index] = {
+                            x: target.x(),
+                            y: target.y(),
+                            scaleX: target.scaleX() / scale,
+                            scaleY: target.scaleY() / scale,
+                            rotation: target.rotation()
+                        };
+                        node.properties.image_states = initialStates;
+                        node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
+                        node.setProperty("image_states", initialStates);
+                        saveHistory();
+                    }
+
+                    imageLayer.batchDraw();
+                });
+
+                setupPositionObservers();
+                updateCanvasPosition();
+
+                if (imagePaths.length > 0) {
+                    loadImages(imagePaths, imageStates);
+                }
+            }
+
             let states = node.properties?.image_states || [];
             let newImagePaths = [];
 
@@ -917,12 +995,15 @@ app.registerExtension({
 
         node.onRemoved = () => {
             if (pollInterval) clearInterval(pollInterval);
-            stage.destroy();
-            mainContainer.remove();
+            if (stage) stage.destroy();
+            if (mainContainer) mainContainer.remove();
+            if (resizeObserver) resizeObserver.disconnect();
+            if (mutationObserver) mutationObserver.disconnect();
             imageCache.clear();
             log.info("XISER_Canvas node removed, resources cleaned");
         };
 
+        startPolling();
         updateSize();
     }
 });

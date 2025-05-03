@@ -18,7 +18,7 @@ class XIS_Label:
         """初始化节点属性"""
         self.properties = self.properties or {}
         self.properties["textData"] = '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'
-        self.color = "#333355"  # 默认深灰色
+        self.properties["color"] = "#333355"  # 默认深灰色
 
 # 节点映射
 NODE_CLASS_MAPPINGS = {
