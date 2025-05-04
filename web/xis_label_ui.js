@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 
 // 资源加载状态
-const loadedResources = new Set();
+const XISER_loadedResources = new Set();
 
 /**
  * 加载JavaScript脚本，支持缓存和CDN回退
@@ -10,7 +10,7 @@ const loadedResources = new Set();
  * @returns {Promise<void>} 加载完成或失败的Promise
  */
 function loadScript(src, fallbackSrc) {
-    if (loadedResources.has(src)) {
+    if (XISER_loadedResources.has(src)) {
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
@@ -18,7 +18,7 @@ function loadScript(src, fallbackSrc) {
         script.type = "application/javascript";
         script.src = src;
         script.onload = () => {
-            loadedResources.add(src);
+            XISER_loadedResources.add(src);
             resolve();
         };
         script.onerror = () => {
@@ -39,12 +39,12 @@ function loadScript(src, fallbackSrc) {
  * @returns {Promise<void>} 加载完成或失败的Promise
  */
 function loadCss(href, fallbackHref) {
-    if (loadedResources.has(href)) {
+    if (XISER_loadedResources.has(href)) {
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
         if (!navigator.onLine) {
-            loadedResources.add(href);
+            XISER_loadedResources.add(href);
             resolve();
             return;
         }
@@ -53,14 +53,14 @@ function loadCss(href, fallbackHref) {
         link.type = "text/css";
         link.href = href;
         link.onload = () => {
-            loadedResources.add(href);
+            XISER_loadedResources.add(href);
             resolve();
         };
         link.onerror = () => {
             if (fallbackHref) {
                 loadCss(fallbackHref).then(resolve).catch(reject);
             } else {
-                loadedResources.add(href);
+                XISER_loadedResources.add(href);
                 resolve();
             }
         };
@@ -73,6 +73,11 @@ function loadCss(href, fallbackHref) {
  * @returns {Promise<void>} 所有资源加载完成的Promise
  */
 async function loadCodeMirrorResources() {
+    // 检查CodeMirror是否已加载
+    if (window.CodeMirror && window.CodeMirror.version === "5.65.17") {
+        return Promise.resolve();
+    }
+
     const resources = [
         {
             type: "script",
@@ -111,7 +116,7 @@ async function loadCodeMirrorResources() {
 }
 
 // 单例CodeMirror编辑器
-let codeMirrorInstance = null;
+let XISER_codeMirrorInstance = null;
 
 // 防抖函数
 function debounce(fn, wait) {
@@ -261,7 +266,7 @@ app.registerExtension({
 
                 const isMuteMode = this.mode === 2;
                 const isPassMode = this.mode === 4 || this.flags?.bypassed === true;
-                const baseColor = this.properties.color || "#333355";
+                const baseColor = this.color || this.properties.color || "#333355";
                 const backgroundColor = isPassMode ? "rgba(128, 0, 128, 0.5)" : baseColor;
                 const alpha = (isMuteMode || isPassMode) ? 0.5 : 1.0;
 
@@ -384,7 +389,7 @@ app.registerExtension({
         // 监听颜色变化
         nodeType.prototype.onPropertyChanged = debounce(function (property, value) {
             if (property === "color" && value) {
-                this.properties.color = value;
+                this.properties.color = value; // 同步到properties.color
                 updateTextDataBackground(this, value);
                 this.setDirtyCanvas(true, true);
                 app.canvas.setDirty(true);
@@ -392,12 +397,13 @@ app.registerExtension({
             return true;
         }, 100);
 
-        // 右键菜单
+        // 右键菜单（仅保留文本编辑）
         nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
             options.push({
                 content: "编辑文本",
                 callback: async () => {
                     const modal = document.createElement("div");
+                    modal.setAttribute("data-xiser-modal", "true"); // 添加唯一标识
                     modal.style.position = "fixed";
                     modal.style.top = "50%";
                     modal.style.left = "50%";
@@ -477,8 +483,8 @@ app.registerExtension({
                     const defaultText = this.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
 
                     if (window.CodeMirror) {
-                        if (!codeMirrorInstance) {
-                            codeMirrorInstance = CodeMirror(editorDiv, {
+                        if (!XISER_codeMirrorInstance) {
+                            XISER_codeMirrorInstance = CodeMirror(editorDiv, {
                                 value: defaultText,
                                 mode: "htmlmixed",
                                 lineNumbers: true,
@@ -487,11 +493,11 @@ app.registerExtension({
                                 extraKeys: { "Ctrl-S": () => saveButton.click() }
                             });
                         } else {
-                            codeMirrorInstance.setValue(defaultText);
-                            codeMirrorInstance.getWrapperElement().parentNode.removeChild(codeMirrorInstance.getWrapperElement());
-                            editorDiv.appendChild(codeMirrorInstance.getWrapperElement());
+                            XISER_codeMirrorInstance.setValue(defaultText);
+                            XISER_codeMirrorInstance.getWrapperElement().parentNode.removeChild(XISER_codeMirrorInstance.getWrapperElement());
+                            editorDiv.appendChild(XISER_codeMirrorInstance.getWrapperElement());
                         }
-                        editor = codeMirrorInstance;
+                        editor = XISER_codeMirrorInstance;
                     } else {
                         const textarea = document.createElement("textarea");
                         textarea.style.width = "100%";
@@ -514,7 +520,7 @@ app.registerExtension({
                             this.setDirtyCanvas(true, true);
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
-                            if (editor !== codeMirrorInstance) editor.remove();
+                            if (editor !== XISER_codeMirrorInstance) editor.remove();
                         } catch (e) {
                         }
                     };
@@ -523,9 +529,9 @@ app.registerExtension({
                         try {
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
-                            if (editor !== codeMirrorInstance) editor.remove();
-                            if (codeMirrorInstance && !document.body.contains(codeMirrorInstance.getWrapperElement())) {
-                                codeMirrorInstance = null;
+                            if (editor !== XISER_codeMirrorInstance) editor.remove();
+                            if (XISER_codeMirrorInstance && !document.body.contains(XISER_codeMirrorInstance.getWrapperElement())) {
+                                XISER_codeMirrorInstance = null;
                             }
                         } catch (e) {
                         }
@@ -535,100 +541,6 @@ app.registerExtension({
                     cancelButton.onclick = cancelHandler;
                     modal.addEventListener("keydown", (e) => {
                         if (e.key === "Escape") cancelHandler();
-                    });
-                }
-            });
-
-            options.push({
-                content: "Change Color",
-                callback: () => {
-                    const modal = document.createElement("div");
-                    modal.style.position = "fixed";
-                    modal.style.top = "50%";
-                    modal.style.left = "50%";
-                    modal.style.transform = "translate(-50%, -50%)";
-                    modal.style.background = "#1A1A1A";
-                    modal.style.border = "none";
-                    modal.style.borderRadius = "8px";
-                    modal.style.padding = "20px";
-                    modal.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
-                    modal.style.zIndex = "10000";
-                    modal.style.display = "flex";
-                    modal.style.flexDirection = "column";
-                    modal.style.gap = "10px";
-                    modal.style.fontFamily = "'Segoe UI', Arial, sans-serif";
-
-                    const colorInput = document.createElement("input");
-                    colorInput.type = "color";
-                    colorInput.value = this.properties.color || "#333355";
-                    colorInput.style.width = "100%";
-                    colorInput.style.padding = "5px";
-                    modal.appendChild(colorInput);
-
-                    const buttonDiv = document.createElement("div");
-                    buttonDiv.style.textAlign = "right";
-                    const saveButton = document.createElement("button");
-                    saveButton.textContent = "保存";
-                    saveButton.className = "save-button";
-                    const cancelButton = document.createElement("button");
-                    cancelButton.textContent = "取消";
-                    cancelButton.className = "cancel-button";
-
-                    buttonDiv.appendChild(saveButton);
-                    buttonDiv.appendChild(cancelButton);
-                    modal.appendChild(buttonDiv);
-
-                    const style = document.createElement("style");
-                    style.textContent = `
-                        .save-button, .cancel-button {
-                            color: #E0E0E0;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            transition: background 0.2s;
-                            font-family: 'Segoe UI', Arial, sans-serif;
-                        }
-                        .save-button {
-                            background: linear-gradient(145deg, #4B5EAA, #3B4A8C);
-                        }
-                        .save-button:hover {
-                            background: linear-gradient(145deg, #5A71C2, #4B5EAA);
-                        }
-                        .cancel-button {
-                            background: linear-gradient(145deg, #D81B60, #B01550);
-                        }
-                        .cancel-button:hover {
-                            background: linear-gradient(145deg, #E91E63, #D81B60);
-                        }
-                    `;
-                    document.head.appendChild(style);
-
-                    document.body.appendChild(modal);
-
-                    const saveColorHandler = () => {
-                        try {
-                            this.properties.color = colorInput.value;
-                            updateTextDataBackground(this, colorInput.value);
-                            this.setDirtyCanvas(true, true);
-                            document.body.removeChild(modal);
-                            document.head.removeChild(style);
-                        } catch (e) {
-                        }
-                    };
-
-                    const cancelColorHandler = () => {
-                        try {
-                            document.body.removeChild(modal);
-                            document.head.removeChild(style);
-                        } catch (e) {
-                        }
-                    };
-
-                    saveButton.onclick = saveColorHandler;
-                    cancelButton.onclick = cancelColorHandler;
-                    modal.addEventListener("keydown", (e) => {
-                        if (e.key === "Escape") cancelColorHandler();
                     });
                 }
             });
