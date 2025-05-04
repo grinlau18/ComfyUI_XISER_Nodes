@@ -26,8 +26,3 @@ class XIS_Label:
 NODE_CLASS_MAPPINGS = {
     "XIS_Label": XIS_Label,
 }
-
-# 节点显示名称
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "XIS_Label": "小贴纸"
-}
