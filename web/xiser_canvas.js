@@ -12,8 +12,12 @@ app.registerExtension({
     async setup() {
         log.info("XISER_Canvas extension loaded");
         if (!window.requestIdleCallback) {
-            window.requestIdleCallback = (callback) => setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 50 }), 1);
-            window.cancelIdleCallback = (id) => clearTimeout(id);
+            window.requestIdleCallback = function (callback) {
+                return setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 50 }), 1);
+            };
+            window.cancelIdleCallback = function (id) {
+                clearTimeout(id);
+            };
         }
         const style = document.createElement("style");
         style.textContent = `
@@ -157,9 +161,11 @@ app.registerExtension({
     async nodeCreated(node) {
         if (node.comfyClass !== "XISER_Canvas") return;
 
-        log.info("XISER_Canvas node created:", node.id);
+        // 延迟日志打印，确保 node.id 已分配
+        setTimeout(() => {
+            log.info("XISER_Canvas node created:", node.id);
+        }, 100);
 
-        // 清理现有 widgets
         if (node.widgets && node.widgets.length > 0) {
             for (let i = node.widgets.length - 1; i >= 0; i--) {
                 const widget = node.widgets[i];
@@ -171,9 +177,30 @@ app.registerExtension({
         }
         node.widgets = [];
 
-        // 初始化参数，增加健壮性
+        // 初始化节点状态
+        const nodeState = {
+            imageNodes: [],
+            defaultLayerOrder: [],
+            initialStates: [],
+            transformer: null,
+            lastImagePaths: [],
+            loadedImageUrls: new Map(),
+            imageCache: new Map(),
+            history: [],
+            historyIndex: -1,
+            selectedLayer: null,
+            layerItems: [],
+            lastNodePos: node.pos ? [...node.pos] : [0, 0],
+            lastNodeSize: node.size ? [...node.size] : [0, 0],
+            lastScale: app.canvas.ds.scale || 1,
+            lastOffset: app.canvas.ds.offset ? [...app.canvas.ds.offset] : [0, 0],
+            pollInterval: null,
+            animationFrameId: null
+        };
+
+        // 从 node.properties.ui_config 和 node.widgets_values 恢复参数
         const uiConfig = node.properties?.ui_config || {};
-        let imageStates = node.properties?.image_states || [];
+        nodeState.initialStates = node.properties?.image_states || [];
         let boardWidth = uiConfig.board_width || 1024;
         let boardHeight = uiConfig.board_height || 1024;
         let borderWidth = uiConfig.border_width || 40;
@@ -192,11 +219,12 @@ app.registerExtension({
             boardHeight = parseInt(node.widgets_values[1]) || boardHeight;
             borderWidth = parseInt(node.widgets_values[2]) || borderWidth;
             canvasColorValue = node.widgets_values[3] || canvasColorValue;
-            try {
-                imageStates = node.widgets_values[4] ? JSON.parse(node.widgets_values[4]) : imageStates;
-            } catch (e) {
-                log.error("Failed to parse image_states from widgets_values:", e);
-                imageStates = [];
+            if (node.widgets_values[4]) {
+                try {
+                    nodeState.initialStates = JSON.parse(node.widgets_values[4]) || nodeState.initialStates;
+                } catch (e) {
+                    log.error("Failed to parse image_states from widgets_values:", e);
+                }
             }
         }
 
@@ -213,9 +241,8 @@ app.registerExtension({
         node.size = [nodeWidth, nodeHeight];
         node.setSize([nodeWidth, nodeHeight]);
 
-        node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(imageStates)];
+        node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(nodeState.initialStates)];
 
-        // 添加 widgets
         node.addWidget("number", "board_width", boardWidth, (value) => {
             boardWidth = Math.min(Math.max(parseInt(value), 256), 4096);
             updateSize();
@@ -236,9 +263,9 @@ app.registerExtension({
             updateSize();
         }, { values: ["black", "white", "transparent"] });
 
-        node.addWidget("hidden", "image_states", JSON.stringify(imageStates), (value) => {}, { serialize: true });
+        node.addWidget("hidden", "image_states", JSON.stringify(nodeState.initialStates), (value) => {}, { serialize: true });
 
-        // 创建 DOM 元素
+        // 创建独立的主容器，附加到 <body>
         const mainContainer = document.createElement("div");
         mainContainer.className = "xiser-main-container";
         document.body.appendChild(mainContainer);
@@ -254,25 +281,33 @@ app.registerExtension({
         const triggerButton = document.createElement("button");
         triggerButton.className = "xiser-trigger-button";
         triggerButton.innerText = "运行节点";
-        triggerButton.onclick = () => triggerPrompt();
+        triggerButton.onclick = () => {
+            triggerPrompt();
+        };
         boardContainer.appendChild(triggerButton);
 
         const resetButton = document.createElement("button");
         resetButton.className = "xiser-reset-button";
         resetButton.innerText = "重置画板";
-        resetButton.onclick = () => resetCanvas();
+        resetButton.onclick = () => {
+            resetCanvas();
+        };
         boardContainer.appendChild(resetButton);
 
         const undoButton = document.createElement("button");
         undoButton.className = "xiser-undo-button";
         undoButton.innerText = "撤销";
-        undoButton.onclick = () => undo();
+        undoButton.onclick = () => {
+            undo();
+        };
         boardContainer.appendChild(undoButton);
 
         const redoButton = document.createElement("button");
         redoButton.className = "xiser-redo-button";
         redoButton.innerText = "重做";
-        redoButton.onclick = () => redo();
+        redoButton.onclick = () => {
+            redo();
+        };
         boardContainer.appendChild(redoButton);
 
         const layerPanel = document.createElement("div");
@@ -326,23 +361,6 @@ app.registerExtension({
         canvasLayer.add(borderRect);
         canvasLayer.add(canvasRect);
 
-        let imageNodes = [];
-        let defaultLayerOrder = [];
-        let initialStates = imageStates.slice();
-        let transformer = null;
-        let lastImagePaths = [];
-        let loadedImageUrls = new Map();
-        const imageCache = new Map();
-        const history = [];
-        let historyIndex = -1;
-        let selectedLayer = null;
-        let layerItems = [];
-        let lastNodePos = node.pos ? [...node.pos] : [0, 0];
-        let lastNodeSize = node.size ? [...node.size] : [0, 0];
-        let lastScale = app.canvas.ds.scale || 1;
-        let lastOffset = app.canvas.ds.offset ? [...app.canvas.ds.offset] : [0, 0];
-        let needsRedraw = false; // 标记是否需要重绘
-
         // 同步容器位置
         function syncContainerPosition() {
             try {
@@ -353,22 +371,28 @@ app.registerExtension({
                 const scale = app.canvas.ds.scale;
                 const offset = app.canvas.ds.offset;
 
+                // 计算节点在画布中的像素坐标
                 const logicalX = (nodePos[0] + offset[0]) * scale;
                 const logicalY = (nodePos[1] + offset[1]) * scale;
-                const x = canvasRect.left + logicalX + 10 * scale;
-                const y = canvasRect.top + logicalY + 186 * scale;
-                const width = (nodeSize[0] - 20);
-                const height = (nodeSize[1] - 206);
 
+                // 转换为浏览器视口的绝对像素坐标
+                const x = canvasRect.left + logicalX + 10 * scale; // 加上节点的边距（10px）
+                const y = canvasRect.top + logicalY + 186 * scale; // 加上标题栏高度（186px）
+                const width = (nodeSize[0] - 20); // 逻辑宽度，缩放前
+                const height = (nodeSize[1] - 206); // 逻辑高度，缩放前
+
+                // 设置 mainContainer 的绝对位置和缩放
                 mainContainer.style.left = `${x}px`;
                 mainContainer.style.top = `${y}px`;
                 mainContainer.style.width = `${width}px`;
                 mainContainer.style.height = `${height}px`;
-                mainContainer.style.transform = `scale(${scale})`;
+                mainContainer.style.transform = `scale(${scale})`; // 使用 CSS 缩放
 
+                // 设置 boardContainer 的逻辑尺寸（抵消缩放影响）
                 boardContainer.style.width = `${width}px`;
                 boardContainer.style.height = `${height}px`;
 
+                // 保持 stage 逻辑尺寸不变
                 stage.width(boardWidth + 2 * borderWidth);
                 stage.height(boardHeight + 2 * borderWidth);
                 borderRect.width(boardWidth + 2 * borderWidth);
@@ -377,74 +401,64 @@ app.registerExtension({
                 canvasRect.y(borderWidth);
                 canvasRect.width(boardWidth);
                 canvasRect.height(boardHeight);
+                canvasLayer.batchDraw();
 
-                const basePadding = 5;
-                const baseFontSize = 12;
+                // 动态调整控件样式（仅调整视觉大小，不调整位置）
+                const basePadding = 5; // 基础内边距
+                const baseFontSize = 12; // 基础字体大小
                 const padding = basePadding / scale;
                 const fontSize = baseFontSize / scale;
+
                 mainContainer.style.setProperty('--xiser-padding', `${padding}px`);
                 mainContainer.style.setProperty('--xiser-font-size', `${fontSize}px`);
 
-                requestRedraw();
+                imageLayer.batchDraw();
+
+                log.info(`Sync position: nodePos=(${nodePos[0]}, ${nodePos[1]}), scale=${scale}, offset=(${offset[0]}, ${offset[1]}), canvasRect=(${canvasRect.left}, ${canvasRect.top}), final=(${x}, ${y}, ${width}, ${height})`);
             } catch (e) {
                 log.error("Error syncing container position:", e);
             }
         }
 
-        // 延迟初始同步位置
-        setTimeout(() => syncContainerPosition(), 500);
+        // 延迟初始同步位置，确保画布渲染完成
+        setTimeout(() => {
+            syncContainerPosition();
+        }, 500);
 
-        // 优化位置和大小检测
-        let animationFrameId = null;
-        let lastCheckTime = 0;
-        const CHECK_INTERVAL = 16; // 每 16ms 检查一次，约 60fps
-        function checkPositionAndSize(timestamp) {
-            if (timestamp - lastCheckTime < CHECK_INTERVAL) {
-                animationFrameId = requestAnimationFrame(checkPositionAndSize);
-                return;
-            }
-            lastCheckTime = timestamp;
-
+        // 实时检测节点位置和大小变化
+        function checkPositionAndSize() {
             try {
                 const nodePos = node.pos;
                 const nodeSize = node.size;
                 const scale = app.canvas.ds.scale;
                 const offset = app.canvas.ds.offset;
 
-                const posChanged = nodePos[0] !== lastNodePos[0] || nodePos[1] !== lastNodePos[1];
-                const sizeChanged = nodeSize[0] !== lastNodeSize[0] || nodeSize[1] !== lastNodeSize[1];
-                const scaleChanged = scale !== lastScale;
-                const offsetChanged = offset[0] !== lastOffset[0] || offset[1] !== lastOffset[1];
+                const posChanged = nodePos[0] !== nodeState.lastNodePos[0] || nodePos[1] !== nodeState.lastNodePos[1];
+                const sizeChanged = nodeSize[0] !== nodeState.lastNodeSize[0] || nodePos[1] !== nodeState.lastNodeSize[1];
+                const scaleChanged = scale !== nodeState.lastScale;
+                const offsetChanged = offset[0] !== nodeState.lastOffset[0] || offset[1] !== nodeState.lastOffset[1];
 
                 if (posChanged || sizeChanged || scaleChanged || offsetChanged) {
                     syncContainerPosition();
-                    lastNodePos = [...nodePos];
-                    lastNodeSize = [...nodeSize];
-                    lastScale = scale;
-                    lastOffset = [...offset];
+                    nodeState.lastNodePos = [...nodePos];
+                    nodeState.lastNodeSize = [...nodeSize];
+                    nodeState.lastScale = scale;
+                    nodeState.lastOffset = [...offset];
                 }
             } catch (e) {
                 log.error("Error in checkPositionAndSize:", e);
             }
-            animationFrameId = requestAnimationFrame(checkPositionAndSize);
+            nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
         }
-        animationFrameId = requestAnimationFrame(checkPositionAndSize);
+        nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
 
         // 监听窗口调整
-        window.addEventListener("resize", () => syncContainerPosition());
+        const resizeListener = () => {
+            syncContainerPosition();
+        };
+        window.addEventListener("resize", resizeListener);
 
-        // 集中管理重绘
-        function requestRedraw() {
-            if (!needsRedraw) {
-                needsRedraw = true;
-                requestAnimationFrame(() => {
-                    if (canvasLayer) canvasLayer.batchDraw();
-                    if (imageLayer) imageLayer.batchDraw();
-                    needsRedraw = false;
-                });
-            }
-        }
-
+        // 使用 ctx 绘制占位矩形
         node.onDrawForeground = function (ctx) {
             try {
                 ctx.save();
@@ -460,41 +474,41 @@ app.registerExtension({
         };
 
         function saveHistory() {
-            const currentState = initialStates.map(state => ({ ...state }));
-            history.splice(historyIndex + 1);
-            history.push(currentState);
-            historyIndex++;
-            if (history.length > 20) {
-                history.shift();
-                historyIndex--;
+            const currentState = nodeState.initialStates.map(state => ({ ...state }));
+            nodeState.history.splice(nodeState.historyIndex + 1);
+            nodeState.history.push(currentState);
+            nodeState.historyIndex++;
+            if (nodeState.history.length > 20) {
+                nodeState.history.shift();
+                nodeState.historyIndex--;
             }
         }
 
         function undo() {
-            if (historyIndex <= 0) return;
-            historyIndex--;
-            initialStates = history[historyIndex].map(state => ({ ...state }));
+            if (nodeState.historyIndex <= 0) return;
+            nodeState.historyIndex--;
+            nodeState.initialStates = nodeState.history[nodeState.historyIndex].map(state => ({ ...state }));
             applyStates();
-            node.properties.image_states = initialStates;
-            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-            node.setProperty("image_states", initialStates);
-            requestRedraw();
+            node.properties.image_states = nodeState.initialStates;
+            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+            node.setProperty("image_states", nodeState.initialStates);
+            imageLayer.batchDraw();
         }
 
         function redo() {
-            if (historyIndex >= history.length - 1) return;
-            historyIndex++;
-            initialStates = history[historyIndex].map(state => ({ ...state }));
+            if (nodeState.historyIndex >= nodeState.history.length - 1) return;
+            nodeState.historyIndex++;
+            nodeState.initialStates = nodeState.history[nodeState.historyIndex].map(state => ({ ...state }));
             applyStates();
-            node.properties.image_states = initialStates;
-            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-            node.setProperty("image_states", initialStates);
-            requestRedraw();
+            node.properties.image_states = nodeState.initialStates;
+            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+            node.setProperty("image_states", nodeState.initialStates);
+            imageLayer.batchDraw();
         }
 
         function applyStates() {
-            imageNodes.forEach((node, i) => {
-                const state = initialStates[i] || {};
+            nodeState.imageNodes.forEach((node, i) => {
+                const state = nodeState.initialStates[i] || {};
                 const maxWidth = boardWidth * 0.8;
                 const maxHeight = boardHeight * 0.8;
                 const imageScale = Math.min(1, maxWidth / node.width(), maxHeight / node.height());
@@ -507,7 +521,7 @@ app.registerExtension({
         }
 
         function resetCanvas() {
-            initialStates = imagePaths.map(() => ({
+            nodeState.initialStates = imagePaths.map(() => ({
                 x: borderWidth + boardWidth / 2,
                 y: borderWidth + boardHeight / 2,
                 scaleX: 1,
@@ -515,69 +529,72 @@ app.registerExtension({
                 rotation: 0
             }));
             applyStates();
-            node.properties.image_states = initialStates;
-            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-            node.setProperty("image_states", initialStates);
-            deselectLayer();
+            node.properties.image_states = nodeState.initialStates;
+            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+            node.setProperty("image_states", nodeState.initialStates);
+            imageLayer.batchDraw();
             saveHistory();
-            requestRedraw();
+            deselectLayer();
         }
 
         function updateLayerPanel() {
-            const fragment = document.createDocumentFragment();
-            const newLayerItems = [];
-            for (let index = imageNodes.length - 1; index >= 0; index--) {
-                let item = layerItems.find(li => parseInt(li.dataset.index) === index);
-                if (!item) {
-                    item = document.createElement("div");
-                    item.className = "xiser-layer-item";
-                    item.innerText = `图层 ${index + 1}`;
-                    item.dataset.index = index;
-                    item.addEventListener("click", () => {
-                        const currentIndex = parseInt(item.dataset.index);
-                        if (selectedLayer === imageNodes[currentIndex]) {
-                            deselectLayer();
-                        } else {
-                            selectLayer(currentIndex);
-                        }
-                    });
-                }
-                if (selectedLayer === imageNodes[index]) {
-                    item.classList.add("selected");
-                } else {
-                    item.classList.remove("selected");
-                }
-                fragment.appendChild(item);
-                newLayerItems.push(item);
-            }
             layerPanel.innerHTML = "";
-            layerPanel.appendChild(fragment);
-            layerItems = newLayerItems;
+            nodeState.layerItems = [];
+            for (let index = nodeState.imageNodes.length - 1; index >= 0; index--) {
+                const item = document.createElement("div");
+                item.className = "xiser-layer-item";
+                item.innerText = `图层 ${index + 1}`;
+                item.dataset.index = index;
+                layerPanel.appendChild(item);
+                nodeState.layerItems.push(item);
+
+                item.addEventListener("click", () => {
+                    const currentIndex = parseInt(item.dataset.index);
+                    if (nodeState.selectedLayer === nodeState.imageNodes[currentIndex]) {
+                        deselectLayer();
+                    } else {
+                        selectLayer(currentIndex);
+                    }
+                });
+            }
         }
 
         function selectLayer(index) {
-            if (index < 0 || index >= imageNodes.length) return;
-            const node = imageNodes[index];
+            if (index < 0 || index >= nodeState.imageNodes.length) return;
+            const node = nodeState.imageNodes[index];
+
             deselectLayer();
-            selectedLayer = node;
+
+            nodeState.selectedLayer = node;
             node.moveToTop();
-            transformer.nodes([node]);
-            updateLayerPanel();
-            requestRedraw();
+            nodeState.transformer.nodes([node]);
+            imageLayer.batchDraw();
+
+            nodeState.layerItems.forEach(item => item.classList.remove("selected"));
+            const listItemIndex = nodeState.imageNodes.length - 1 - index;
+            if (nodeState.layerItems[listItemIndex]) {
+                nodeState.layerItems[listItemIndex].classList.add("selected");
+            }
         }
 
         function deselectLayer() {
-            if (!selectedLayer) return;
-            defaultLayerOrder.forEach((node, index) => node.zIndex(index));
-            selectedLayer = null;
-            transformer.nodes([]);
-            updateLayerPanel();
-            requestRedraw();
+            if (!nodeState.selectedLayer) return;
+
+            // 恢复输入时的默认图层顺序
+            nodeState.defaultLayerOrder.forEach((node, index) => {
+                node.zIndex(index);
+            });
+
+            nodeState.selectedLayer = null;
+            nodeState.transformer.nodes([]);
+            imageLayer.batchDraw();
+
+            nodeState.layerItems.forEach(item => item.classList.remove("selected"));
         }
 
         async function loadImages(imagePaths, states, base64Chunks = [], retryCount = 0, maxRetries = 3) {
             if (!imagePaths || imagePaths.length === 0) {
-                log.warn("No image paths provided");
+                log.warn("No image paths provided for node:", node.id);
                 statusText.innerText = "无图像数据";
                 statusText.style.color = "#f00";
                 return;
@@ -598,43 +615,43 @@ app.registerExtension({
             }));
 
             const currentFilenames = images.map(img => img.filename);
-            const imagesToLoad = images.filter(img => !imageNodes.some(node => node.attrs.filename === img.filename));
-            const imagesToRemove = imageNodes.filter(node => !currentFilenames.includes(node.attrs.filename));
+            const imagesToLoad = images.filter(img => !nodeState.imageNodes.some(node => node.attrs.filename === img.filename));
+            const imagesToRemove = nodeState.imageNodes.filter(node => !currentFilenames.includes(node.attrs.filename));
 
             imagesToRemove.forEach(node => {
                 node.destroy();
-                imageNodes = imageNodes.filter(n => n !== node);
-                loadedImageUrls.delete(node.attrs.filename);
-                imageCache.delete(node.attrs.filename);
+                nodeState.imageNodes = nodeState.imageNodes.filter(n => n !== node);
+                nodeState.loadedImageUrls.delete(node.attrs.filename);
             });
+            imageLayer.batchDraw();
 
             if (imagesToLoad.length === 0) {
-                statusText.innerText = `已加载 ${imageNodes.length} 张图像`;
+                statusText.innerText = `已加载 ${nodeState.imageNodes.length} 张图像`;
                 statusText.style.color = "#0f0";
                 updateLayerPanel();
-                requestRedraw();
                 return;
             }
 
             statusText.innerText = `加载图像... 0/${images.length}`;
             statusText.style.color = "#fff";
 
-            let loadedCount = imageNodes.length;
-            const loadPromises = images.map(async (imgData, i) => {
-                if (imageNodes.some(node => node.attrs.filename === imgData.filename)) return;
+            let loadedCount = nodeState.imageNodes.length;
+            for (let i = 0; i < images.length; i++) {
+                const imgData = images[i];
+                if (nodeState.imageNodes.some(node => node.attrs.filename === imgData.filename)) continue;
 
                 try {
-                    let img = imageCache.get(imgData.filename);
+                    let img = nodeState.imageCache.get(imgData.filename);
                     if (!img) {
                         img = new Image();
-                        const imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
+                        let imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
                         const response = await fetch(imgUrl, { method: 'HEAD' });
                         if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         img.src = imgUrl;
                         await new Promise((resolve, reject) => {
                             img.onload = () => {
-                                imageCache.set(imgData.filename, img);
-                                loadedImageUrls.set(imgData.filename, imgUrl);
+                                nodeState.imageCache.set(imgData.filename, img);
+                                nodeState.loadedImageUrls.set(imgData.filename, imgUrl);
                                 resolve();
                             };
                             img.onerror = () => {
@@ -664,8 +681,8 @@ app.registerExtension({
                         filename: imgData.filename
                     });
                     imageLayer.add(konvaImg);
-                    imageNodes.push(konvaImg);
-                    initialStates[i] = initialStates[i] || {
+                    nodeState.imageNodes.push(konvaImg);
+                    nodeState.initialStates[i] = nodeState.initialStates[i] || {
                         x: state.x || borderWidth + boardWidth / 2,
                         y: state.y || borderWidth + boardHeight / 2,
                         scaleX: konvaImg.scaleX() / imageScale,
@@ -674,18 +691,18 @@ app.registerExtension({
                     };
 
                     const updateImageState = () => {
-                        initialStates[i] = {
+                        nodeState.initialStates[i] = {
                             x: konvaImg.x(),
                             y: konvaImg.y(),
                             scaleX: konvaImg.scaleX() / imageScale,
                             scaleY: konvaImg.scaleY() / imageScale,
                             rotation: konvaImg.rotation()
                         };
-                        node.properties.image_states = initialStates;
-                        node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-                        node.setProperty("image_states", initialStates);
+                        node.properties.image_states = nodeState.initialStates;
+                        node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+                        node.setProperty("image_states", nodeState.initialStates);
+                        imageLayer.batchDraw();
                         saveHistory();
-                        requestRedraw();
                     };
 
                     konvaImg.on("dragend transformend", updateImageState);
@@ -696,15 +713,17 @@ app.registerExtension({
                     log.error(`Error loading image ${i+1}:`, e);
                     statusText.innerText = `加载失败：${e.message}`;
                     statusText.style.color = "#f00";
+                    continue;
                 }
-            });
+            }
 
-            await Promise.all(loadPromises);
+            // 记录输入时的默认图层顺序
+            nodeState.defaultLayerOrder = [...nodeState.imageNodes];
 
-            defaultLayerOrder = [...imageNodes];
             updateLayerPanel();
-            transformer.nodes([]);
-            imageLayer.add(transformer);
+            nodeState.transformer.nodes([]);
+            imageLayer.add(nodeState.transformer);
+            imageLayer.batchDraw();
             if (loadedCount === 0) {
                 statusText.innerText = "无法加载任何图像，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -713,20 +732,19 @@ app.registerExtension({
                 statusText.style.color = "#0f0";
             }
             saveHistory();
-            requestRedraw();
         }
 
         if (imagePaths.length > 0) {
-            loadImages(imagePaths, initialStates);
+            loadImages(imagePaths, nodeState.initialStates);
         }
 
-        transformer = new Konva.Transformer({
+        nodeState.transformer = new Konva.Transformer({
             nodes: [],
             keepRatio: true,
             enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
             rotateEnabled: true
         });
-        imageLayer.add(transformer);
+        imageLayer.add(nodeState.transformer);
 
         stage.on("click tap", (e) => {
             const target = e.target;
@@ -734,16 +752,16 @@ app.registerExtension({
                 deselectLayer();
                 return;
             }
-            if (imageNodes.includes(target)) {
-                const index = imageNodes.indexOf(target);
-                if (selectedLayer === target) return;
+            if (nodeState.imageNodes.includes(target)) {
+                const index = nodeState.imageNodes.indexOf(target);
+                if (nodeState.selectedLayer === target) return;
                 selectLayer(index);
             }
         });
 
         stage.on("mousedown", (e) => {
-            if (imageNodes.includes(e.target)) {
-                const index = imageNodes.indexOf(e.target);
+            if (nodeState.imageNodes.includes(e.target)) {
+                const index = nodeState.imageNodes.indexOf(e.target);
                 selectLayer(index);
             }
         });
@@ -751,32 +769,34 @@ app.registerExtension({
         stage.on("wheel", (e) => {
             e.evt.preventDefault();
             const scaleBy = 1.01;
-            const target = transformer.nodes()[0];
-            if (!target || !imageNodes.includes(target)) return;
+            const target = nodeState.transformer.nodes()[0];
+            if (!target || !nodeState.imageNodes.includes(target)) return;
 
             const oldScale = target.scaleX();
             const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+
             target.scaleX(newScale);
             target.scaleY(newScale);
 
-            const index = imageNodes.indexOf(target);
+            const index = nodeState.imageNodes.indexOf(target);
             if (index !== -1) {
                 const maxWidth = boardWidth * 0.8;
                 const maxHeight = boardHeight * 0.8;
                 const imageScale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
-                initialStates[index] = {
+                nodeState.initialStates[index] = {
                     x: target.x(),
                     y: target.y(),
                     scaleX: target.scaleX() / imageScale,
                     scaleY: target.scaleY() / imageScale,
                     rotation: target.rotation()
                 };
-                node.properties.image_states = initialStates;
-                node.widgets.find(w => w.name === "image_states").value = JSON.stringify(initialStates);
-                node.setProperty("image_states", initialStates);
+                node.properties.image_states = nodeState.initialStates;
+                node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+                node.setProperty("image_states", nodeState.initialStates);
                 saveHistory();
             }
-            requestRedraw();
+
+            imageLayer.batchDraw();
         });
 
         node.addDOMWidget("canvas", "Canvas", document.createElement("div"), {
@@ -789,7 +809,7 @@ app.registerExtension({
                     canvas_color: canvasColor,
                     border_color: borderColor,
                     image_paths: imagePaths,
-                    image_states: initialStates
+                    image_states: nodeState.initialStates
                 };
             },
             setValue(value) {
@@ -800,10 +820,10 @@ app.registerExtension({
                     canvasColor = value.canvas_color || canvasColor;
                     borderColor = value.border_color || borderColor;
                     imagePaths = value.image_paths || imagePaths;
-                    initialStates = value.image_states || initialStates;
+                    nodeState.initialStates = value.image_states || nodeState.initialStates;
                     updateSize();
                     if (imagePaths.length > 0) {
-                        loadImages(imagePaths, initialStates);
+                        loadImages(imagePaths, nodeState.initialStates);
                     }
                 } catch (e) {
                     log.error("Error in setValue:", e);
@@ -818,16 +838,20 @@ app.registerExtension({
 
         if (node.getHTMLElement) {
             const element = node.getHTMLElement();
-            if (element) element.classList.add("xiser-node");
+            if (element) {
+                element.classList.add("xiser-node");
+            }
         }
 
         function triggerPrompt() {
             try {
-                node.properties.image_states = initialStates;
-                const serializedStates = JSON.stringify(initialStates);
+                node.properties.image_states = nodeState.initialStates;
+                const serializedStates = JSON.stringify(nodeState.initialStates);
                 node.widgets.find(w => w.name === "image_states").value = serializedStates;
-                node.setProperty("image_states", initialStates);
-                if (app.queuePrompt) app.queuePrompt();
+                node.setProperty("image_states", nodeState.initialStates);
+                if (app.queuePrompt) {
+                    app.queuePrompt();
+                }
             } catch (e) {
                 log.error("Failed to queue prompt:", e);
             }
@@ -835,6 +859,7 @@ app.registerExtension({
 
         function updateSize() {
             try {
+                // 验证参数范围
                 boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
                 boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
                 borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
@@ -851,15 +876,17 @@ app.registerExtension({
                     "transparent": "rgba(0, 0, 0, 0)"
                 }[canvasColorValue] || "rgb(25, 25, 25)";
 
+                // 更新 widgets 和 inputs
                 node.widgets.forEach(widget => {
                     if (widget.name === "board_width") widget.value = boardWidth;
                     if (widget.name === "board_height") widget.value = boardHeight;
                     if (widget.name === "border_width") widget.value = borderWidth;
                     if (widget.name === "canvas_color") widget.value = canvasColorValue;
-                    if (widget.name === "image_states") widget.value = JSON.stringify(initialStates);
+                    if (widget.name === "image_states") widget.value = JSON.stringify(nodeState.initialStates);
                 });
-                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(initialStates)];
+                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(nodeState.initialStates)];
 
+                // 安全更新 node.inputs
                 if (node.inputs) {
                     if (node.inputs.board_width) node.inputs.board_width.value = boardWidth;
                     if (node.inputs.board_height) node.inputs.board_height.value = boardHeight;
@@ -867,15 +894,35 @@ app.registerExtension({
                     if (node.inputs.canvas_color) node.inputs.canvas_color.value = canvasColorValue;
                 }
 
+                // 更新 stage 和画板元素
                 const containerWidth = boardWidth + 2 * borderWidth;
                 const containerHeight = boardHeight + 2 * borderWidth;
-                stage.width(containerWidth);
-                stage.height(containerHeight);
-                borderRect.setAttrs({ x: 0, y: 0, width: containerWidth, height: containerHeight, fill: borderColor });
-                canvasRect.setAttrs({ x: borderWidth, y: borderWidth, width: boardWidth, height: boardHeight, fill: canvasColor });
+                if (stage) {
+                    stage.width(containerWidth);
+                    stage.height(containerHeight);
+                }
+                if (borderRect) {
+                    borderRect.setAttrs({
+                        x: 0,
+                        y: 0,
+                        width: containerWidth,
+                        height: containerHeight,
+                        fill: borderColor
+                    });
+                }
+                if (canvasRect) {
+                    canvasRect.setAttrs({
+                        x: borderWidth,
+                        y: borderWidth,
+                        width: boardWidth,
+                        height: boardHeight,
+                        fill: canvasColor
+                    });
+                }
 
-                imageNodes.forEach((node, i) => {
-                    const state = initialStates[i] || {};
+                // 更新图像节点位置
+                nodeState.imageNodes.forEach((node, i) => {
+                    const state = nodeState.initialStates[i] || {};
                     const imgWidth = node.width();
                     const imgHeight = node.height();
                     const maxWidth = boardWidth * 0.8;
@@ -890,7 +937,7 @@ app.registerExtension({
                     node.rotation(state.rotation || 0);
                     node.offsetX(imgWidth / 2);
                     node.offsetY(imgHeight / 2);
-                    initialStates[i] = {
+                    nodeState.initialStates[i] = {
                         x: newX,
                         y: newY,
                         scaleX: node.scaleX() / imageScale,
@@ -899,11 +946,13 @@ app.registerExtension({
                     };
                 });
 
+                // 更新节点尺寸
                 const nodeWidth = boardWidth + 2 * borderWidth + 20;
                 const nodeHeight = boardHeight + 2 * borderWidth + 206;
                 node.size = [nodeWidth, nodeHeight];
                 node.setSize([nodeWidth, nodeHeight]);
 
+                // 更新 node.properties
                 node.properties.ui_config = {
                     board_width: boardWidth,
                     board_height: boardHeight,
@@ -912,9 +961,14 @@ app.registerExtension({
                     border_color: borderColor,
                     image_paths: imagePaths
                 };
-                node.properties.image_states = initialStates;
+                node.properties.image_states = nodeState.initialStates;
                 node.setProperty("ui_config", node.properties.ui_config);
-                node.setProperty("image_states", initialStates);
+                node.setProperty("image_states", nodeState.initialStates);
+
+                // 绘制画板
+                if (canvasLayer) canvasLayer.batchDraw();
+                if (imageLayer) imageLayer.batchDraw();
+                if (stage) stage.batchDraw();
 
                 updateLayerPanel();
                 syncContainerPosition();
@@ -925,10 +979,9 @@ app.registerExtension({
             }
         }
 
-        let pollInterval = null;
         function startPolling() {
-            if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(() => {
+            if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
+            nodeState.pollInterval = setInterval(() => {
                 let newImagePaths = [];
                 let states = node.properties?.image_states || [];
 
@@ -945,19 +998,19 @@ app.registerExtension({
                     newImagePaths = uiConfigPaths;
                 }
 
-                if (JSON.stringify(newImagePaths) !== JSON.stringify(lastImagePaths)) {
-                    lastImagePaths = newImagePaths.slice();
+                if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
+                    nodeState.lastImagePaths = newImagePaths.slice();
                     if (newImagePaths.length > 0) {
                         imagePaths = newImagePaths;
                         node.properties.ui_config.image_paths = imagePaths;
                         node.properties.image_states = states;
-                        if (states.length === 0 && initialStates.length === 0) {
-                            initialStates = states;
-                            node.setProperty("image_states", initialStates);
+                        if (states.length === 0 && nodeState.initialStates.length === 0) {
+                            nodeState.initialStates = states;
+                            node.setProperty("image_states", nodeState.initialStates);
                         } else {
-                            initialStates = states;
+                            nodeState.initialStates = states;
                         }
-                        loadImages(imagePaths, initialStates);
+                        loadImages(imagePaths, nodeState.initialStates);
                     }
                 }
             }, 1000);
@@ -984,18 +1037,18 @@ app.registerExtension({
                 imagePaths = newImagePaths;
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
-                if (states.length === 0 && initialStates.length === 0) {
-                    initialStates = states;
-                    node.setProperty("image_states", initialStates);
+                if (states.length === 0 && nodeState.initialStates.length === 0) {
+                    nodeState.initialStates = states;
+                    node.setProperty("image_states", nodeState.initialStates);
                 } else {
-                    initialStates = states;
+                    nodeState.initialStates = states;
                 }
-                lastImagePaths = imagePaths.slice();
-                loadImages(imagePaths, initialStates);
+                nodeState.lastImagePaths = imagePaths.slice();
+                loadImages(imagePaths, nodeState.initialStates);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
-                log.error("No valid image paths received in onNodeExecuted");
+                log.error("No valid image paths received in onNodeExecuted for node:", node.id);
             }
         };
 
@@ -1031,30 +1084,29 @@ app.registerExtension({
                 imagePaths = newImagePaths;
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
-                if (states.length === 0 && initialStates.length === 0) {
-                    initialStates = states;
-                    node.setProperty("image_states", initialStates);
+                if (states.length === 0 && nodeState.initialStates.length === 0) {
+                    nodeState.initialStates = states;
+                    node.setProperty("image_states", nodeState.initialStates);
                 } else {
-                    initialStates = states;
+                    nodeState.initialStates = states;
                 }
-                lastImagePaths = imagePaths.slice();
+                nodeState.lastImagePaths = imagePaths.slice();
                 loadImages(imagePaths, states);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
-                log.error("No valid image paths received in onExecuted");
+                log.error("No valid image paths received in onExecuted for node:", node.id);
             }
         };
 
         node.onRemoved = () => {
-            if (pollInterval) clearInterval(pollInterval);
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
+            if (nodeState.animationFrameId) cancelAnimationFrame(nodeState.animationFrameId);
             stage.destroy();
             mainContainer.remove();
-            imageCache.clear();
-            loadedImageUrls.clear();
-            window.removeEventListener("resize", syncContainerPosition);
-            log.info("XISER_Canvas node removed, resources cleaned");
+            nodeState.imageCache.clear();
+            window.removeEventListener("resize", resizeListener);
+            log.info("XISER_Canvas node removed, resources cleaned for node:", node.id);
         };
 
         updateSize();
