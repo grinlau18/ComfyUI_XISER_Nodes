@@ -894,6 +894,88 @@ class XIS_ImagesToCanvas:
 
         logger.info(f"Packed {len(normalized_images)} images for canvas")
         return (normalized_images,)
+    
+
+# 多蒙版混合节点，支持最多 8 张蒙版
+class XIS_CanvasMaskProcessor:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                # 反向蒙版开关置顶，默认开启
+                "invert_output": ("BOOLEAN", {"default": True}),
+                # 单一蒙版批次输入，接受 1-8 张蒙版
+                "masks": ("MASK",),
+                # 布尔开关，名称改为 Layer_Mask_X，默认关闭
+                "Layer_Mask_1": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                # 剩余布尔开关，支持最多 8 张蒙版
+                "Layer_Mask_2": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_3": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_4": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_5": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_6": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_7": ("BOOLEAN", {"default": False}),
+                "Layer_Mask_8": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("MASK",)
+    RETURN_NAMES = ("output_mask",)
+    FUNCTION = "blend_masks"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
+
+    def blend_masks(self, invert_output, masks, Layer_Mask_1, 
+                    Layer_Mask_2=False, Layer_Mask_3=False, Layer_Mask_4=False,
+                    Layer_Mask_5=False, Layer_Mask_6=False, Layer_Mask_7=False, Layer_Mask_8=False):
+        # 收集布尔开关
+        enables = [Layer_Mask_1, Layer_Mask_2, Layer_Mask_3, Layer_Mask_4,
+                   Layer_Mask_5, Layer_Mask_6, Layer_Mask_7, Layer_Mask_8]
+        
+        # 检查蒙版批次大小
+        batch_size = masks.shape[0] if masks.dim() == 3 else 1
+        if batch_size < 1 or batch_size > 8:
+            raise ValueError("Mask batch size must be between 1 and 8.")
+        
+        # 如果输入是单张蒙版（2D），添加批次维度
+        if masks.dim() == 2:
+            masks = masks.unsqueeze(0)
+        
+        # 截取有效的布尔开关
+        valid_enables = enables[:batch_size]
+        
+        # 检查蒙版尺寸（忽略批次维度）
+        shape = masks[0].shape
+        for mask in masks[1:]:
+            if mask.shape != shape:
+                raise ValueError("All masks in the batch must have the same dimensions.")
+        
+        # 初始化输出蒙版为全 0
+        output_mask = torch.zeros_like(masks[0])
+        
+        # 按批次顺序（从下到上）处理蒙版
+        for i, (mask, enable) in enumerate(zip(masks, valid_enables)):
+            if enable:
+                # 计算上层蒙版的累积不透明度
+                upper_opacity = torch.zeros_like(mask)
+                for j in range(i + 1, batch_size):
+                    upper_opacity = torch.max(upper_opacity, masks[j])
+                
+                # 当前蒙版的可见部分 = 自身值 * (1 - 上层不透明度)
+                visible_part = mask * (1.0 - upper_opacity)
+                
+                # 累加到输出蒙版
+                output_mask = output_mask + visible_part
+        
+        # 确保输出值在 [0, 1] 区间
+        output_mask = torch.clamp(output_mask, 0.0, 1.0)
+        
+        # 应用反向蒙版
+        if invert_output:
+            output_mask = 1.0 - output_mask
+        
+        return (output_mask,)
 
 
 NODE_CLASS_MAPPINGS = {
@@ -908,4 +990,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
     "XIS_ImagesToCanvas": XIS_ImagesToCanvas,
+    "XIS_CanvasMaskProcessor": XIS_CanvasMaskProcessor, 
 }
