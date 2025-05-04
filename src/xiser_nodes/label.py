@@ -1,6 +1,8 @@
 # 小贴纸节点
 from typing import Any
 
+print("注册 XIS_Label 节点")
+
 class XIS_Label:
     @classmethod
     def INPUT_TYPES(cls) -> dict:
@@ -19,9 +21,13 @@ class XIS_Label:
         self.properties = self.properties or {}
         self.properties["textData"] = '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'
         self.color = "#333355"  # 默认深灰色
-        self.properties["color"] = self.color  # 同步到properties.color
 
 # 节点映射
 NODE_CLASS_MAPPINGS = {
     "XIS_Label": XIS_Label,
+}
+
+# 节点显示名称
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "XIS_Label": "小贴纸"
 }

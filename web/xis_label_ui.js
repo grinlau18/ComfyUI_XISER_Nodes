@@ -1,35 +1,41 @@
 import { app } from "/scripts/app.js";
 
 // 资源加载状态
-const XISER_loadedResources = new Set();
+const loadedResources = new Set();
 
 /**
- * 加载JavaScript脚本，支持缓存和CDN回退
+ * 加载JavaScript脚本，支持缓存、CDN回退和重试
  * @param {string} src - 脚本URL
  * @param {string} [fallbackSrc] - 回退CDN URL
+ * @param {number} [retries=2] - 重试次数
  * @returns {Promise<void>} 加载完成或失败的Promise
  */
-function loadScript(src, fallbackSrc) {
-    if (XISER_loadedResources.has(src)) {
+async function loadScript(src, fallbackSrc, retries = 2) {
+    if (loadedResources.has(src)) {
         return Promise.resolve();
     }
-    return new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.type = "application/javascript";
-        script.src = src;
-        script.onload = () => {
-            XISER_loadedResources.add(src);
-            resolve();
-        };
-        script.onerror = () => {
-            if (fallbackSrc) {
-                loadScript(fallbackSrc).then(resolve).catch(reject);
-            } else {
-                reject(new Error(`加载脚本失败: ${src}`));
+    for (let i = 0; i < retries; i++) {
+        try {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.type = "application/javascript";
+                script.src = src;
+                script.onload = () => {
+                    loadedResources.add(src);
+                    resolve();
+                };
+                script.onerror = () => reject(new Error(`加载脚本失败: ${src}`));
+                document.head.appendChild(script);
+            });
+            return;
+        } catch (e) {
+            if (i === retries - 1 && fallbackSrc) {
+                await loadScript(fallbackSrc);
+                return;
             }
-        };
-        document.head.appendChild(script);
-    });
+        }
+    }
+    throw new Error(`加载脚本失败: ${src}`);
 }
 
 /**
@@ -39,12 +45,12 @@ function loadScript(src, fallbackSrc) {
  * @returns {Promise<void>} 加载完成或失败的Promise
  */
 function loadCss(href, fallbackHref) {
-    if (XISER_loadedResources.has(href)) {
+    if (loadedResources.has(href)) {
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
         if (!navigator.onLine) {
-            XISER_loadedResources.add(href);
+            loadedResources.add(href);
             resolve();
             return;
         }
@@ -53,14 +59,14 @@ function loadCss(href, fallbackHref) {
         link.type = "text/css";
         link.href = href;
         link.onload = () => {
-            XISER_loadedResources.add(href);
+            loadedResources.add(href);
             resolve();
         };
         link.onerror = () => {
             if (fallbackHref) {
                 loadCss(fallbackHref).then(resolve).catch(reject);
             } else {
-                XISER_loadedResources.add(href);
+                loadedResources.add(href);
                 resolve();
             }
         };
@@ -69,16 +75,11 @@ function loadCss(href, fallbackHref) {
 }
 
 /**
- * 异步加载CodeMirror相关资源
- * @returns {Promise<void>} 所有资源加载完成的Promise
+ * 异步加载CodeMirror相关资源，字体为可选
+ * @returns {Promise<void>} 所有关键资源加载完成的Promise
  */
 async function loadCodeMirrorResources() {
-    // 检查CodeMirror是否已加载
-    if (window.CodeMirror && window.CodeMirror.version === "5.65.17") {
-        return Promise.resolve();
-    }
-
-    const resources = [
+    const criticalResources = [
         {
             type: "script",
             src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/codemirror.js",
@@ -98,7 +99,9 @@ async function loadCodeMirrorResources() {
             type: "css",
             src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/theme/dracula.css",
             fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/dracula.min.css"
-        },
+        }
+    ];
+    const optionalResources = [
         {
             type: "css",
             src: "https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap",
@@ -107,16 +110,23 @@ async function loadCodeMirrorResources() {
     ];
 
     await Promise.all(
-        resources.map(res =>
+        criticalResources.map(res =>
             res.type === "script"
                 ? loadScript(res.src, res.fallback)
                 : loadCss(res.src, res.fallback)
         )
     );
+    await Promise.all(
+        optionalResources.map(res =>
+            res.type === "script"
+                ? loadScript(res.src, res.fallback).catch(() => {})
+                : loadCss(res.src, res.fallback).catch(() => {})
+        )
+    );
 }
 
 // 单例CodeMirror编辑器
-let XISER_codeMirrorInstance = null;
+let codeMirrorInstance = null;
 
 // 防抖函数
 function debounce(fn, wait) {
@@ -129,11 +139,15 @@ function debounce(fn, wait) {
 
 app.registerExtension({
     name: "ComfyUI.XISER.Label",
+    async setup() {
+        try {
+            await loadCodeMirrorResources();
+        } catch (e) {
+            console.error("资源加载失败，节点可能不可用", e);
+        }
+    },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "XIS_Label") return;
-
-        // 加载资源（仅一次）
-        await loadCodeMirrorResources();
 
         /**
          * 解析HTML格式的文本数据，转换为结构化行数据
@@ -250,6 +264,9 @@ app.registerExtension({
          * @param {string} newText - 新文本数据
          */
         function updateTextData(node, newText) {
+            if (node.properties.textData !== newText) {
+                delete node.properties.parsedTextData;
+            }
             node.properties.textData = newText;
             node.properties.parsedTextData = parseHtmlFormat(newText);
             app.canvas.setDirty(true);
@@ -287,6 +304,9 @@ app.registerExtension({
                     if (!font) {
                         font = `${fontWeight} ${line.font_size}px 'Fira Code', monospace`;
                         fontCache.set(fontKey, font);
+                        if (fontCache.size > 100) {
+                            fontCache.delete(fontCache.keys().next().value);
+                        }
                     }
                     ctx.font = font;
                     ctx.textAlign = "left";
@@ -382,7 +402,7 @@ app.registerExtension({
 
         // 监听模式变化
         nodeType.prototype.onModeChange = function (newMode, oldMode) {
-            this.setDirtyCanvas(true, true);
+            this.setDirtyCanvas(true, false);
             app.canvas.setDirty(true);
         };
 
@@ -391,11 +411,23 @@ app.registerExtension({
             if (property === "color" && value) {
                 this.properties.color = value; // 同步到properties.color
                 updateTextDataBackground(this, value);
-                this.setDirtyCanvas(true, true);
+                this.setDirtyCanvas(true, false);
                 app.canvas.setDirty(true);
             }
             return true;
         }, 100);
+
+        // 确保节点加载后渲染
+        nodeType.prototype.onAdded = function () {
+            this.setDirtyCanvas(true, false);
+        };
+
+        // 自定义序列化，防止缓存数据保存
+        nodeType.prototype.serialize = function () {
+            const data = LiteGraph.LGraphNode.prototype.serialize.call(this);
+            delete data.properties.parsedTextData;
+            return data;
+        };
 
         // 右键菜单（仅保留文本编辑）
         nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
@@ -403,7 +435,6 @@ app.registerExtension({
                 content: "编辑文本",
                 callback: async () => {
                     const modal = document.createElement("div");
-                    modal.setAttribute("data-xiser-modal", "true"); // 添加唯一标识
                     modal.style.position = "fixed";
                     modal.style.top = "50%";
                     modal.style.left = "50%";
@@ -483,8 +514,8 @@ app.registerExtension({
                     const defaultText = this.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
 
                     if (window.CodeMirror) {
-                        if (!XISER_codeMirrorInstance) {
-                            XISER_codeMirrorInstance = CodeMirror(editorDiv, {
+                        if (!codeMirrorInstance) {
+                            codeMirrorInstance = CodeMirror(editorDiv, {
                                 value: defaultText,
                                 mode: "htmlmixed",
                                 lineNumbers: true,
@@ -493,12 +524,16 @@ app.registerExtension({
                                 extraKeys: { "Ctrl-S": () => saveButton.click() }
                             });
                         } else {
-                            XISER_codeMirrorInstance.setValue(defaultText);
-                            XISER_codeMirrorInstance.getWrapperElement().parentNode.removeChild(XISER_codeMirrorInstance.getWrapperElement());
-                            editorDiv.appendChild(XISER_codeMirrorInstance.getWrapperElement());
+                            codeMirrorInstance.setValue("");
+                            editorDiv.appendChild(codeMirrorInstance.getWrapperElement());
+                            codeMirrorInstance.setValue(defaultText);
                         }
-                        editor = XISER_codeMirrorInstance;
+                        editor = codeMirrorInstance;
                     } else {
+                        const errorMsg = document.createElement("div");
+                        errorMsg.style.color = "#FF5555";
+                        errorMsg.textContent = "CodeMirror 加载失败，使用普通文本编辑器";
+                        editorDiv.appendChild(errorMsg);
                         const textarea = document.createElement("textarea");
                         textarea.style.width = "100%";
                         textarea.style.height = "100%";
@@ -517,10 +552,12 @@ app.registerExtension({
                         try {
                             const newText = editor.getValue ? editor.getValue() : editor.value;
                             updateTextData(this, newText);
-                            this.setDirtyCanvas(true, true);
+                            this.setDirtyCanvas(true, false);
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
-                            if (editor !== XISER_codeMirrorInstance) editor.remove();
+                            if (editor !== codeMirrorInstance) editor.remove();
+                            saveButton.onclick = null;
+                            cancelButton.onclick = null;
                         } catch (e) {
                         }
                     };
@@ -529,10 +566,13 @@ app.registerExtension({
                         try {
                             document.body.removeChild(modal);
                             document.head.removeChild(style);
-                            if (editor !== XISER_codeMirrorInstance) editor.remove();
-                            if (XISER_codeMirrorInstance && !document.body.contains(XISER_codeMirrorInstance.getWrapperElement())) {
-                                XISER_codeMirrorInstance = null;
+                            if (editor !== codeMirrorInstance) editor.remove();
+                            if (codeMirrorInstance) {
+                                codeMirrorInstance.getWrapperElement().remove();
+                                codeMirrorInstance = null;
                             }
+                            saveButton.onclick = null;
+                            cancelButton.onclick = null;
                         } catch (e) {
                         }
                     };
