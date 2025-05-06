@@ -162,8 +162,9 @@ class XISER_Canvas:
                 mask = Image.new("L", (board_width, board_height), 0)
                 rotation = state.get("rotation", 0)
                 if rotation != 0:
-                    img = img.rotate(-rotation, expand=True)
-                    alpha = alpha.rotate(-rotation, expand=True)
+                    # 使用高质量插值和抗锯齿进行旋转
+                    img = img.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True)
+                    alpha = alpha.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True)
                 x = state.get("x", border_width + board_width / 2) - border_width
                 y = state.get("y", border_width + board_height / 2) - border_width
                 paste_x, paste_y = int(x - img.width / 2), int(y - img.height / 2)
