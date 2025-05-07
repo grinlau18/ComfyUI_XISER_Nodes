@@ -7,6 +7,10 @@ const log = {
     error: (...args) => console.error(...args)
 };
 
+// 全局缓存，按 nodeId 隔离
+const globalImageCache = new Map(); // Map<nodeId, Map<filename, image>>
+const globalLoadedImageUrls = new Map(); // Map<nodeId, Map<filename, url>>
+
 app.registerExtension({
     name: "xiser.canvas",
     async setup() {
@@ -177,15 +181,25 @@ app.registerExtension({
         }
         node.widgets = [];
 
+        // 为当前节点初始化独立的缓存
+        const nodeId = node.id;
+        if (!globalImageCache.has(nodeId)) {
+            globalImageCache.set(nodeId, new Map());
+        }
+        if (!globalLoadedImageUrls.has(nodeId)) {
+            globalLoadedImageUrls.set(nodeId, new Map());
+        }
+
         // 初始化节点状态
         const nodeState = {
+            nodeId: nodeId,
             imageNodes: [],
             defaultLayerOrder: [],
             initialStates: [],
             transformer: null,
             lastImagePaths: [],
-            loadedImageUrls: new Map(),
-            imageCache: new Map(),
+            loadedImageUrls: globalLoadedImageUrls.get(nodeId),
+            imageCache: globalImageCache.get(nodeId),
             history: [],
             historyIndex: -1,
             selectedLayer: null,
@@ -195,7 +209,7 @@ app.registerExtension({
             lastScale: app.canvas.ds.scale || 1,
             lastOffset: app.canvas.ds.offset ? [...app.canvas.ds.offset] : [0, 0],
             pollInterval: null,
-            animationFrameId: null
+            checkInterval: null
         };
 
         // 从 node.properties.ui_config 和 node.widgets_values 恢复参数
@@ -335,17 +349,17 @@ app.registerExtension({
 
         const canvasLayer = new Konva.Layer();
         const imageLayer = new Konva.Layer();
+        const topLayer = new Konva.Layer();
         stage.add(canvasLayer);
         stage.add(imageLayer);
+        stage.add(topLayer);
 
         const canvasRect = new Konva.Rect({
             x: borderWidth,
             y: borderWidth,
             width: boardWidth,
             height: boardHeight,
-            fill: canvasColor,
-            stroke: "#808080",
-            strokeWidth: 2
+            fill: canvasColor
         });
 
         const borderRect = new Konva.Rect({
@@ -353,13 +367,23 @@ app.registerExtension({
             y: 0,
             width: boardWidth + 2 * borderWidth,
             height: boardHeight + 2 * borderWidth,
-            fill: borderColor,
+            fill: borderColor
+        });
+
+        const frameRect = new Konva.Rect({
+            x: borderWidth,
+            y: borderWidth,
+            width: boardWidth,
+            height: boardHeight,
             stroke: "#808080",
-            strokeWidth: 2
+            strokeWidth: 2,
+            fill: null,
+            listening: false // 禁用事件监听
         });
 
         canvasLayer.add(borderRect);
         canvasLayer.add(canvasRect);
+        topLayer.add(frameRect);
 
         // 同步容器位置
         function syncContainerPosition() {
@@ -371,28 +395,23 @@ app.registerExtension({
                 const scale = app.canvas.ds.scale;
                 const offset = app.canvas.ds.offset;
 
-                // 计算节点在画布中的像素坐标
                 const logicalX = (nodePos[0] + offset[0]) * scale;
                 const logicalY = (nodePos[1] + offset[1]) * scale;
 
-                // 转换为浏览器视口的绝对像素坐标
-                const x = canvasRect.left + logicalX + 10 * scale; // 加上节点的边距（10px）
-                const y = canvasRect.top + logicalY + 186 * scale; // 加上标题栏高度（186px）
-                const width = (nodeSize[0] - 20); // 逻辑宽度，缩放前
-                const height = (nodeSize[1] - 206); // 逻辑高度，缩放前
+                const x = canvasRect.left + logicalX + 10 * scale;
+                const y = canvasRect.top + logicalY + 186 * scale;
+                const width = nodeSize[0] - 20;
+                const height = nodeSize[1] - 206;
 
-                // 设置 mainContainer 的绝对位置和缩放
                 mainContainer.style.left = `${x}px`;
                 mainContainer.style.top = `${y}px`;
                 mainContainer.style.width = `${width}px`;
                 mainContainer.style.height = `${height}px`;
-                mainContainer.style.transform = `scale(${scale})`; // 使用 CSS 缩放
+                mainContainer.style.transform = `scale(${scale})`;
 
-                // 设置 boardContainer 的逻辑尺寸（抵消缩放影响）
                 boardContainer.style.width = `${width}px`;
                 boardContainer.style.height = `${height}px`;
 
-                // 保持 stage 逻辑尺寸不变
                 stage.width(boardWidth + 2 * borderWidth);
                 stage.height(boardHeight + 2 * borderWidth);
                 borderRect.width(boardWidth + 2 * borderWidth);
@@ -401,17 +420,21 @@ app.registerExtension({
                 canvasRect.y(borderWidth);
                 canvasRect.width(boardWidth);
                 canvasRect.height(boardHeight);
-                canvasLayer.batchDraw();
+                frameRect.x(borderWidth);
+                frameRect.y(borderWidth);
+                frameRect.width(boardWidth);
+                frameRect.height(boardHeight);
 
-                // 动态调整控件样式（仅调整视觉大小，不调整位置）
-                const basePadding = 5; // 基础内边距
-                const baseFontSize = 12; // 基础字体大小
+                const basePadding = 5;
+                const baseFontSize = 12;
                 const padding = basePadding / scale;
                 const fontSize = baseFontSize / scale;
 
                 mainContainer.style.setProperty('--xiser-padding', `${padding}px`);
                 mainContainer.style.setProperty('--xiser-font-size', `${fontSize}px`);
 
+                canvasLayer.batchDraw();
+                topLayer.batchDraw();
                 imageLayer.batchDraw();
 
                 log.info(`Sync position: nodePos=(${nodePos[0]}, ${nodePos[1]}), scale=${scale}, offset=(${offset[0]}, ${offset[1]}), canvasRect=(${canvasRect.left}, ${canvasRect.top}), final=(${x}, ${y}, ${width}, ${height})`);
@@ -420,12 +443,12 @@ app.registerExtension({
             }
         }
 
-        // 延迟初始同步位置，确保画布渲染完成
+        // 延迟初始同步位置
         setTimeout(() => {
             syncContainerPosition();
         }, 500);
 
-        // 实时检测节点位置和大小变化
+        // 优化位置和大小检测
         function checkPositionAndSize() {
             try {
                 const nodePos = node.pos;
@@ -434,7 +457,7 @@ app.registerExtension({
                 const offset = app.canvas.ds.offset;
 
                 const posChanged = nodePos[0] !== nodeState.lastNodePos[0] || nodePos[1] !== nodeState.lastNodePos[1];
-                const sizeChanged = nodeSize[0] !== nodeState.lastNodeSize[0] || nodePos[1] !== nodeState.lastNodeSize[1];
+                const sizeChanged = nodeSize[0] !== nodeState.lastNodeSize[0] || nodeSize[1] !== nodeState.lastNodeSize[1];
                 const scaleChanged = scale !== nodeState.lastScale;
                 const offsetChanged = offset[0] !== nodeState.lastOffset[0] || offset[1] !== nodeState.lastOffset[1];
 
@@ -448,9 +471,10 @@ app.registerExtension({
             } catch (e) {
                 log.error("Error in checkPositionAndSize:", e);
             }
-            nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
         }
-        nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
+
+        // 使用 setInterval 降低检测频率
+        nodeState.checkInterval = setInterval(checkPositionAndSize, 25);
 
         // 监听窗口调整
         const resizeListener = () => {
@@ -580,7 +604,6 @@ app.registerExtension({
         function deselectLayer() {
             if (!nodeState.selectedLayer) return;
 
-            // 恢复输入时的默认图层顺序
             nodeState.defaultLayerOrder.forEach((node, index) => {
                 node.zIndex(index);
             });
@@ -623,7 +646,9 @@ app.registerExtension({
                 nodeState.imageNodes = nodeState.imageNodes.filter(n => n !== node);
                 nodeState.loadedImageUrls.delete(node.attrs.filename);
             });
-            imageLayer.batchDraw();
+            if (imagesToRemove.length > 0) {
+                imageLayer.batchDraw();
+            }
 
             if (imagesToLoad.length === 0) {
                 statusText.innerText = `已加载 ${nodeState.imageNodes.length} 张图像`;
@@ -635,36 +660,37 @@ app.registerExtension({
             statusText.innerText = `加载图像... 0/${images.length}`;
             statusText.style.color = "#fff";
 
-            let loadedCount = nodeState.imageNodes.length;
-            for (let i = 0; i < images.length; i++) {
-                const imgData = images[i];
-                if (nodeState.imageNodes.some(node => node.attrs.filename === imgData.filename)) continue;
+            const loadImage = async (imgData, index) => {
+                if (nodeState.imageNodes.some(node => node.attrs.filename === imgData.filename)) return;
 
                 try {
                     let img = nodeState.imageCache.get(imgData.filename);
                     if (!img) {
                         img = new Image();
-                        let imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
+                        const imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
                         const response = await fetch(imgUrl, { method: 'HEAD' });
                         if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         img.src = imgUrl;
                         await new Promise((resolve, reject) => {
+                            const timeout = setTimeout(() => reject(new Error("Image load timeout")), 5000);
                             img.onload = () => {
+                                clearTimeout(timeout);
                                 nodeState.imageCache.set(imgData.filename, img);
                                 nodeState.loadedImageUrls.set(imgData.filename, imgUrl);
                                 resolve();
                             };
                             img.onerror = () => {
-                                log.error(`Failed to load image ${i+1}: ${imgData.filename}, URL: ${imgUrl}`);
+                                clearTimeout(timeout);
+                                log.error(`Failed to load image ${index+1}: ${imgData.filename}, URL: ${imgUrl}`);
                                 if (retryCount < maxRetries) {
-                                    setTimeout(() => loadImages([imgData.filename], [states[i]], base64Chunks, retryCount + 1, maxRetries), 1000);
+                                    setTimeout(() => loadImages([imgData.filename], [states[index]], base64Chunks, retryCount + 1, maxRetries), 1000);
                                 }
                                 resolve();
                             };
                         });
                     }
 
-                    const state = states[i] || {};
+                    const state = states[index] || {};
                     const maxWidth = boardWidth * 0.8;
                     const maxHeight = boardHeight * 0.8;
                     const imageScale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
@@ -682,7 +708,7 @@ app.registerExtension({
                     });
                     imageLayer.add(konvaImg);
                     nodeState.imageNodes.push(konvaImg);
-                    nodeState.initialStates[i] = nodeState.initialStates[i] || {
+                    nodeState.initialStates[index] = nodeState.initialStates[index] || {
                         x: state.x || borderWidth + boardWidth / 2,
                         y: state.y || borderWidth + boardHeight / 2,
                         scaleX: konvaImg.scaleX() / imageScale,
@@ -691,7 +717,7 @@ app.registerExtension({
                     };
 
                     const updateImageState = () => {
-                        nodeState.initialStates[i] = {
+                        nodeState.initialStates[index] = {
                             x: konvaImg.x(),
                             y: konvaImg.y(),
                             scaleX: konvaImg.scaleX() / imageScale,
@@ -707,17 +733,19 @@ app.registerExtension({
 
                     konvaImg.on("dragend transformend", updateImageState);
 
-                    loadedCount++;
-                    statusText.innerText = `加载图像... ${loadedCount}/${images.length}`;
+                    return true;
                 } catch (e) {
-                    log.error(`Error loading image ${i+1}:`, e);
+                    log.error(`Error loading image ${index+1}:`, e);
                     statusText.innerText = `加载失败：${e.message}`;
                     statusText.style.color = "#f00";
-                    continue;
+                    return false;
                 }
-            }
+            };
 
-            // 记录输入时的默认图层顺序
+            const loadPromises = images.map((imgData, i) => loadImage(imgData, i));
+            const results = await Promise.all(loadPromises);
+            const loadedCount = results.filter(Boolean).length + nodeState.imageNodes.length - imagesToLoad.length;
+
             nodeState.defaultLayerOrder = [...nodeState.imageNodes];
 
             updateLayerPanel();
@@ -859,7 +887,6 @@ app.registerExtension({
 
         function updateSize() {
             try {
-                // 验证参数范围
                 boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
                 boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
                 borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
@@ -876,7 +903,6 @@ app.registerExtension({
                     "transparent": "rgba(0, 0, 0, 0)"
                 }[canvasColorValue] || "rgb(25, 25, 25)";
 
-                // 更新 widgets 和 inputs
                 node.widgets.forEach(widget => {
                     if (widget.name === "board_width") widget.value = boardWidth;
                     if (widget.name === "board_height") widget.value = boardHeight;
@@ -886,15 +912,13 @@ app.registerExtension({
                 });
                 node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(nodeState.initialStates)];
 
-                // 安全更新 node.inputs
                 if (node.inputs) {
                     if (node.inputs.board_width) node.inputs.board_width.value = boardWidth;
                     if (node.inputs.board_height) node.inputs.board_height.value = boardHeight;
-                    if (node.inputs.border_width) node.inputs.border_width.value = borderWidth;
+                    if (node.inputs.border_width) node.inputs.board_width.value = borderWidth;
                     if (node.inputs.canvas_color) node.inputs.canvas_color.value = canvasColorValue;
                 }
 
-                // 更新 stage 和画板元素
                 const containerWidth = boardWidth + 2 * borderWidth;
                 const containerHeight = boardHeight + 2 * borderWidth;
                 if (stage) {
@@ -919,8 +943,17 @@ app.registerExtension({
                         fill: canvasColor
                     });
                 }
+                if (frameRect) {
+                    frameRect.setAttrs({
+                        x: borderWidth,
+                        y: borderWidth,
+                        width: boardWidth,
+                        height: boardHeight,
+                        stroke: "#808080",
+                        strokeWidth: 2
+                    });
+                }
 
-                // 更新图像节点位置
                 nodeState.imageNodes.forEach((node, i) => {
                     const state = nodeState.initialStates[i] || {};
                     const imgWidth = node.width();
@@ -946,13 +979,11 @@ app.registerExtension({
                     };
                 });
 
-                // 更新节点尺寸
                 const nodeWidth = boardWidth + 2 * borderWidth + 20;
                 const nodeHeight = boardHeight + 2 * borderWidth + 206;
                 node.size = [nodeWidth, nodeHeight];
                 node.setSize([nodeWidth, nodeHeight]);
 
-                // 更新 node.properties
                 node.properties.ui_config = {
                     board_width: boardWidth,
                     board_height: boardHeight,
@@ -965,10 +996,9 @@ app.registerExtension({
                 node.setProperty("ui_config", node.properties.ui_config);
                 node.setProperty("image_states", nodeState.initialStates);
 
-                // 绘制画板
-                if (canvasLayer) canvasLayer.batchDraw();
-                if (imageLayer) imageLayer.batchDraw();
-                if (stage) stage.batchDraw();
+                canvasLayer.batchDraw();
+                imageLayer.batchDraw();
+                topLayer.batchDraw();
 
                 updateLayerPanel();
                 syncContainerPosition();
@@ -1101,10 +1131,11 @@ app.registerExtension({
 
         node.onRemoved = () => {
             if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
-            if (nodeState.animationFrameId) cancelAnimationFrame(nodeState.animationFrameId);
+            if (nodeState.checkInterval) clearInterval(nodeState.checkInterval);
             stage.destroy();
             mainContainer.remove();
-            nodeState.imageCache.clear();
+            globalImageCache.delete(nodeState.nodeId);
+            globalLoadedImageUrls.delete(nodeState.nodeId);
             window.removeEventListener("resize", resizeListener);
             log.info("XISER_Canvas node removed, resources cleaned for node:", node.id);
         };
