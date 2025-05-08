@@ -7,6 +7,16 @@ import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
 from nodes import MAX_RESOLUTION
+import os
+import torch
+import numpy as np
+from PIL import Image
+import folder_paths
+import time
+import uuid
+
+
+
 
 
 """
@@ -990,5 +1000,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
     "XIS_ImagesToCanvas": XIS_ImagesToCanvas,
-    "XIS_CanvasMaskProcessor": XIS_CanvasMaskProcessor, 
+    "XIS_CanvasMaskProcessor": XIS_CanvasMaskProcessor,
 }
