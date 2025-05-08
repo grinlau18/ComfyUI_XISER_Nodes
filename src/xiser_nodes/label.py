@@ -1,6 +1,8 @@
 # 小贴纸节点
 from typing import Any
 
+print("注册 XIS_Label 节点")
+
 class XIS_Label:
     @classmethod
     def INPUT_TYPES(cls) -> dict:
