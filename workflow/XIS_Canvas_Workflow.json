@@ -1,0 +1,876 @@
+{
+  "id": "25c204cc-5123-4efa-a03a-25478c6ed82a",
+  "revision": 0,
+  "last_node_id": 65,
+  "last_link_id": 110,
+  "nodes": [
+    {
+      "id": 37,
+      "type": "XISER_Canvas",
+      "pos": [
+        -401.33099365234375,
+        963.9578857421875
+      ],
+      "size": [
+        884,
+        1486
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "XIS_IMAGES",
+          "link": 67
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": [
+            76
+          ]
+        },
+        {
+          "name": "image_paths",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": [
+            74
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "6d0acef8133c4ef34002fc5216a7bd975c82f6ef",
+        "ui_config": {
+          "board_width": 800,
+          "board_height": 1216,
+          "border_width": 32,
+          "canvas_color": "rgb(0, 0, 0)",
+          "border_color": "rgb(25, 25, 25)",
+          "image_paths": [
+            "xiser_canvas_aa605d642d7740599fb32596ee45a7fd.png",
+            "xiser_canvas_042079698a164170a70ca6deb3da8b3c.png",
+            "xiser_canvas_b0f0f084bc134fa6935d5cbfebe8f1b8.png"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 397.50287905013977,
+            "y": 396.28152167956455,
+            "scaleX": 1.9284601530560948,
+            "scaleY": 1.9284601530560948,
+            "rotation": 0
+          },
+          {
+            "x": 422.9225832874182,
+            "y": 702.0778417410164,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          },
+          {
+            "x": 419.8889657406543,
+            "y": 178.39562660706514,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          }
+        ],
+        "Node name for S&R": "XISER_Canvas"
+      },
+      "widgets_values": [
+        800,
+        1216,
+        32,
+        "black",
+        "[{\"x\":397.50287905013977,\"y\":396.28152167956455,\"scaleX\":1.9284601530560948,\"scaleY\":1.9284601530560948,\"rotation\":0},{\"x\":422.9225832874182,\"y\":702.0778417410164,\"scaleX\":1,\"scaleY\":1,\"rotation\":0},{\"x\":419.8889657406543,\"y\":178.39562660706514,\"scaleX\":1,\"scaleY\":1,\"rotation\":0}]",
+        {
+          "board_width": 800,
+          "board_height": 1216,
+          "border_width": 32,
+          "canvas_color": "rgb(0, 0, 0)",
+          "border_color": "rgb(25, 25, 25)",
+          "image_paths": [
+            "xiser_canvas_aa605d642d7740599fb32596ee45a7fd.png",
+            "xiser_canvas_042079698a164170a70ca6deb3da8b3c.png",
+            "xiser_canvas_b0f0f084bc134fa6935d5cbfebe8f1b8.png"
+          ],
+          "image_states": [
+            {
+              "x": 397.50287905013977,
+              "y": 396.28152167956455,
+              "scaleX": 1.9284601530560948,
+              "scaleY": 1.9284601530560948,
+              "rotation": 0
+            },
+            {
+              "x": 422.9225832874182,
+              "y": 702.0778417410164,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            },
+            {
+              "x": 419.8889657406543,
+              "y": 178.39562660706514,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            }
+          ]
+        }
+      ],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 43,
+      "type": "LayerMask: MaskPreview",
+      "pos": [
+        503.34503173828125,
+        1270.6826171875
+      ],
+      "size": [
+        450.9482421875,
+        655.9480590820312
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 75
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfyui_layerstyle",
+        "ver": "1.0.90",
+        "Node name for S&R": "LayerMask: MaskPreview"
+      },
+      "widgets_values": [],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 47,
+      "type": "PreviewImage",
+      "pos": [
+        975.867919921875,
+        970
+      ],
+      "size": [
+        622.2249145507812,
+        960.3323364257812
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 76
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "PreviewImage"
+      },
+      "widgets_values": [],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 48,
+      "type": "XIS_Label",
+      "pos": [
+        -399.6664123535156,
+        887.6757202148438
+      ],
+      "size": [
+        882.8731079101562,
+        34
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "b14f1c3a2f99019bbd938f7b502997f25d8ee46e",
+        "Node name for S&R": "XIS_Label",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">将输入图片进行分层显示，可进行移动、缩放以及旋转</p>"
+      },
+      "widgets_values": [],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 49,
+      "type": "XIS_Label",
+      "pos": [
+        505.0894775390625,
+        886.4828491210938
+      ],
+      "size": [
+        452.1336975097656,
+        34
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "b14f1c3a2f99019bbd938f7b502997f25d8ee46e",
+        "Node name for S&R": "XIS_Label",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">自由选择输出图层蒙版</p>"
+      },
+      "widgets_values": [],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 50,
+      "type": "XIS_Label",
+      "pos": [
+        978.92333984375,
+        888.316162109375
+      ],
+      "size": [
+        615.70751953125,
+        34
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "b14f1c3a2f99019bbd938f7b502997f25d8ee46e",
+        "Node name for S&R": "XIS_Label",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">输出重新构图后的图片</p>"
+      },
+      "widgets_values": [],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 54,
+      "type": "InvertMask",
+      "pos": [
+        -790,
+        2250
+      ],
+      "size": [
+        140,
+        26
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "mask",
+          "type": "MASK",
+          "link": 78
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            79
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "InvertMask"
+      },
+      "widgets_values": [],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 39,
+      "type": "LoadImage",
+      "pos": [
+        -870,
+        960
+      ],
+      "size": [
+        270,
+        314.00006103515625
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            104
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            105
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "clipspace/clipspace-mask-920524.png [input]",
+        "image"
+      ],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 62,
+      "type": "JoinImageWithAlpha",
+      "pos": [
+        -810,
+        1320
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 104
+        },
+        {
+          "name": "alpha",
+          "type": "MASK",
+          "link": 105
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            106
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "JoinImageWithAlpha"
+      },
+      "widgets_values": [],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 51,
+      "type": "XIS_Label",
+      "pos": [
+        -870,
+        890
+      ],
+      "size": [
+        442.6026306152344,
+        34
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "b14f1c3a2f99019bbd938f7b502997f25d8ee46e",
+        "Node name for S&R": "XIS_Label",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">随意输入不同尺寸的RGB以及RGBA图片</p>"
+      },
+      "widgets_values": [],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 53,
+      "type": "JoinImageWithAlpha",
+      "pos": [
+        -790,
+        2290
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 80
+        },
+        {
+          "name": "alpha",
+          "type": "MASK",
+          "link": 79
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            81
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "JoinImageWithAlpha"
+      },
+      "widgets_values": [],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 52,
+      "type": "LayerUtility: SimpleTextImage",
+      "pos": [
+        -870,
+        1800
+      ],
+      "size": [
+        268.1099853515625,
+        396
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "size_as",
+          "shape": 7,
+          "type": "*",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            80
+          ]
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": [
+            78
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_layerstyle",
+        "ver": "1.0.90",
+        "Node name for S&R": "LayerUtility: SimpleTextImage"
+      },
+      "widgets_values": [
+        "XISER Nodes",
+        "Alibaba-PuHuiTi-Heavy.ttf",
+        "center",
+        80,
+        8,
+        150,
+        "#FFFFFF",
+        0,
+        "#FF8000",
+        0,
+        0,
+        1024,
+        215
+      ],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 41,
+      "type": "LoadImage",
+      "pos": [
+        -870,
+        1380
+      ],
+      "size": [
+        270,
+        314.0001220703125
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            108
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            109
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_temp_xlzlk_00002_.png",
+        "image"
+      ],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 65,
+      "type": "JoinImageWithAlpha",
+      "pos": [
+        -810,
+        1750
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 108
+        },
+        {
+          "name": "alpha",
+          "type": "MASK",
+          "link": 109
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            110
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "JoinImageWithAlpha"
+      },
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 45,
+      "type": "XIS_CanvasMaskProcessor",
+      "pos": [
+        503.636474609375,
+        967.272705078125
+      ],
+      "size": [
+        452.34698486328125,
+        250
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "masks",
+          "type": "MASK",
+          "link": 74
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output_mask",
+          "type": "MASK",
+          "links": [
+            75
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "b14f1c3a2f99019bbd938f7b502997f25d8ee46e",
+        "Node name for S&R": "XIS_CanvasMaskProcessor"
+      },
+      "widgets_values": [
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "color": "#233",
+      "bgcolor": "#355"
+    },
+    {
+      "id": 38,
+      "type": "XIS_ImagesToCanvas",
+      "pos": [
+        -580,
+        960
+      ],
+      "size": [
+        155.0625,
+        166
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 106
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 110
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 81
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image6",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image7",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image8",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "XIS_IMAGES",
+          "links": [
+            67
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "6d0acef8133c4ef34002fc5216a7bd975c82f6ef",
+        "Node name for S&R": "XIS_ImagesToCanvas"
+      },
+      "widgets_values": [],
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    }
+  ],
+  "links": [
+    [
+      67,
+      38,
+      0,
+      37,
+      0,
+      "XIS_IMAGES"
+    ],
+    [
+      74,
+      37,
+      2,
+      45,
+      0,
+      "MASK"
+    ],
+    [
+      75,
+      45,
+      0,
+      43,
+      0,
+      "MASK"
+    ],
+    [
+      76,
+      37,
+      0,
+      47,
+      0,
+      "IMAGE"
+    ],
+    [
+      78,
+      52,
+      1,
+      54,
+      0,
+      "MASK"
+    ],
+    [
+      79,
+      54,
+      0,
+      53,
+      1,
+      "MASK"
+    ],
+    [
+      80,
+      52,
+      0,
+      53,
+      0,
+      "IMAGE"
+    ],
+    [
+      81,
+      53,
+      0,
+      38,
+      2,
+      "IMAGE"
+    ],
+    [
+      104,
+      39,
+      0,
+      62,
+      0,
+      "IMAGE"
+    ],
+    [
+      105,
+      39,
+      1,
+      62,
+      1,
+      "MASK"
+    ],
+    [
+      106,
+      62,
+      0,
+      38,
+      0,
+      "IMAGE"
+    ],
+    [
+      108,
+      41,
+      0,
+      65,
+      0,
+      "IMAGE"
+    ],
+    [
+      109,
+      41,
+      1,
+      65,
+      1,
+      "MASK"
+    ],
+    [
+      110,
+      65,
+      0,
+      38,
+      1,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "frontendVersion": "1.18.9"
+  },
+  "version": 0.4
+}

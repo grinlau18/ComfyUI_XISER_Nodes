@@ -69,18 +69,18 @@ app.registerExtension({
                 left: 10px;
                 color: #fff;
                 background-color: rgba(0, 0, 0, 0.7);
-                padding: var(--xiser-padding, 3px);
+                padding: 3px;
                 font-family: Arial, sans-serif;
-                font-size: var(--xiser-font-size, 12px);
+                font-size: 12px;
                 z-index: 10;
             }
             .xiser-trigger-button, .xiser-reset-button, .xiser-undo-button, .xiser-redo-button {
                 position: absolute;
                 top: 10px;
                 color: #fff;
-                padding: var(--xiser-padding, 5px 10px);
+                padding: 5px 10px;
                 font-family: Arial, sans-serif;
-                font-size: var(--xiser-font-size, 12px);
+                font-size: 12px;
                 border: none;
                 cursor: pointer;
                 z-index: 10;
@@ -119,15 +119,15 @@ app.registerExtension({
                 left: 10px;
                 background-color: rgba(0, 0, 0, 0.8);
                 color: #fff;
-                padding: var(--xiser-padding, 10px);
+                padding: 10px;
                 font-family: Arial, sans-serif;
-                font-size: var(--xiser-font-size, 12px);
+                font-size: 12px;
                 z-index: 10;
                 max-height: 200px;
                 overflow-y: auto;
             }
             .xiser-layer-item {
-                padding: var(--xiser-padding, 5px);
+                padding: 5px;
                 cursor: pointer;
                 border-bottom: 1px solid #444;
             }
@@ -141,24 +141,30 @@ app.registerExtension({
         `;
         document.head.appendChild(style);
 
-        // 加载 Konva.js
-        try {
-            await new Promise((resolve, reject) => {
-                const script = document.createElement("script");
-                script.src = "/extensions/ComfyUI_XISER_Nodes/lib/konva.min.js";
-                script.onload = () => {
-                    log.info("Konva.js loaded");
-                    resolve();
-                };
-                script.onerror = () => {
-                    log.error("Failed to load Konva.js");
-                    reject(new Error("Konva.js load failed"));
-                };
-                document.head.appendChild(script);
-            });
-        } catch (e) {
-            log.error("Setup failed due to Konva.js error", e);
-            return;
+        // 加载 Konva.js 并确保成功
+        if (!window.Konva) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement("script");
+                    script.src = "/extensions/ComfyUI_XISER_Nodes/lib/konva.min.js";
+                    script.onload = () => {
+                        log.info("Konva.js loaded successfully");
+                        if (!window.Konva) {
+                            reject(new Error("Konva.js loaded but window.Konva is undefined"));
+                        } else {
+                            resolve();
+                        }
+                    };
+                    script.onerror = () => {
+                        log.error("Failed to load Konva.js");
+                        reject(new Error("Konva.js load failed"));
+                    };
+                    document.head.appendChild(script);
+                });
+            } catch (e) {
+                log.error("Setup failed due to Konva.js error", e);
+                return;
+            }
         }
 
         // 扩展 onNodeExecuted 钩子
@@ -199,10 +205,10 @@ app.registerExtension({
             globalLoadedImageUrls.set(nodeId, new Map());
         }
 
-        // 节点状态
+        // 重置节点状态
         const nodeState = {
             nodeId,
-            imageNodes: [],
+            imageNodes: [], // 确保初始化为空
             defaultLayerOrder: [],
             initialStates: [],
             transformer: null,
@@ -215,10 +221,18 @@ app.registerExtension({
             layerItems: [],
             lastNodePos: node.pos ? [...node.pos] : [0, 0],
             lastNodeSize: node.size ? [...node.size] : [0, 0],
-            lastScale: app.canvas.ds.scale || 1,
-            lastOffset: app.canvas.ds.offset ? [...app.canvas.ds.offset] : [0, 0],
+            lastScale: app.canvas?.ds?.scale || 1,
+            lastOffset: app.canvas?.ds?.offset ? [...app.canvas.ds.offset] : [0, 0],
             pollInterval: null,
-            animationFrameId: null
+            animationFrameId: null,
+            stage: null,
+            canvasLayer: null,
+            imageLayer: null,
+            borderLayer: null,
+            canvasRect: null,
+            borderRect: null,
+            borderFrame: null,
+            isLoading: false // 添加标志位，防止重复调用
         };
 
         // 初始化参数
@@ -229,9 +243,19 @@ app.registerExtension({
         let borderWidth = uiConfig.border_width || 40;
         let canvasColor = uiConfig.canvas_color || "rgb(0, 0, 0)";
         let borderColor = uiConfig.border_color || "rgb(25, 25, 25)";
-        let imagePaths = uiConfig.image_paths
-            ? (typeof uiConfig.image_paths === "string" ? uiConfig.image_paths.split(",").filter(p => p) : uiConfig.image_paths)
-            : [];
+        let imagePaths = [];
+
+        // 优先使用最新的 image_paths
+        if (node.outputs?.[1]?.value) {
+            if (typeof node.outputs[1].value === "string") {
+                imagePaths = node.outputs[1].value.split(",").filter(p => p);
+            } else if (Array.isArray(node.outputs[1].value)) {
+                imagePaths = node.outputs[1].value.filter(p => p);
+            }
+        }
+        if (!imagePaths.length && uiConfig.image_paths) {
+            imagePaths = typeof uiConfig.image_paths === "string" ? uiConfig.image_paths.split(",").filter(p => p) : uiConfig.image_paths;
+        }
 
         // 从 widgets_values 恢复参数
         let canvasColorValue = node.widgets_values?.[3] ||
@@ -346,20 +370,29 @@ app.registerExtension({
             return;
         }
 
-        const stage = new Konva.Stage({
+        // 确保 Konva.Rect 可用
+        if (typeof window.Konva.Rect !== "function") {
+            log.error(`Konva.Rect is not a function for node ${node.id}`);
+            statusText.innerText = "错误：Konva.Rect 不可用";
+            statusText.style.color = "#f00";
+            mainContainer.remove();
+            return;
+        }
+
+        nodeState.stage = new Konva.Stage({
             container: stageContainer,
             width: boardWidth + 2 * borderWidth,
             height: boardHeight + 2 * borderWidth
         });
 
-        const canvasLayer = new Konva.Layer();
-        const imageLayer = new Konva.Layer();
-        const borderLayer = new Konva.Layer();
-        stage.add(canvasLayer);
-        stage.add(imageLayer);
-        stage.add(borderLayer);
+        nodeState.canvasLayer = new Konva.Layer();
+        nodeState.imageLayer = new Konva.Layer();
+        nodeState.borderLayer = new Konva.Layer();
+        nodeState.stage.add(nodeState.canvasLayer);
+        nodeState.stage.add(nodeState.imageLayer);
+        nodeState.stage.add(nodeState.borderLayer);
 
-        const canvasRect = new Konva.Rect({
+        nodeState.canvasRect = new Konva.Rect({
             x: borderWidth,
             y: borderWidth,
             width: boardWidth,
@@ -367,7 +400,7 @@ app.registerExtension({
             fill: canvasColor
         });
 
-        const borderRect = new Konva.Rect({
+        nodeState.borderRect = new Konva.Rect({
             x: 0,
             y: 0,
             width: boardWidth + 2 * borderWidth,
@@ -377,7 +410,7 @@ app.registerExtension({
             strokeWidth: 2
         });
 
-        const borderFrame = new Konva.Rect({
+        nodeState.borderFrame = new Konva.Rect({
             x: borderWidth,
             y: borderWidth,
             width: boardWidth,
@@ -388,19 +421,26 @@ app.registerExtension({
             listening: false
         });
 
-        canvasLayer.add(borderRect);
-        canvasLayer.add(canvasRect);
-        borderLayer.add(borderFrame);
+        nodeState.canvasLayer.add(nodeState.borderRect);
+        nodeState.canvasLayer.add(nodeState.canvasRect);
+        nodeState.borderLayer.add(nodeState.borderFrame);
 
         // 辅助函数：同步容器位置
         function syncContainerPosition() {
             try {
+                if (!app.canvas || !app.canvas.canvas || !node.pos || !node.size) {
+                    return;
+                }
+                if (!nodeState.stage || !nodeState.canvasRect || !nodeState.borderRect || !nodeState.borderFrame) {
+                    log.warn(`Konva objects not initialized for node ${node.id}`);
+                    return;
+                }
                 const canvas = app.canvas.canvas;
                 const canvasRect = canvas.getBoundingClientRect();
                 const nodePos = node.pos;
                 const nodeSize = node.size;
-                const scale = app.canvas.ds.scale;
-                const offset = app.canvas.ds.offset;
+                const scale = app.canvas.ds.scale || 1;
+                const offset = app.canvas.ds.offset || [0, 0];
 
                 const logicalX = (nodePos[0] + offset[0]) * scale;
                 const logicalY = (nodePos[1] + offset[1]) * scale;
@@ -418,47 +458,47 @@ app.registerExtension({
                 boardContainer.style.width = `${width}px`;
                 boardContainer.style.height = `${height}px`;
 
-                stage.width(boardWidth + 2 * borderWidth);
-                stage.height(boardHeight + 2 * borderWidth);
-                borderRect.width(boardWidth + 2 * borderWidth);
-                borderRect.height(boardHeight + 2 * borderWidth);
-                canvasRect.x(borderWidth);
-                canvasRect.y(borderWidth);
-                canvasRect.width(boardWidth);
-                canvasRect.height(boardHeight);
-                borderFrame.x(borderWidth);
-                borderFrame.y(borderWidth);
-                borderFrame.width(boardWidth);
-                borderFrame.height(boardHeight);
+                nodeState.stage.width(boardWidth + 2 * borderWidth);
+                nodeState.stage.height(boardHeight + 2 * borderWidth);
+                nodeState.borderRect.width(boardWidth + 2 * borderWidth);
+                nodeState.borderRect.height(boardHeight + 2 * borderWidth);
+                nodeState.canvasRect.x(borderWidth);
+                nodeState.canvasRect.y(borderWidth);
+                nodeState.canvasRect.width(boardWidth);
+                nodeState.canvasRect.height(boardHeight);
+                nodeState.borderFrame.x(borderWidth);
+                nodeState.borderFrame.y(borderWidth);
+                nodeState.borderFrame.width(boardWidth);
+                nodeState.borderFrame.height(boardHeight);
 
-                const basePadding = 5;
-                const baseFontSize = 12;
-                const padding = basePadding / scale;
-                const fontSize = baseFontSize / scale;
-                mainContainer.style.setProperty('--xiser-padding', `${padding}px`);
-                mainContainer.style.setProperty('--xiser-font-size', `${fontSize}px`);
-
-                canvasLayer.batchDraw();
-                imageLayer.batchDraw();
-                borderLayer.batchDraw();
+                nodeState.canvasLayer.batchDraw();
+                nodeState.imageLayer.batchDraw();
+                nodeState.borderLayer.batchDraw();
             } catch (e) {
                 log.error(`Error syncing container position for node ${node.id}`, e);
             }
         }
 
-        // 延迟初始同步
-        setTimeout(syncContainerPosition, 500);
+        // 延迟初始同步，确保 Konva 对象初始化完成
+        setTimeout(syncContainerPosition, 1000);
 
         // 实时检测位置和大小变化
         function checkPositionAndSize() {
             try {
+                if (!node.pos || !node.size || !app.canvas?.ds) {
+                    return;
+                }
+                if (!nodeState.stage || !nodeState.canvasRect || !nodeState.borderRect || !nodeState.borderFrame) {
+                    log.warn(`Konva objects not initialized for node ${node.id}`);
+                    return;
+                }
                 const nodePos = node.pos;
                 const nodeSize = node.size;
-                const scale = app.canvas.ds.scale;
-                const offset = app.canvas.ds.offset;
+                const scale = app.canvas.ds.scale || 1;
+                const offset = app.canvas.ds.offset || [0, 0];
 
                 const posChanged = nodePos[0] !== nodeState.lastNodePos[0] || nodePos[1] !== nodeState.lastNodePos[1];
-                const sizeChanged = nodeSize[0] !== nodeState.lastNodeSize[0] || nodePos[1] !== nodeState.lastNodeSize[1];
+                const sizeChanged = nodeSize[0] !== nodeState.lastNodeSize[0] || nodeSize[1] !== nodeState.lastNodeSize[1];
                 const scaleChanged = scale !== nodeState.lastScale;
                 const offsetChanged = offset[0] !== nodeState.lastOffset[0] || offset[1] !== nodeState.lastOffset[1];
 
@@ -474,7 +514,9 @@ app.registerExtension({
             }
             nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
         }
-        nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
+        setTimeout(() => {
+            nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
+        }, 1000);
 
         // 窗口调整监听
         const resizeListener = () => syncContainerPosition();
@@ -512,7 +554,7 @@ app.registerExtension({
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
             node.setProperty("image_states", nodeState.initialStates);
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
         }
 
         function redo() {
@@ -523,7 +565,7 @@ app.registerExtension({
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
             node.setProperty("image_states", nodeState.initialStates);
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
         }
 
         // 应用图像状态
@@ -554,7 +596,7 @@ app.registerExtension({
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
             node.setProperty("image_states", nodeState.initialStates);
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
             saveHistory();
             deselectLayer();
         }
@@ -592,7 +634,7 @@ app.registerExtension({
             nodeState.selectedLayer = node;
             node.moveToTop();
             nodeState.transformer.nodes([node]);
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
 
             nodeState.layerItems.forEach(item => item.classList.remove("selected"));
             const listItemIndex = nodeState.imageNodes.length - 1 - index;
@@ -611,7 +653,7 @@ app.registerExtension({
 
             nodeState.selectedLayer = null;
             nodeState.transformer.nodes([]);
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
 
             nodeState.layerItems.forEach(item => item.classList.remove("selected"));
         }
@@ -625,12 +667,35 @@ app.registerExtension({
                 return;
             }
 
-            if (states.length !== imagePaths.length) {
-                states = states.slice(0, imagePaths.length);
-                while (states.length < imagePaths.length) {
-                    states.push({ x: borderWidth + boardWidth / 2, y: borderWidth + boardHeight / 2, scaleX: 1, scaleY: 1, rotation: 0 });
-                }
+            // 防止重复调用
+            if (nodeState.isLoading) {
+                log.info(`LoadImages already in progress for node ${node.id}, skipping`);
+                return;
             }
+            nodeState.isLoading = true;
+
+            log.info(`Starting loadImages for node ${node.id}, imagePaths: ${JSON.stringify(imagePaths)}, length: ${imagePaths.length}, current imageNodes: ${nodeState.imageNodes.length}`);
+
+            // 清空现有图片节点和图层
+            nodeState.imageNodes.forEach(node => node.destroy());
+            nodeState.imageNodes = [];
+            nodeState.imageLayer.destroyChildren(); // 清空图层
+            nodeState.imageLayer.batchDraw();
+
+            // 重置 initialStates，确保与 imagePaths 同步
+            nodeState.initialStates = imagePaths.map(() => ({
+                x: borderWidth + boardWidth / 2,
+                y: borderWidth + boardHeight / 2,
+                scaleX: 1,
+                scaleY: 1,
+                rotation: 0
+            }));
+            // 如果有传入的状态，应用它们
+            states.forEach((state, i) => {
+                if (i < nodeState.initialStates.length) {
+                    nodeState.initialStates[i] = { ...nodeState.initialStates[i], ...state };
+                }
+            });
 
             const images = imagePaths.map(path => ({
                 filename: path,
@@ -639,32 +704,12 @@ app.registerExtension({
                 mime_type: "image/png"
             }));
 
-            const currentFilenames = images.map(img => img.filename);
-            const imagesToLoad = images.filter(img => !nodeState.imageNodes.some(node => node.attrs.filename === img.filename));
-            const imagesToRemove = nodeState.imageNodes.filter(node => !currentFilenames.includes(node.attrs.filename));
-
-            imagesToRemove.forEach(node => {
-                node.destroy();
-                nodeState.imageNodes = nodeState.imageNodes.filter(n => n !== node);
-                nodeState.loadedImageUrls.delete(node.attrs.filename);
-            });
-            imageLayer.batchDraw();
-
-            if (!imagesToLoad.length) {
-                statusText.innerText = `已加载 ${nodeState.imageNodes.length} 张图像`;
-                statusText.style.color = "#0f0";
-                updateLayerPanel();
-                return;
-            }
-
             statusText.innerText = `加载图像... 0/${images.length}`;
             statusText.style.color = "#fff";
 
-            let loadedCount = nodeState.imageNodes.length;
+            let loadedCount = 0;
             for (let i = 0; i < images.length; i++) {
                 const imgData = images[i];
-                if (nodeState.imageNodes.some(node => node.attrs.filename === imgData.filename)) continue;
-
                 try {
                     let img = nodeState.imageCache.get(imgData.filename);
                     if (!img) {
@@ -689,7 +734,7 @@ app.registerExtension({
                         });
                     }
 
-                    const state = states[i] || {};
+                    const state = nodeState.initialStates[i] || {};
                     const maxWidth = boardWidth * 0.8;
                     const maxHeight = boardHeight * 0.8;
                     const imageScale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
@@ -705,11 +750,11 @@ app.registerExtension({
                         offsetY: img.height / 2,
                         filename: imgData.filename
                     });
-                    imageLayer.add(konvaImg);
+                    nodeState.imageLayer.add(konvaImg);
                     nodeState.imageNodes.push(konvaImg);
-                    nodeState.initialStates[i] = nodeState.initialStates[i] || {
-                        x: state.x || borderWidth + boardWidth / 2,
-                        y: state.y || borderWidth + boardHeight / 2,
+                    nodeState.initialStates[i] = {
+                        x: konvaImg.x(),
+                        y: konvaImg.y(),
                         scaleX: konvaImg.scaleX() / imageScale,
                         scaleY: konvaImg.scaleY() / imageScale,
                         rotation: konvaImg.rotation()
@@ -726,7 +771,7 @@ app.registerExtension({
                         node.properties.image_states = nodeState.initialStates;
                         node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
                         node.setProperty("image_states", nodeState.initialStates);
-                        imageLayer.batchDraw();
+                        nodeState.imageLayer.batchDraw();
                         saveHistory();
                     };
 
@@ -744,9 +789,15 @@ app.registerExtension({
 
             nodeState.defaultLayerOrder = [...nodeState.imageNodes];
             updateLayerPanel();
-            nodeState.transformer.nodes([]);
-            imageLayer.add(nodeState.transformer);
-            imageLayer.batchDraw();
+            nodeState.transformer = new Konva.Transformer({
+                nodes: [],
+                keepRatio: true,
+                enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
+                rotateEnabled: true
+            });
+            nodeState.imageLayer.add(nodeState.transformer);
+            nodeState.imageLayer.batchDraw();
+
             if (loadedCount === 0) {
                 statusText.innerText = "无法加载任何图像，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -755,6 +806,8 @@ app.registerExtension({
                 statusText.style.color = "#0f0";
             }
             saveHistory();
+            log.info(`Finished loadImages for node ${node.id}, imageNodes: ${nodeState.imageNodes.length}, initialStates: ${nodeState.initialStates.length}`);
+            nodeState.isLoading = false;
         }
 
         if (imagePaths.length) {
@@ -768,12 +821,12 @@ app.registerExtension({
             enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
             rotateEnabled: true
         });
-        imageLayer.add(nodeState.transformer);
+        nodeState.imageLayer.add(nodeState.transformer);
 
         // 鼠标交互
-        stage.on("click tap", (e) => {
+        nodeState.stage.on("click tap", (e) => {
             const target = e.target;
-            if (target === canvasRect || target === stage || target === borderRect) {
+            if (target === nodeState.canvasRect || target === nodeState.stage || target === nodeState.borderRect) {
                 deselectLayer();
                 return;
             }
@@ -785,14 +838,14 @@ app.registerExtension({
             }
         });
 
-        stage.on("mousedown", (e) => {
+        nodeState.stage.on("mousedown", (e) => {
             if (nodeState.imageNodes.includes(e.target)) {
                 const index = nodeState.imageNodes.indexOf(e.target);
                 selectLayer(index);
             }
         });
 
-        stage.on("wheel", (e) => {
+        nodeState.stage.on("wheel", (e) => {
             e.evt.preventDefault();
             const scaleBy = 1.01;
             const target = nodeState.transformer.nodes()[0];
@@ -821,7 +874,7 @@ app.registerExtension({
                 saveHistory();
             }
 
-            imageLayer.batchDraw();
+            nodeState.imageLayer.batchDraw();
         });
 
         // 添加 DOM widget
@@ -884,7 +937,6 @@ app.registerExtension({
         // 更新尺寸
         function updateSize() {
             try {
-                // 强制整数
                 boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
                 boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
                 borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
@@ -919,23 +971,23 @@ app.registerExtension({
 
                 const containerWidth = boardWidth + 2 * borderWidth;
                 const containerHeight = boardHeight + 2 * borderWidth;
-                stage.width(containerWidth);
-                stage.height(containerHeight);
-                borderRect.setAttrs({
+                nodeState.stage.width(containerWidth);
+                nodeState.stage.height(containerHeight);
+                nodeState.borderRect.setAttrs({
                     x: 0,
                     y: 0,
                     width: containerWidth,
                     height: containerHeight,
                     fill: borderColor
                 });
-                canvasRect.setAttrs({
+                nodeState.canvasRect.setAttrs({
                     x: borderWidth,
                     y: borderWidth,
                     width: boardWidth,
                     height: boardHeight,
                     fill: canvasColor
                 });
-                borderFrame.setAttrs({
+                nodeState.borderFrame.setAttrs({
                     x: borderWidth,
                     y: borderWidth,
                     width: boardWidth,
@@ -984,10 +1036,10 @@ app.registerExtension({
                 node.setProperty("ui_config", node.properties.ui_config);
                 node.setProperty("image_states", nodeState.initialStates);
 
-                canvasLayer.batchDraw();
-                imageLayer.batchDraw();
-                borderLayer.batchDraw();
-                stage.batchDraw();
+                nodeState.canvasLayer.batchDraw();
+                nodeState.imageLayer.batchDraw();
+                nodeState.borderLayer.batchDraw();
+                nodeState.stage.batchDraw();
 
                 updateLayerPanel();
                 syncContainerPosition();
@@ -996,6 +1048,18 @@ app.registerExtension({
                 statusText.innerText = `更新画板失败：${e.message}`;
                 statusText.style.color = "#f00";
             }
+        }
+
+        // 防抖辅助函数
+        let loadImagesDebounceTimeout = null;
+        function debounceLoadImages(imagePaths, states) {
+            if (loadImagesDebounceTimeout) {
+                clearTimeout(loadImagesDebounceTimeout);
+            }
+            loadImagesDebounceTimeout = setTimeout(() => {
+                loadImages(imagePaths, states);
+                loadImagesDebounceTimeout = null;
+            }, 300); // 300ms 防抖
         }
 
         // 轮询图像更新
@@ -1019,14 +1083,21 @@ app.registerExtension({
                 }
 
                 if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
+                    log.info(`Image paths changed for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
                     nodeState.lastImagePaths = newImagePaths.slice();
                     if (newImagePaths.length) {
                         imagePaths = newImagePaths;
                         node.properties.ui_config.image_paths = imagePaths;
                         node.properties.image_states = states;
-                        nodeState.initialStates = states.length ? states : nodeState.initialStates;
+                        nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
+                            x: borderWidth + boardWidth / 2,
+                            y: borderWidth + boardHeight / 2,
+                            scaleX: 1,
+                            scaleY: 1,
+                            rotation: 0
+                        }));
                         node.setProperty("image_states", nodeState.initialStates);
-                        loadImages(imagePaths, nodeState.initialStates);
+                        debounceLoadImages(imagePaths, nodeState.initialStates);
                     }
                 }
             }, 1000);
@@ -1051,13 +1122,20 @@ app.registerExtension({
             }
 
             if (newImagePaths.length) {
+                log.info(`onNodeExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
                 imagePaths = newImagePaths;
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
-                nodeState.initialStates = states.length ? states : nodeState.initialStates;
+                nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
+                    x: borderWidth + boardWidth / 2,
+                    y: borderWidth + boardHeight / 2,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                }));
                 node.setProperty("image_states", nodeState.initialStates);
                 nodeState.lastImagePaths = imagePaths.slice();
-                loadImages(imagePaths, nodeState.initialStates);
+                debounceLoadImages(imagePaths, nodeState.initialStates);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -1090,13 +1168,20 @@ app.registerExtension({
             }
 
             if (newImagePaths.length) {
+                log.info(`onExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
                 imagePaths = newImagePaths;
                 node.properties.ui_config.image_paths = imagePaths;
                 node.properties.image_states = states;
-                nodeState.initialStates = states.length ? states : nodeState.initialStates;
+                nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
+                    x: borderWidth + boardWidth / 2,
+                    y: borderWidth + boardHeight / 2,
+                    scaleX: 1,
+                    scaleY: 1,
+                    rotation: 0
+                }));
                 node.setProperty("image_states", nodeState.initialStates);
                 nodeState.lastImagePaths = imagePaths.slice();
-                loadImages(imagePaths, states);
+                debounceLoadImages(imagePaths, states);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -1108,7 +1193,10 @@ app.registerExtension({
         node.onRemoved = () => {
             if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
             if (nodeState.animationFrameId) cancelAnimationFrame(nodeState.animationFrameId);
-            stage.destroy();
+            if (nodeState.stage) {
+                nodeState.imageNodes.forEach(node => node.destroy());
+                nodeState.stage.destroy();
+            }
             mainContainer.remove();
             globalImageCache.delete(nodeState.nodeId);
             globalLoadedImageUrls.delete(nodeState.nodeId);
