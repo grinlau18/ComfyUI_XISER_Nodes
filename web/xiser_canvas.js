@@ -1,10 +1,13 @@
 import { app } from "/scripts/app.js";
 
 // 日志管理
-const LOG_LEVEL = "info";
+const LOG_LEVEL = "info"; // 可选值: "debug", "info", "error"
 const log = {
+    debug: (message, ...args) => {
+        if (LOG_LEVEL === "debug") console.log(`[XISER_Canvas] ${message}`, ...args);
+    },
     info: (message, ...args) => {
-        if (LOG_LEVEL !== "error") console.log(`[XISER_Canvas] ${message}`, ...args);
+        if (LOG_LEVEL === "debug" || LOG_LEVEL === "info") console.log(`[XISER_Canvas] ${message}`, ...args);
     },
     error: (message, ...args) => console.error(`[XISER_Canvas] ${message}`, ...args)
 };
@@ -18,13 +21,11 @@ app.registerExtension({
     async setup() {
         log.info("Extension loaded");
 
-        // 兼容性处理：添加 requestIdleCallback 垫片
         if (!window.requestIdleCallback) {
             window.requestIdleCallback = (callback) => setTimeout(() => callback({ didTimeout: false, timeRemaining: () => 50 }), 1);
             window.cancelIdleCallback = (id) => clearTimeout(id);
         }
 
-        // 添加全局样式
         const style = document.createElement("style");
         style.textContent = `
             .xiser-canvas-container {
@@ -69,55 +70,71 @@ app.registerExtension({
                 left: 10px;
                 color: #fff;
                 background-color: rgba(0, 0, 0, 0.7);
-                padding: 3px;
+                border-radius: 5px;
+                padding: 5px;
                 font-family: Arial, sans-serif;
                 font-size: 12px;
                 z-index: 10;
             }
-            .xiser-trigger-button, .xiser-reset-button, .xiser-undo-button, .xiser-redo-button {
+            .xiser-trigger-button, .xiser-instruction-button, .xiser-reset-button, .xiser-undo-button, .xiser-redo-button {
                 position: absolute;
                 top: 10px;
                 color: #fff;
-                padding: 5px 10px;
+                padding: 6px 10px;
                 font-family: Arial, sans-serif;
                 font-size: 12px;
                 border: none;
                 cursor: pointer;
                 z-index: 10;
             }
-            .xiser-trigger-button {
+             .xiser-instruction-button {
                 right: 10px;
-                background-color: #4CAF50;
+                background-color: rgba(0, 0, 0, 0.75);
+                border-radius: 5px;
+            }
+            .xiser-instruction-button:hover {
+                background-color: rgb(30, 121, 195);
+            }
+            .xiser-trigger-button {
+                right: 145px;
+                background-color: rgba(0, 0, 0, 0.75);
+                border-radius: 5px;
             }
             .xiser-trigger-button:hover {
-                background-color: #45a049;
+                background-color: rgb(30, 121, 195);
             }
             .xiser-reset-button {
-                right: 90px;
-                background-color: #f44336;
+                right: 254px;
+                background-color: rgba(0, 0, 0, 0.75);
+                border-radius: 5px;
+                padding: 4.5px 10px;
             }
             .xiser-reset-button:hover {
-                background-color: #da190b;
-            }
-            .xiser-undo-button {
-                right: 170px;
-                background-color: #2196F3;
-            }
-            .xiser-undo-button:hover {
-                background-color: #0b7dda;
+                background-color: rgb(30, 121, 195);
+                padding: 4.5px 10px;
             }
             .xiser-redo-button {
-                right: 225px;
-                background-color: #2196F3;
+                right: 359px;
+                background-color: rgba(0, 0, 0, 0.75);
+                border-radius: 5px;
             }
             .xiser-redo-button:hover {
-                background-color: #0b7dda;
+                background-color: rgb(30, 121, 195);
             }
+            .xiser-undo-button {
+                right: 462px;
+                background-color: rgba(0, 0, 0, 0.75);
+                border-radius: 5px;
+            }
+            .xiser-undo-button:hover {
+                background-color: rgb(30, 121, 195);
+            }
+        
             .xiser-layer-panel {
                 position: absolute;
                 top: 50px;
                 left: 10px;
-                background-color: rgba(0, 0, 0, 0.8);
+                background-color: rgba(0, 0, 0, 0.65);
                 color: #fff;
                 padding: 10px;
                 font-family: Arial, sans-serif;
@@ -125,6 +142,7 @@ app.registerExtension({
                 z-index: 10;
                 max-height: 200px;
                 overflow-y: auto;
+                border-radius: 5px;
             }
             .xiser-layer-item {
                 padding: 5px;
@@ -135,13 +153,48 @@ app.registerExtension({
                 background-color: #555;
             }
             .xiser-layer-item.selected {
-                background-color: #2196F3;
+                background-color: rgb(30, 121, 195);
                 color: #fff;
+            }
+            .xiser-modal {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 10000;
+                justify-content: center;
+                align-items: center;
+            }
+            .xiser-modal-content {
+                background-color: rgb(30, 35, 49);
+                padding: 20px;
+                border-radius: 5px;
+                max-width: 500px;
+                width: 90%;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                line-height: 1.5;
+                position: relative;
+                color: #aaa;
+            }
+            .xiser-modal-content h3 {
+                margin-top: 0;
+                font-size: 18px;
+                color: #fff;
+            }
+            .xiser-modal-content ul {
+                padding-left: 20px;
+                margin: 10px 0;
+            }
+            .xiser-modal-content li {
+                margin-bottom: 10px;
             }
         `;
         document.head.appendChild(style);
 
-        // 加载 Konva.js 并确保成功
         if (!window.Konva) {
             try {
                 await new Promise((resolve, reject) => {
@@ -167,7 +220,6 @@ app.registerExtension({
             }
         }
 
-        // 扩展 onNodeExecuted 钩子
         const originalOnNodeExecuted = app.graph.onNodeExecuted || (() => {});
         app.graph.onNodeExecuted = function (node) {
             originalOnNodeExecuted.apply(this, arguments);
@@ -179,10 +231,44 @@ app.registerExtension({
     async nodeCreated(node) {
         if (node.comfyClass !== "XISER_Canvas") return;
 
-        // 延迟日志，确保 node.id 稳定
-        setTimeout(() => {
+        // 辅助函数：等待有效 node.id
+        async function ensureNodeId(node) {
+            let attempts = 0;
+            const maxAttempts = 100;
+            while (node.id === -1 && attempts < maxAttempts) {
+                log.debug(`Node ID is -1, waiting for valid ID (attempt ${attempts + 1})`);
+                await new Promise(resolve => setTimeout(resolve, 50));
+                attempts++;
+            }
+            if (node.id === -1) {
+                log.error(`Failed to get valid node ID for node after ${maxAttempts} attempts, aborting`);
+                return false;
+            }
             log.info(`Node created with ID: ${node.id}`);
-        }, 100);
+            return true;
+        }
+
+        // 检查 node.id 是否有效
+        if (node.id === -1) {
+            const hasValidId = await ensureNodeId(node);
+            if (!hasValidId) {
+                const invalidContainers = document.querySelectorAll(`.xiser-main-container[data-nodeId="-1"]`);
+                invalidContainers.forEach(container => {
+                    log.info(`Removing invalid container with nodeId -1`);
+                    container.remove();
+                });
+                return;
+            }
+        } else {
+            log.info(`Node created with ID: ${node.id}`);
+        }
+
+        // 清理任何可能存在的 nodeId=-1 的残留容器
+        const invalidContainers = document.querySelectorAll(`.xiser-main-container[data-nodeId="-1"]`);
+        invalidContainers.forEach(container => {
+            log.info(`Cleaning up residual container with nodeId -1`);
+            container.remove();
+        });
 
         // 清理现有 widgets
         if (node.widgets?.length) {
@@ -196,7 +282,6 @@ app.registerExtension({
         }
         node.widgets = [];
 
-        // 初始化节点缓存
         const nodeId = node.id;
         if (!globalImageCache.has(nodeId)) {
             globalImageCache.set(nodeId, new Map());
@@ -205,10 +290,9 @@ app.registerExtension({
             globalLoadedImageUrls.set(nodeId, new Map());
         }
 
-        // 重置节点状态
         const nodeState = {
             nodeId,
-            imageNodes: [], // 确保初始化为空
+            imageNodes: [],
             defaultLayerOrder: [],
             initialStates: [],
             transformer: null,
@@ -232,10 +316,10 @@ app.registerExtension({
             canvasRect: null,
             borderRect: null,
             borderFrame: null,
-            isLoading: false // 添加标志位，防止重复调用
+            isLoading: false,
+            historyDebounceTimeout: null // 用于防抖历史记录
         };
 
-        // 初始化参数
         const uiConfig = node.properties?.ui_config || {};
         nodeState.initialStates = node.properties?.image_states || [];
         let boardWidth = uiConfig.board_width || 1024;
@@ -243,9 +327,9 @@ app.registerExtension({
         let borderWidth = uiConfig.border_width || 40;
         let canvasColor = uiConfig.canvas_color || "rgb(0, 0, 0)";
         let borderColor = uiConfig.border_color || "rgb(25, 25, 25)";
+        let autoSize = uiConfig.auto_size || "off";
         let imagePaths = [];
 
-        // 优先使用最新的 image_paths
         if (node.outputs?.[1]?.value) {
             if (typeof node.outputs[1].value === "string") {
                 imagePaths = node.outputs[1].value.split(",").filter(p => p);
@@ -257,48 +341,46 @@ app.registerExtension({
             imagePaths = typeof uiConfig.image_paths === "string" ? uiConfig.image_paths.split(",").filter(p => p) : uiConfig.image_paths;
         }
 
-        // 从 widgets_values 恢复参数
         let canvasColorValue = node.widgets_values?.[3] ||
             (canvasColor === "rgb(0, 0, 0)" ? "black" :
              canvasColor === "rgb(255, 255, 255)" ? "white" :
              canvasColor === "rgba(0, 0, 0, 0)" ? "transparent" : "black");
 
-        if (node.widgets_values?.length >= 5) {
+        if (node.widgets_values?.length >= 6) {
             boardWidth = parseInt(node.widgets_values[0]) || boardWidth;
             boardHeight = parseInt(node.widgets_values[1]) || boardHeight;
             borderWidth = parseInt(node.widgets_values[2]) || borderWidth;
             canvasColorValue = node.widgets_values[3] || canvasColorValue;
-            if (node.widgets_values[4]) {
+            autoSize = node.widgets_values[4] || autoSize;
+            if (node.widgets_values[5]) {
                 try {
-                    nodeState.initialStates = JSON.parse(node.widgets_values[4]) || nodeState.initialStates;
+                    nodeState.initialStates = JSON.parse(node.widgets_values[5]) || nodeState.initialStates;
                 } catch (e) {
                     log.error(`Failed to parse image_states for node ${node.id}`, e);
                 }
             }
         }
 
-        // 初始化 inputs
         node.inputs = node.inputs || {};
         node.inputs.board_width = node.inputs.board_width || { value: boardWidth, type: "INT" };
         node.inputs.board_height = node.inputs.board_height || { value: boardHeight, type: "INT" };
         node.inputs.border_width = node.inputs.border_width || { value: borderWidth, type: "INT" };
         node.inputs.canvas_color = node.inputs.canvas_color || { value: canvasColorValue, type: "STRING" };
+        node.inputs.auto_size = node.inputs.auto_size || { value: autoSize, type: "STRING" };
 
-        // 设置初始尺寸
         const nodeWidth = boardWidth + 2 * borderWidth + 20;
         const nodeHeight = boardHeight + 2 * borderWidth + 206;
         node.size = [nodeWidth, nodeHeight];
         node.setSize([nodeWidth, nodeHeight]);
 
-        node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(nodeState.initialStates)];
+        node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, autoSize, JSON.stringify(nodeState.initialStates)];
 
-        // 添加 widgets，确保显示为整数
-        node.addWidget("number", "board_width", boardWidth, (value) => {
+        const boardWidthWidget = node.addWidget("number", "board_width", boardWidth, (value) => {
             boardWidth = Math.min(Math.max(parseInt(value), 256), 4096);
             updateSize();
         }, { min: 256, max: 4096, step: 1, precision: 0 });
 
-        node.addWidget("number", "board_height", boardHeight, (value) => {
+        const boardHeightWidget = node.addWidget("number", "board_height", boardHeight, (value) => {
             boardHeight = Math.min(Math.max(parseInt(value), 256), 4096);
             updateSize();
         }, { min: 256, max: 4096, step: 1, precision: 0 });
@@ -313,11 +395,24 @@ app.registerExtension({
             updateSize();
         }, { values: ["black", "white", "transparent"] });
 
+        const autoSizeWidget = node.addWidget("combo", "auto_size", autoSize, (value) => {
+            autoSize = value;
+            boardWidthWidget.disabled = (autoSize === "on");
+            boardHeightWidget.disabled = (autoSize === "on");
+            updateSize();
+            if (imagePaths.length) {
+                loadImages(imagePaths, nodeState.initialStates);
+            }
+        }, { values: ["off", "on"] });
+
         node.addWidget("hidden", "image_states", JSON.stringify(nodeState.initialStates), () => {}, { serialize: true });
 
-        // 创建 DOM 容器
+        boardWidthWidget.disabled = (autoSize === "on");
+        boardHeightWidget.disabled = (autoSize === "on");
+
         const mainContainer = document.createElement("div");
         mainContainer.className = "xiser-main-container";
+        mainContainer.dataset.nodeId = nodeId;
         document.body.appendChild(mainContainer);
 
         const boardContainer = document.createElement("div");
@@ -330,25 +425,69 @@ app.registerExtension({
 
         const triggerButton = document.createElement("button");
         triggerButton.className = "xiser-trigger-button";
-        triggerButton.innerText = "运行节点";
+        triggerButton.innerText = "▶️ 运行 Queue";
         triggerButton.onclick = triggerPrompt;
         boardContainer.appendChild(triggerButton);
 
+        // 添加操作说明按钮
+        const instructionButton = document.createElement("button");
+        instructionButton.className = "xiser-instruction-button";
+        instructionButton.innerText = "ℹ️ 说明 Instructions";
+        instructionButton.onclick = showInstructions;
+        boardContainer.appendChild(instructionButton);
+
+        // 创建模态弹窗
+        const modal = document.createElement("div");
+        modal.className = "xiser-modal";
+        modal.id = `xiser-modal-${nodeId}`;
+        const modalContent = document.createElement("div");
+        modalContent.className = "xiser-modal-content";
+        modalContent.innerHTML = `
+            <h3>操作方法</h3>
+            <ul>
+                <li>鼠标点击可选中图层，选中图层后可以自由移动，通过控制框可以缩放和旋转</li>
+                <li>鼠标滚轮可以对选中图层进行缩放，Alt + 鼠标滚轮可以旋转图层</li>
+                <li>如果上层图层挡住了下层图层，可以通过左上角的图层面板临时将选中的图层置顶</li>
+                <li>取消图层选择或在面板中点击最上层图层，可恢复原本图层堆叠顺序。</li>
+            </ul><br>
+            <h3>Operation Method</h3>
+            <ul>
+                <li>Click with the mouse to select a layer. After selecting a layer, you can move it freely. You can scale and rotate it through the control box.</li>
+                <li>The mouse wheel can be used to scale the selected layer, and Alt + mouse wheel can be used to rotate the layer.</li>
+                <li>If an upper layer blocks a lower layer, you can temporarily bring the selected layer to the top through the layer panel in the upper left corner.</li>
+                <li>Deselect the layer or click the top-most layer in the panel to restore the original layer stacking order.</li>
+            </ul>
+        `;
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+
+        // 显示操作说明弹窗
+        function showInstructions() {
+            modal.style.display = "flex";
+        }
+
+        // 点击弹窗外部关闭
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) {
+                modal.style.display = "none";
+            }
+        });
+
         const resetButton = document.createElement("button");
         resetButton.className = "xiser-reset-button";
-        resetButton.innerText = "重置画板";
+        resetButton.innerText = "🔁 重置 Reset";
         resetButton.onclick = resetCanvas;
         boardContainer.appendChild(resetButton);
 
         const undoButton = document.createElement("button");
         undoButton.className = "xiser-undo-button";
-        undoButton.innerText = "撤销";
+        undoButton.innerText = "↩️ 撤销 Undo";
         undoButton.onclick = undo;
         boardContainer.appendChild(undoButton);
 
         const redoButton = document.createElement("button");
         redoButton.className = "xiser-redo-button";
-        redoButton.innerText = "重做";
+        redoButton.innerText = "↪️ 重做 Redo";
         redoButton.onclick = redo;
         boardContainer.appendChild(redoButton);
 
@@ -361,7 +500,6 @@ app.registerExtension({
         boardContainer.appendChild(stageContainer);
         mainContainer.appendChild(boardContainer);
 
-        // 初始化 Konva 舞台
         if (!window.Konva) {
             log.error(`Konva.js not available for node ${node.id}`);
             statusText.innerText = "错误：Konva.js 未加载";
@@ -370,7 +508,6 @@ app.registerExtension({
             return;
         }
 
-        // 确保 Konva.Rect 可用
         if (typeof window.Konva.Rect !== "function") {
             log.error(`Konva.Rect is not a function for node ${node.id}`);
             statusText.innerText = "错误：Konva.Rect 不可用";
@@ -425,7 +562,6 @@ app.registerExtension({
         nodeState.canvasLayer.add(nodeState.canvasRect);
         nodeState.borderLayer.add(nodeState.borderFrame);
 
-        // 辅助函数：同步容器位置
         function syncContainerPosition() {
             try {
                 if (!app.canvas || !app.canvas.canvas || !node.pos || !node.size) {
@@ -479,10 +615,8 @@ app.registerExtension({
             }
         }
 
-        // 延迟初始同步，确保 Konva 对象初始化完成
-        setTimeout(syncContainerPosition, 1000);
+        syncContainerPosition();
 
-        // 实时检测位置和大小变化
         function checkPositionAndSize() {
             try {
                 if (!node.pos || !node.size || !app.canvas?.ds) {
@@ -514,15 +648,11 @@ app.registerExtension({
             }
             nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
         }
-        setTimeout(() => {
-            nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
-        }, 1000);
+        nodeState.animationFrameId = requestAnimationFrame(checkPositionAndSize);
 
-        // 窗口调整监听
         const resizeListener = () => syncContainerPosition();
         window.addEventListener("resize", resizeListener);
 
-        // 绘制占位矩形
         node.onDrawForeground = function (ctx) {
             try {
                 ctx.save();
@@ -534,7 +664,17 @@ app.registerExtension({
             }
         };
 
-        // 历史记录管理
+        // 防抖保存历史记录
+        function debounceSaveHistory() {
+            if (nodeState.historyDebounceTimeout) {
+                clearTimeout(nodeState.historyDebounceTimeout);
+            }
+            nodeState.historyDebounceTimeout = setTimeout(() => {
+                saveHistory();
+                nodeState.historyDebounceTimeout = null;
+            }, 300);
+        }
+
         function saveHistory() {
             const currentState = nodeState.initialStates.map(state => ({ ...state }));
             nodeState.history.splice(nodeState.historyIndex + 1);
@@ -568,22 +708,17 @@ app.registerExtension({
             nodeState.imageLayer.batchDraw();
         }
 
-        // 应用图像状态
         function applyStates() {
             nodeState.imageNodes.forEach((node, i) => {
                 const state = nodeState.initialStates[i] || {};
-                const maxWidth = boardWidth * 0.8;
-                const maxHeight = boardHeight * 0.8;
-                const imageScale = Math.min(1, maxWidth / node.width(), maxHeight / node.height());
                 node.x(state.x || borderWidth + boardWidth / 2);
                 node.y(state.y || borderWidth + boardHeight / 2);
-                node.scaleX(imageScale * (state.scaleX || 1));
-                node.scaleY(imageScale * (state.scaleY || 1));
+                node.scaleX(state.scaleX || 1);
+                node.scaleY(state.scaleY || 1);
                 node.rotation(state.rotation || 0);
             });
         }
 
-        // 重置画板
         function resetCanvas() {
             nodeState.initialStates = imagePaths.map(() => ({
                 x: borderWidth + boardWidth / 2,
@@ -601,14 +736,13 @@ app.registerExtension({
             deselectLayer();
         }
 
-        // 更新图层面板
         function updateLayerPanel() {
             layerPanel.innerHTML = "";
             nodeState.layerItems = [];
             for (let index = nodeState.imageNodes.length - 1; index >= 0; index--) {
                 const item = document.createElement("div");
                 item.className = "xiser-layer-item";
-                item.innerText = `图层 ${index + 1}`;
+                item.innerText = `图层Layer ${index + 1}`;
                 item.dataset.index = index;
                 layerPanel.appendChild(item);
                 nodeState.layerItems.push(item);
@@ -624,7 +758,6 @@ app.registerExtension({
             }
         }
 
-        // 选择图层
         function selectLayer(index) {
             if (index < 0 || index >= nodeState.imageNodes.length) return;
             const node = nodeState.imageNodes[index];
@@ -643,7 +776,6 @@ app.registerExtension({
             }
         }
 
-        // 取消选择图层
         function deselectLayer() {
             if (!nodeState.selectedLayer) return;
 
@@ -658,7 +790,6 @@ app.registerExtension({
             nodeState.layerItems.forEach(item => item.classList.remove("selected"));
         }
 
-        // 加载图像
         async function loadImages(imagePaths, states, base64Chunks = [], retryCount = 0, maxRetries = 3) {
             if (!imagePaths?.length) {
                 log.warn(`No image paths provided for node ${node.id}`);
@@ -667,7 +798,6 @@ app.registerExtension({
                 return;
             }
 
-            // 防止重复调用
             if (nodeState.isLoading) {
                 log.info(`LoadImages already in progress for node ${node.id}, skipping`);
                 return;
@@ -676,13 +806,11 @@ app.registerExtension({
 
             log.info(`Starting loadImages for node ${node.id}, imagePaths: ${JSON.stringify(imagePaths)}, length: ${imagePaths.length}, current imageNodes: ${nodeState.imageNodes.length}`);
 
-            // 清空现有图片节点和图层
             nodeState.imageNodes.forEach(node => node.destroy());
             nodeState.imageNodes = [];
-            nodeState.imageLayer.destroyChildren(); // 清空图层
+            nodeState.imageLayer.destroyChildren();
             nodeState.imageLayer.batchDraw();
 
-            // 重置 initialStates，确保与 imagePaths 同步
             nodeState.initialStates = imagePaths.map(() => ({
                 x: borderWidth + boardWidth / 2,
                 y: borderWidth + boardHeight / 2,
@@ -690,7 +818,6 @@ app.registerExtension({
                 scaleY: 1,
                 rotation: 0
             }));
-            // 如果有传入的状态，应用它们
             states.forEach((state, i) => {
                 if (i < nodeState.initialStates.length) {
                     nodeState.initialStates[i] = { ...nodeState.initialStates[i], ...state };
@@ -734,16 +861,21 @@ app.registerExtension({
                         });
                     }
 
+                    if (autoSize === "on" && i === 0) {
+                        boardWidth = Math.min(Math.max(parseInt(img.width), 256), 4096);
+                        boardHeight = Math.min(Math.max(parseInt(img.height), 256), 4096);
+                        updateSize();
+                        statusText.innerText = `画板尺寸已调整为 ${boardWidth}x${boardHeight}`;
+                        statusText.style.color = "#0f0";
+                    }
+
                     const state = nodeState.initialStates[i] || {};
-                    const maxWidth = boardWidth * 0.8;
-                    const maxHeight = boardHeight * 0.8;
-                    const imageScale = Math.min(1, maxWidth / img.width, maxHeight / img.height);
                     const konvaImg = new Konva.Image({
                         image: img,
                         x: state.x || borderWidth + boardWidth / 2,
                         y: state.y || borderWidth + boardHeight / 2,
-                        scaleX: imageScale * (state.scaleX || 1),
-                        scaleY: imageScale * (state.scaleY || 1),
+                        scaleX: state.scaleX || 1,
+                        scaleY: state.scaleY || 1,
                         rotation: state.rotation || 0,
                         draggable: true,
                         offsetX: img.width / 2,
@@ -755,8 +887,8 @@ app.registerExtension({
                     nodeState.initialStates[i] = {
                         x: konvaImg.x(),
                         y: konvaImg.y(),
-                        scaleX: konvaImg.scaleX() / imageScale,
-                        scaleY: konvaImg.scaleY() / imageScale,
+                        scaleX: konvaImg.scaleX(),
+                        scaleY: konvaImg.scaleY(),
                         rotation: konvaImg.rotation()
                     };
 
@@ -764,15 +896,15 @@ app.registerExtension({
                         nodeState.initialStates[i] = {
                             x: konvaImg.x(),
                             y: konvaImg.y(),
-                            scaleX: konvaImg.scaleX() / imageScale,
-                            scaleY: konvaImg.scaleY() / imageScale,
+                            scaleX: konvaImg.scaleX(),
+                            scaleY: konvaImg.scaleY(),
                             rotation: konvaImg.rotation()
                         };
                         node.properties.image_states = nodeState.initialStates;
                         node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
                         node.setProperty("image_states", nodeState.initialStates);
                         nodeState.imageLayer.batchDraw();
-                        saveHistory();
+                        debounceSaveHistory();
                     };
 
                     konvaImg.on("dragend transformend", updateImageState);
@@ -812,9 +944,10 @@ app.registerExtension({
 
         if (imagePaths.length) {
             loadImages(imagePaths, nodeState.initialStates);
+        } else {
+            loadImages([], nodeState.initialStates);
         }
 
-        // 初始化变换器
         nodeState.transformer = new Konva.Transformer({
             nodes: [],
             keepRatio: true,
@@ -823,7 +956,6 @@ app.registerExtension({
         });
         nodeState.imageLayer.add(nodeState.transformer);
 
-        // 鼠标交互
         nodeState.stage.on("click tap", (e) => {
             const target = e.target;
             if (target === nodeState.canvasRect || target === nodeState.stage || target === nodeState.borderRect) {
@@ -847,37 +979,50 @@ app.registerExtension({
 
         nodeState.stage.on("wheel", (e) => {
             e.evt.preventDefault();
-            const scaleBy = 1.01;
             const target = nodeState.transformer.nodes()[0];
             if (!target || !nodeState.imageNodes.includes(target)) return;
 
-            const oldScale = target.scaleX();
-            const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-            target.scaleX(newScale);
-            target.scaleY(newScale);
-
             const index = nodeState.imageNodes.indexOf(target);
-            if (index !== -1) {
-                const maxWidth = boardWidth * 0.8;
-                const maxHeight = boardHeight * 0.8;
-                const imageScale = Math.min(1, maxWidth / target.width(), maxHeight / target.height());
-                nodeState.initialStates[index] = {
-                    x: target.x(),
-                    y: target.y(),
-                    scaleX: target.scaleX() / imageScale,
-                    scaleY: target.scaleY() / imageScale,
-                    rotation: target.rotation()
-                };
-                node.properties.image_states = nodeState.initialStates;
-                node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
-                node.setProperty("image_states", nodeState.initialStates);
-                saveHistory();
+            if (index === -1) return;
+
+            // 检测是否按下 Alt 键
+            const isAltPressed = e.evt.altKey;
+
+            if (isAltPressed) {
+                // Alt + 鼠标滚轮：旋转
+                const rotationStep = 1; // 每次旋转 1 度
+                const currentRotation = target.rotation();
+                const delta = e.evt.deltaY > 0 ? -rotationStep : rotationStep; // 向上滚轮逆时针，向下顺时针
+                target.rotation(currentRotation + delta);
+            } else {
+                // 普通鼠标滚轮：缩放
+                const scaleBy = 1.01;
+                const oldScale = target.scaleX();
+                let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+
+                // 添加缩放范围限制
+                newScale = Math.min(Math.max(newScale, 0.1), 10); // 限制缩放范围在 0.1 到 10 之间
+
+                target.scaleX(newScale);
+                target.scaleY(newScale);
             }
+
+            // 更新状态
+            nodeState.initialStates[index] = {
+                x: target.x(),
+                y: target.y(),
+                scaleX: target.scaleX(),
+                scaleY: target.scaleY(),
+                rotation: target.rotation()
+            };
+            node.properties.image_states = nodeState.initialStates;
+            node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+            node.setProperty("image_states", nodeState.initialStates);
+            debounceSaveHistory();
 
             nodeState.imageLayer.batchDraw();
         });
 
-        // 添加 DOM widget
         node.addDOMWidget("canvas", "Canvas", document.createElement("div"), {
             serialize: true,
             getValue() {
@@ -887,6 +1032,7 @@ app.registerExtension({
                     border_width: borderWidth,
                     canvas_color: canvasColor,
                     border_color: borderColor,
+                    auto_size: autoSize,
                     image_paths: imagePaths,
                     image_states: nodeState.initialStates
                 };
@@ -898,12 +1044,11 @@ app.registerExtension({
                     borderWidth = parseInt(value.border_width) || borderWidth;
                     canvasColor = value.canvas_color || canvasColor;
                     borderColor = value.border_color || borderColor;
+                    autoSize = value.auto_size || autoSize;
                     imagePaths = value.image_paths || imagePaths;
                     nodeState.initialStates = value.image_states || nodeState.initialStates;
                     updateSize();
-                    if (imagePaths.length) {
-                        loadImages(imagePaths, nodeState.initialStates);
-                    }
+                    loadImages(imagePaths, nodeState.initialStates);
                 } catch (e) {
                     log.error(`Error setting value for node ${node.id}`, e);
                     statusText.innerText = "设置画板值失败";
@@ -922,7 +1067,6 @@ app.registerExtension({
             }
         }
 
-        // 触发工作流
         function triggerPrompt() {
             try {
                 node.properties.image_states = nodeState.initialStates;
@@ -931,14 +1075,13 @@ app.registerExtension({
                 app.queuePrompt?.();
             } catch (e) {
                 log.error(`Failed to queue prompt for node ${node.id}`, e);
+                statusText.innerText = "触发队列失败";
+                statusText.style.color = "#f00";
             }
         }
 
-        // 更新尺寸
         function updateSize() {
             try {
-                boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 4096);
-                boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 4096);
                 borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
                 canvasColorValue = canvasColorValue || "black";
 
@@ -954,19 +1097,27 @@ app.registerExtension({
                 }[canvasColorValue] || "rgb(25, 25, 25)";
 
                 node.widgets.forEach(widget => {
-                    if (widget.name === "board_width") widget.value = boardWidth;
-                    if (widget.name === "board_height") widget.value = boardHeight;
+                    if (widget.name === "board_width") {
+                        widget.value = boardWidth;
+                        widget.disabled = (autoSize === "on");
+                    }
+                    if (widget.name === "board_height") {
+                        widget.value = boardHeight;
+                        widget.disabled = (autoSize === "on");
+                    }
                     if (widget.name === "border_width") widget.value = borderWidth;
                     if (widget.name === "canvas_color") widget.value = canvasColorValue;
+                    if (widget.name === "auto_size") widget.value = autoSize;
                     if (widget.name === "image_states") widget.value = JSON.stringify(nodeState.initialStates);
                 });
-                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, JSON.stringify(nodeState.initialStates)];
+                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, autoSize, JSON.stringify(nodeState.initialStates)];
 
                 if (node.inputs) {
                     if (node.inputs.board_width) node.inputs.board_width.value = boardWidth;
                     if (node.inputs.board_height) node.inputs.board_height.value = boardHeight;
                     if (node.inputs.border_width) node.inputs.border_width.value = borderWidth;
                     if (node.inputs.canvas_color) node.inputs.canvas_color.value = canvasColorValue;
+                    if (node.inputs.auto_size) node.inputs.auto_size.value = autoSize;
                 }
 
                 const containerWidth = boardWidth + 2 * borderWidth;
@@ -998,23 +1149,17 @@ app.registerExtension({
                     const state = nodeState.initialStates[i] || {};
                     const imgWidth = node.width();
                     const imgHeight = node.height();
-                    const maxWidth = boardWidth * 0.8;
-                    const maxHeight = boardHeight * 0.8;
-                    const imageScale = Math.min(1, maxWidth / imgWidth, maxHeight / imgHeight);
                     const newX = state.x || borderWidth + boardWidth / 2;
                     const newY = state.y || borderWidth + boardHeight / 2;
                     node.x(newX);
                     node.y(newY);
-                    node.scaleX(imageScale * (state.scaleX || 1));
-                    node.scaleY(imageScale * (state.scaleY || 1));
-                    node.rotation(state.rotation || 0);
                     node.offsetX(imgWidth / 2);
                     node.offsetY(imgHeight / 2);
                     nodeState.initialStates[i] = {
                         x: newX,
                         y: newY,
-                        scaleX: node.scaleX() / imageScale,
-                        scaleY: node.scaleY() / imageScale,
+                        scaleX: node.scaleX(),
+                        scaleY: node.scaleY(),
                         rotation: node.rotation()
                     };
                 });
@@ -1030,6 +1175,7 @@ app.registerExtension({
                     border_width: borderWidth,
                     canvas_color: canvasColor,
                     border_color: borderColor,
+                    auto_size: autoSize,
                     image_paths: imagePaths
                 };
                 node.properties.image_states = nodeState.initialStates;
@@ -1050,7 +1196,6 @@ app.registerExtension({
             }
         }
 
-        // 防抖辅助函数
         let loadImagesDebounceTimeout = null;
         function debounceLoadImages(imagePaths, states) {
             if (loadImagesDebounceTimeout) {
@@ -1059,10 +1204,9 @@ app.registerExtension({
             loadImagesDebounceTimeout = setTimeout(() => {
                 loadImages(imagePaths, states);
                 loadImagesDebounceTimeout = null;
-            }, 300); // 300ms 防抖
+            }, 300);
         }
 
-        // 轮询图像更新
         function startPolling() {
             if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
             nodeState.pollInterval = setInterval(() => {
@@ -1082,29 +1226,40 @@ app.registerExtension({
                     newImagePaths = uiConfigPaths;
                 }
 
-                if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
+                if (newImagePaths.length && !nodeState.lastImagePaths.length) {
+                    log.info(`Forcing initial load for new node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
+                    imagePaths = newImagePaths;
+                    node.properties.ui_config.image_paths = imagePaths;
+                    node.properties.image_states = states;
+                    nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
+                        x: borderWidth + boardWidth / 2,
+                        y: borderWidth + boardHeight / 2,
+                        scaleX: 1,
+                        scaleY: 1,
+                        rotation: 0
+                    }));
+                    node.setProperty("image_states", nodeState.initialStates);
+                    debounceLoadImages(imagePaths, nodeState.initialStates);
+                } else if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
                     log.info(`Image paths changed for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
-                    nodeState.lastImagePaths = newImagePaths.slice();
-                    if (newImagePaths.length) {
-                        imagePaths = newImagePaths;
-                        node.properties.ui_config.image_paths = imagePaths;
-                        node.properties.image_states = states;
-                        nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
-                            x: borderWidth + boardWidth / 2,
-                            y: borderWidth + boardHeight / 2,
-                            scaleX: 1,
-                            scaleY: 1,
-                            rotation: 0
-                        }));
-                        node.setProperty("image_states", nodeState.initialStates);
-                        debounceLoadImages(imagePaths, nodeState.initialStates);
-                    }
+                    imagePaths = newImagePaths;
+                    node.properties.ui_config.image_paths = imagePaths;
+                    node.properties.image_states = states;
+                    nodeState.initialStates = states.length ? states : imagePaths.map(() => ({
+                        x: borderWidth + boardWidth / 2,
+                        y: borderWidth + boardHeight / 2,
+                        scaleX: 1,
+                        scaleY: 1,
+                        rotation: 0
+                    }));
+                    node.setProperty("image_states", nodeState.initialStates);
+                    debounceLoadImages(imagePaths, nodeState.initialStates);
                 }
+                nodeState.lastImagePaths = newImagePaths.slice();
             }, 1000);
         }
         startPolling();
 
-        // 节点执行回调
         node._onNodeExecuted = function () {
             let states = node.properties?.image_states || [];
             let newImagePaths = [];
@@ -1135,7 +1290,7 @@ app.registerExtension({
                 }));
                 node.setProperty("image_states", nodeState.initialStates);
                 nodeState.lastImagePaths = imagePaths.slice();
-                debounceLoadImages(imagePaths, nodeState.initialStates);
+                debounceLoadImages(imagePaths, states);
             } else {
                 statusText.innerText = "无有效图像数据，请检查上游节点";
                 statusText.style.color = "#f00";
@@ -1189,7 +1344,6 @@ app.registerExtension({
             }
         };
 
-        // 清理资源
         node.onRemoved = () => {
             if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
             if (nodeState.animationFrameId) cancelAnimationFrame(nodeState.animationFrameId);
@@ -1197,10 +1351,22 @@ app.registerExtension({
                 nodeState.imageNodes.forEach(node => node.destroy());
                 nodeState.stage.destroy();
             }
-            mainContainer.remove();
+            if (mainContainer && mainContainer.parentNode) {
+                mainContainer.remove();
+            }
+            if (modal && modal.parentNode) {
+                modal.remove();
+            }
             globalImageCache.delete(nodeState.nodeId);
             globalLoadedImageUrls.delete(nodeState.nodeId);
             window.removeEventListener("resize", resizeListener);
+
+            const residualContainers = document.querySelectorAll(`.xiser-main-container[data-nodeId="-1"]`);
+            residualContainers.forEach(container => {
+                log.info(`Cleaning up residual container with nodeId -1 during node removal`);
+                container.remove();
+            });
+
             log.info(`Node ${node.id} removed, resources cleaned`);
         };
 
