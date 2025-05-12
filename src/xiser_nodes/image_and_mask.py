@@ -1,22 +1,11 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
-from nodes import MAX_RESOLUTION
-import os
-import torch
-import numpy as np
-from PIL import Image
-import folder_paths
-import time
-import uuid
-
-
-
 
 
 """
@@ -934,7 +923,7 @@ class XIS_CanvasMaskProcessor:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("output_mask",)
     FUNCTION = "blend_masks"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Canvas"
 
     def blend_masks(self, invert_output, masks, Layer_Mask_1, 
                     Layer_Mask_2=False, Layer_Mask_3=False, Layer_Mask_4=False,

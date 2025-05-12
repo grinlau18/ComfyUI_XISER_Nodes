@@ -328,18 +328,7 @@ app.registerExtension({
         let canvasColor = uiConfig.canvas_color || "rgb(0, 0, 0)";
         let borderColor = uiConfig.border_color || "rgb(25, 25, 25)";
         let autoSize = uiConfig.auto_size || "off";
-        let imagePaths = [];
-
-        if (node.outputs?.[1]?.value) {
-            if (typeof node.outputs[1].value === "string") {
-                imagePaths = node.outputs[1].value.split(",").filter(p => p);
-            } else if (Array.isArray(node.outputs[1].value)) {
-                imagePaths = node.outputs[1].value.filter(p => p);
-            }
-        }
-        if (!imagePaths.length && uiConfig.image_paths) {
-            imagePaths = typeof uiConfig.image_paths === "string" ? uiConfig.image_paths.split(",").filter(p => p) : uiConfig.image_paths;
-        }
+        let imagePaths = uiConfig.image_paths || []; // 从 ui_config 获取 image_paths
 
         let canvasColorValue = node.widgets_values?.[3] ||
             (canvasColor === "rgb(0, 0, 0)" ? "black" :
@@ -449,6 +438,7 @@ app.registerExtension({
                 <li>鼠标滚轮可以对选中图层进行缩放，Alt + 鼠标滚轮可以旋转图层</li>
                 <li>如果上层图层挡住了下层图层，可以通过左上角的图层面板临时将选中的图层置顶</li>
                 <li>取消图层选择或在面板中点击最上层图层，可恢复原本图层堆叠顺序。</li>
+                <li>打开”auto_size“开关后，画板会自动调整为输入的第一张图的尺寸</li>
             </ul><br>
             <h3>Operation Method</h3>
             <ul>
@@ -456,6 +446,7 @@ app.registerExtension({
                 <li>The mouse wheel can be used to scale the selected layer, and Alt + mouse wheel can be used to rotate the layer.</li>
                 <li>If an upper layer blocks a lower layer, you can temporarily bring the selected layer to the top through the layer panel in the upper left corner.</li>
                 <li>Deselect the layer or click the top-most layer in the panel to restore the original layer stacking order.</li>
+                <li>After turning on the "auto_size" switch, the drawing board will automatically adjust to the size of the first input image.</li>
             </ul>
         `;
         modal.appendChild(modalContent);
@@ -835,6 +826,8 @@ app.registerExtension({
             statusText.style.color = "#fff";
 
             let loadedCount = 0;
+            let originalBoardWidth = boardWidth;
+            let originalBoardHeight = boardHeight;
             for (let i = 0; i < images.length; i++) {
                 const imgData = images[i];
                 try {
@@ -862,6 +855,8 @@ app.registerExtension({
                     }
 
                     if (autoSize === "on" && i === 0) {
+                        originalBoardWidth = boardWidth;
+                        originalBoardHeight = boardHeight;
                         boardWidth = Math.min(Math.max(parseInt(img.width), 256), 4096);
                         boardHeight = Math.min(Math.max(parseInt(img.height), 256), 4096);
                         updateSize();
@@ -917,6 +912,11 @@ app.registerExtension({
                     statusText.style.color = "#f00";
                     continue;
                 }
+            }
+
+            // 如果 auto_size 打开且画板尺寸有更改，执行重置
+            if (autoSize === "on" && (boardWidth !== originalBoardWidth || boardHeight !== originalBoardHeight)) {
+                resetCanvas();
             }
 
             nodeState.defaultLayerOrder = [...nodeState.imageNodes];
@@ -1067,12 +1067,41 @@ app.registerExtension({
             }
         }
 
-        function triggerPrompt() {
+        async function triggerPrompt() {
             try {
+                // 获取最新的 image_paths 从 ui_config
+                let newImagePaths = node.properties?.ui_config?.image_paths || [];
+
+                // 如果 image_paths 发生变化，确保 initialStates 长度匹配
+                if (JSON.stringify(newImagePaths) !== JSON.stringify(imagePaths)) {
+                    imagePaths = newImagePaths;
+                    nodeState.initialStates = imagePaths.map(() => ({
+                        x: borderWidth + boardWidth / 2,
+                        y: borderWidth + boardHeight / 2,
+                        scaleX: 1,
+                        scaleY: 1,
+                        rotation: 0
+                    }));
+                }
+
+                // 如果 auto_size 打开，重新加载图像并重置
+                if (autoSize === "on" && imagePaths.length) {
+                    statusText.innerText = "正在调整画板并重置...";
+                    statusText.style.color = "#fff";
+                    await loadImages(imagePaths, nodeState.initialStates);
+                    statusText.innerText = "调整完成，准备渲染...";
+                }
+
+                // 强制同步状态
+                nodeState.initialStates = nodeState.initialStates.slice(0, imagePaths.length);
                 node.properties.image_states = nodeState.initialStates;
                 node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
                 node.setProperty("image_states", nodeState.initialStates);
+                node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, autoSize, JSON.stringify(nodeState.initialStates)];
+
                 app.queuePrompt?.();
+                statusText.innerText = "渲染中...";
+                statusText.style.color = "#fff";
             } catch (e) {
                 log.error(`Failed to queue prompt for node ${node.id}`, e);
                 statusText.innerText = "触发队列失败";
@@ -1210,21 +1239,8 @@ app.registerExtension({
         function startPolling() {
             if (nodeState.pollInterval) clearInterval(nodeState.pollInterval);
             nodeState.pollInterval = setInterval(() => {
-                let newImagePaths = [];
+                let newImagePaths = node.properties?.ui_config?.image_paths || [];
                 let states = node.properties?.image_states || [];
-
-                if (node.outputs?.[1]?.value) {
-                    if (typeof node.outputs[1].value === "string") {
-                        newImagePaths = node.outputs[1].value.split(",").filter(p => p);
-                    } else if (Array.isArray(node.outputs[1].value)) {
-                        newImagePaths = node.outputs[1].value.filter(p => p);
-                    }
-                }
-
-                const uiConfigPaths = node.properties?.ui_config?.image_paths || [];
-                if (!newImagePaths.length && uiConfigPaths.length) {
-                    newImagePaths = uiConfigPaths;
-                }
 
                 if (newImagePaths.length && !nodeState.lastImagePaths.length) {
                     log.info(`Forcing initial load for new node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
@@ -1262,19 +1278,7 @@ app.registerExtension({
 
         node._onNodeExecuted = function () {
             let states = node.properties?.image_states || [];
-            let newImagePaths = [];
-
-            if (node.outputs?.[1]?.value) {
-                if (typeof node.outputs[1].value === "string") {
-                    newImagePaths = node.outputs[1].value.split(",").filter(p => p);
-                } else if (Array.isArray(node.outputs[1].value)) {
-                    newImagePaths = node.outputs[1].value.filter(p => p);
-                }
-            }
-
-            if (!newImagePaths.length && node.properties?.ui_config?.image_paths) {
-                newImagePaths = node.properties.ui_config.image_paths;
-            }
+            let newImagePaths = node.properties?.ui_config?.image_paths || [];
 
             if (newImagePaths.length) {
                 log.info(`onNodeExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
@@ -1300,26 +1304,15 @@ app.registerExtension({
 
         node.onExecuted = function (message) {
             let states = message?.image_states || [];
-            let newImagePaths = [];
+            let newImagePaths = node.properties?.ui_config?.image_paths || [];
 
+            // 从 message 中获取 image_paths（如果有）
             if (message?.image_paths) {
                 if (typeof message.image_paths === "string") {
                     newImagePaths = message.image_paths.split(",").filter(p => p);
                 } else if (Array.isArray(message.image_paths)) {
                     newImagePaths = message.image_paths.filter(p => p);
                 }
-            }
-
-            if (!newImagePaths.length && node.outputs?.[1]?.value) {
-                if (typeof node.outputs[1].value === "string") {
-                    newImagePaths = node.outputs[1].value.split(",").filter(p => p);
-                } else if (Array.isArray(node.outputs[1].value)) {
-                    newImagePaths = node.outputs[1].value.filter(p => p);
-                }
-            }
-
-            if (!newImagePaths.length && node.properties?.ui_config?.image_paths) {
-                newImagePaths = node.properties.ui_config.image_paths;
             }
 
             if (newImagePaths.length) {

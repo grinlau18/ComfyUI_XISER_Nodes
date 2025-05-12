@@ -37,11 +37,11 @@ class XISER_Canvas:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING", "MASK",)
-    RETURN_NAMES = ("canvas_image", "image_paths", "masks",)
+    RETURN_TYPES = ("IMAGE", "HIDDEN", "MASK",)  # 将 "STRING" 改为 "HIDDEN"
+    RETURN_NAMES = ("canvas_image", "image_paths", "masks",)  # 保持名称不变，但隐藏
     FUNCTION = "render"
     CATEGORY = "XISER_Nodes/Canvas"
-    OUTPUT_NODE = False
+    OUTPUT_NODE = True
 
     def _generate_base64_chunks(self, pil_img, format="PNG", quality=10, chunk_size=512*1024):
         if not os.getenv("COMFYUI_DEBUG"):
@@ -99,6 +99,8 @@ class XISER_Canvas:
             raise ValueError("Input values out of allowed range")
 
         # 动态调整 board_width 和 board_height 当 auto_size 为 "on"
+        original_board_width = board_width
+        original_board_height = board_height
         if auto_size == "on" and images_list:
             first_img = (images_list[0].cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
             first_pil_img = Image.fromarray(first_img, mode="RGBA")
@@ -151,15 +153,51 @@ class XISER_Canvas:
                     "data": chunk
                 } for j, chunk in enumerate(chunks)])
             self.properties["image_paths"] = image_paths
-            if not image_states or len(image_states) != len(image_paths):
-                image_states = [{"x": border_width + board_width / 2, "y": border_width + board_height / 2, "scaleX": 1, "scaleY": 1, "rotation": 0} for _ in range(len(image_paths))]
-                self.properties["image_states"] = image_states
+
+            # 当图片变化且 auto_size 打开时，强制重置 image_states 为新的居中状态
+            if auto_size == "on":
+                image_states = [{
+                    "x": border_width + board_width / 2,
+                    "y": border_width + board_height / 2,
+                    "scaleX": 1,
+                    "scaleY": 1,
+                    "rotation": 0
+                } for _ in range(len(image_paths))]
+                logger.info(f"Auto-size enabled with image change, resetting image_states to center positions")
+            # 如果 auto_size 关闭或长度不匹配，保留现有状态并补充默认值
+            elif not image_states or len(image_states) != len(image_paths):
+                new_image_states = []
+                for i in range(len(image_paths)):
+                    if i < len(image_states):
+                        new_image_states.append(image_states[i])
+                    else:
+                        new_image_states.append({
+                            "x": border_width + board_width / 2,
+                            "y": border_width + board_height / 2,
+                            "scaleX": 1,
+                            "scaleY": 1,
+                            "rotation": 0
+                        })
+                image_states = new_image_states
+            self.properties["image_states"] = image_states
             self._clean_old_files()
 
         # 确保 image_paths 和 image_states 长度一致
         if len(image_paths) != len(image_states):
             logger.warning(f"Image paths ({len(image_paths)}) and states ({len(image_states)}) length mismatch, adjusting states")
-            image_states = [{"x": border_width + board_width / 2, "y": border_width + board_height / 2, "scaleX": 1, "scaleY": 1, "rotation": 0} for _ in range(len(image_paths))]
+            new_image_states = []
+            for i in range(len(image_paths)):
+                if i < len(image_states):
+                    new_image_states.append(image_states[i])
+                else:
+                    new_image_states.append({
+                        "x": border_width + board_width / 2,
+                        "y": border_width + board_height / 2,
+                        "scaleX": 1,
+                        "scaleY": 1,
+                        "rotation": 0
+                    })
+            image_states = new_image_states
             self.properties["image_states"] = image_states
 
         canvas_color_rgb = {"black": (0, 0, 0, 255), "white": (255, 255, 255, 255), "transparent": (0, 0, 0, 0)}[canvas_color]
