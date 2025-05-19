@@ -96,7 +96,7 @@ app.registerExtension({
                 background-color: rgb(30, 121, 195);
             }
             .xiser-trigger-button {
-                right: 145px;
+                right: 80px;
                 background-color: rgba(0, 0, 0, 0.75);
                 border-radius: 5px;
             }
@@ -104,17 +104,17 @@ app.registerExtension({
                 background-color: rgb(30, 121, 195);
             }
             .xiser-reset-button {
-                right: 254px;
+                right: 164px;
                 background-color: rgba(0, 0, 0, 0.75);
                 border-radius: 5px;
-                padding: 4.5px 10px;
+                padding: 6px 10px;
             }
             .xiser-reset-button:hover {
                 background-color: rgb(30, 121, 195);
-                padding: 4.5px 10px;
+                padding: 6px 10px;
             }
             .xiser-redo-button {
-                right: 359px;
+                right: 244px;
                 background-color: rgba(0, 0, 0, 0.75);
                 border-radius: 5px;
             }
@@ -122,7 +122,7 @@ app.registerExtension({
                 background-color: rgb(30, 121, 195);
             }
             .xiser-undo-button {
-                right: 462px;
+                right: 320px;
                 background-color: rgba(0, 0, 0, 0.75);
                 border-radius: 5px;
             }
@@ -414,14 +414,14 @@ app.registerExtension({
 
         const triggerButton = document.createElement("button");
         triggerButton.className = "xiser-trigger-button";
-        triggerButton.innerText = "▶️ 运行 Queue";
+        triggerButton.innerText = "▶️ Queue";
         triggerButton.onclick = triggerPrompt;
         boardContainer.appendChild(triggerButton);
 
         // 添加操作说明按钮
         const instructionButton = document.createElement("button");
         instructionButton.className = "xiser-instruction-button";
-        instructionButton.innerText = "ℹ️ 说明 Instructions";
+        instructionButton.innerText = "ℹ️ Tips";
         instructionButton.onclick = showInstructions;
         boardContainer.appendChild(instructionButton);
 
@@ -466,19 +466,19 @@ app.registerExtension({
 
         const resetButton = document.createElement("button");
         resetButton.className = "xiser-reset-button";
-        resetButton.innerText = "🔁 重置 Reset";
+        resetButton.innerText = "🔁 Reset";
         resetButton.onclick = resetCanvas;
         boardContainer.appendChild(resetButton);
 
         const undoButton = document.createElement("button");
         undoButton.className = "xiser-undo-button";
-        undoButton.innerText = "↩️ 撤销 Undo";
+        undoButton.innerText = "↩️ Undo";
         undoButton.onclick = undo;
         boardContainer.appendChild(undoButton);
 
         const redoButton = document.createElement("button");
         redoButton.className = "xiser-redo-button";
-        redoButton.innerText = "↪️ 重做 Redo";
+        redoButton.innerText = "↪️ Redo";
         redoButton.onclick = redo;
         boardContainer.appendChild(redoButton);
 
@@ -733,7 +733,7 @@ app.registerExtension({
             for (let index = nodeState.imageNodes.length - 1; index >= 0; index--) {
                 const item = document.createElement("div");
                 item.className = "xiser-layer-item";
-                item.innerText = `图层Layer ${index + 1}`;
+                item.innerText = `Layer ${index + 1}`;
                 item.dataset.index = index;
                 layerPanel.appendChild(item);
                 nodeState.layerItems.push(item);

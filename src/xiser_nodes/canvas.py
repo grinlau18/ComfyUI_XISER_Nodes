@@ -37,8 +37,8 @@ class XISER_Canvas:
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "HIDDEN", "MASK",)  # 将 "STRING" 改为 "HIDDEN"
-    RETURN_NAMES = ("canvas_image", "image_paths", "masks",)  # 保持名称不变，但隐藏
+    RETURN_TYPES = ("IMAGE", "STRING", "MASK",)
+    RETURN_NAMES = ("canvas_image", "image_paths", "masks",)
     FUNCTION = "render"
     CATEGORY = "XISER_Nodes/Canvas"
     OUTPUT_NODE = True
@@ -84,10 +84,6 @@ class XISER_Canvas:
             logger.error("No valid images provided")
             raise ValueError("At least one image must be provided")
 
-        if len(images_list) > 8:
-            logger.error(f"Too many images: {len(images_list)}, maximum 8 allowed")
-            raise ValueError("Maximum 8 images allowed")
-
         if canvas_color not in ["black", "white", "transparent"]:
             logger.error(f"Invalid canvas_color: {canvas_color}")
             raise ValueError(f"Invalid canvas_color: {canvas_color}")
@@ -98,18 +94,53 @@ class XISER_Canvas:
             logger.error(f"Input values out of range: board_width={board_width}, board_height={board_height}, border_width={border_width}")
             raise ValueError("Input values out of allowed range")
 
-        # 动态调整 board_width 和 board_height 当 auto_size 为 "on"
-        original_board_width = board_width
-        original_board_height = board_height
-        if auto_size == "on" and images_list:
+        # 检查第一张图片的尺寸和哈希值
+        first_image_size = None
+        first_image_hash = None
+        if images_list:
             first_img = (images_list[0].cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
             first_pil_img = Image.fromarray(first_img, mode="RGBA")
+            first_image_size = (first_pil_img.width, first_pil_img.height)
+            first_image_hash = hash(images_list[0].cpu().numpy().tobytes())
+
+        # 获取之前的记录
+        last_first_image_size = self.properties.get("last_first_image_size")
+        last_first_image_hash = self.properties.get("last_first_image_hash")
+        last_auto_size = self.properties.get("last_auto_size", "off")
+
+        # 动态调整 board_width 和 board_height 当 auto_size 为 "on"
+        should_reset = False
+        if auto_size == "on" and images_list:
             dynamic_board_width = min(max(first_pil_img.width, 256), 4096)
             dynamic_board_height = min(max(first_pil_img.height, 256), 4096)
-            if dynamic_board_width != board_width or dynamic_board_height != board_height:
-                logger.info(f"Auto-sizing: adjusting board to {dynamic_board_width}x{dynamic_board_height}")
+            # 判断是否需要调整画板尺寸和重置
+            if last_auto_size == "on" and last_first_image_size and last_first_image_hash:
+                # auto_size 已打开，检查第一张图片是否变化
+                first_image_changed = first_image_hash != last_first_image_hash
+                size_changed = first_image_size != last_first_image_size
+                if first_image_changed and size_changed:
+                    # 第一张图片变化且尺寸不同，调整画板并重置
+                    logger.info(f"First image changed with different size, adjusting board to {dynamic_board_width}x{dynamic_board_height}")
+                    board_width = dynamic_board_width
+                    board_height = dynamic_board_height
+                    should_reset = True
+                elif first_image_changed:
+                    # 第一张图片变化但尺寸相同，仅更新图片，不重置
+                    logger.info("First image changed but size unchanged, keeping board size")
+                else:
+                    # 第一张图片未变，仅更新其他图片，不重置
+                    logger.info("First image unchanged, keeping board size")
+            else:
+                # auto_size 刚打开或无历史记录，调整画板并重置
+                logger.info(f"Auto-size enabled or no history, adjusting board to {dynamic_board_width}x{dynamic_board_height}")
                 board_width = dynamic_board_width
                 board_height = dynamic_board_height
+                should_reset = True
+
+        # 更新历史记录
+        self.properties["last_first_image_size"] = first_image_size
+        self.properties["last_first_image_hash"] = first_image_hash
+        self.properties["last_auto_size"] = auto_size
 
         current_params = {
             "board_width": board_width,
@@ -154,8 +185,8 @@ class XISER_Canvas:
                 } for j, chunk in enumerate(chunks)])
             self.properties["image_paths"] = image_paths
 
-            # 当图片变化且 auto_size 打开时，强制重置 image_states 为新的居中状态
-            if auto_size == "on":
+            # 根据 should_reset 决定是否重置 image_states
+            if auto_size == "on" and should_reset:
                 image_states = [{
                     "x": border_width + board_width / 2,
                     "y": border_width + board_height / 2,
@@ -163,8 +194,7 @@ class XISER_Canvas:
                     "scaleY": 1,
                     "rotation": 0
                 } for _ in range(len(image_paths))]
-                logger.info(f"Auto-size enabled with image change, resetting image_states to center positions")
-            # 如果 auto_size 关闭或长度不匹配，保留现有状态并补充默认值
+                logger.info(f"Auto-size enabled and reset triggered, resetting image_states to center positions")
             elif not image_states or len(image_states) != len(image_paths):
                 new_image_states = []
                 for i in range(len(image_paths)):
@@ -200,7 +230,12 @@ class XISER_Canvas:
             image_states = new_image_states
             self.properties["image_states"] = image_states
 
-        canvas_color_rgb = {"black": (0, 0, 0, 255), "white": (255, 255, 255, 255), "transparent": (0, 0, 0, 0)}[canvas_color]
+        # 创建画布并应用 canvas_color
+        canvas_color_rgb = {
+            "black": (0, 0, 0, 255),
+            "white": (255, 255, 255, 255),
+            "transparent": (0, 0, 0, 0)
+        }[canvas_color]
         canvas_img = np.ones((board_height, board_width, 4), dtype=np.uint8) * np.array(canvas_color_rgb, dtype=np.uint8)
         canvas_pil = Image.fromarray(canvas_img, mode="RGBA")
 
@@ -211,19 +246,19 @@ class XISER_Canvas:
                 alpha = img.split()[3]
                 mask = Image.new("L", (board_width, board_height), 0)
 
-                # 应用缩放
+                # 应用缩放（使用 BICUBIC 插值）
                 scale_x = state.get("scaleX", 1.0)
                 scale_y = state.get("scaleY", 1.0)
                 if scale_x != 1.0 or scale_y != 1.0:
                     new_width = int(img.width * scale_x)
                     new_height = int(img.height * scale_y)
-                    img = img.resize((new_width, new_height), resample=Image.Resampling.LANCZOS)
-                    alpha = alpha.resize((new_width, new_height), resample=Image.Resampling.LANCZOS)
+                    img = img.resize((new_width, new_height), resample=Image.Resampling.BICUBIC)
+                    alpha = alpha.resize((new_width, new_height), resample=Image.Resampling.BICUBIC)
 
-                # 应用旋转
+                # 应用旋转（使用 BICUBIC 插值，填充透明色）
                 rotation = state.get("rotation", 0)
                 if rotation != 0:
-                    img = img.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True)
+                    img = img.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=(0, 0, 0, 0))
                     alpha = alpha.rotate(-rotation, resample=Image.Resampling.BICUBIC, expand=True)
 
                 # 计算平移位置（基于缩放和旋转后的图像尺寸）
@@ -232,9 +267,14 @@ class XISER_Canvas:
                 paste_x = int(x - img.width / 2)
                 paste_y = int(y - img.height / 2)
 
+                # 确保粘贴区域在画布内
+                paste_box = (max(0, paste_x), max(0, paste_y), min(board_width, paste_x + img.width), min(board_height, paste_y + img.height))
+                img_cropped = img.crop((max(0, -paste_x), max(0, -paste_y), min(img.width, board_width - paste_x), min(img.height, board_height - paste_y)))
+                alpha_cropped = alpha.crop((max(0, -paste_x), max(0, -paste_y), min(alpha.width, board_width - paste_x), min(alpha.height, board_height - paste_y)))
+
                 # 粘贴图像和 Alpha 通道
-                canvas_pil.paste(img, (paste_x, paste_y), img)
-                mask.paste(alpha, (paste_x, paste_y))
+                canvas_pil.paste(img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped)
+                mask.paste(alpha_cropped, (max(0, paste_x), max(0, paste_y)))
                 mask_list.append(torch.from_numpy(np.array(mask, dtype=np.float32) / 255.0))
                 logger.debug(f"Mask {i} generated with shape: {mask.size}")
             except Exception as e:
