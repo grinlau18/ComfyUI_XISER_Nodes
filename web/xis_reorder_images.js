@@ -28,6 +28,12 @@ app.registerExtension({
                 if (this.id <= 0) {
                     log.warning("Temporary invalid node ID, waiting for valid ID");
                 }
+
+                // Check if images output already exists to avoid duplicates
+                const hasImagesOutput = this.outputs && this.outputs.some(output => output.name === "images");
+                if (!hasImagesOutput) {
+                    this.addOutput("images", "IMAGE");
+                }
             };
         }
     },
@@ -283,7 +289,7 @@ app.registerExtension({
             const cardHeight = 84;
             const extraHeight = 96;
             const panelHeight = imagePreviews.length > 0 
-                ? Math.min(Math.max(imagePreviews.length * cardHeight + extraHeight, 120), 800)
+                ? Math.min(Math.max(imagePreviews.length * cardHeight + extraHeight, 120), 1000)
                 : 120;
             mainContainer.style.height = `${panelHeight-20}px`;
             mainContainer.style.maxHeight = `${panelHeight-20}px`;
@@ -298,6 +304,13 @@ app.registerExtension({
             if (sortableInstance) {
                 sortableInstance.destroy();
                 sortableInstance = null;
+            }
+
+            // Warn about potential performance issues with large number of images
+            if (imagePreviews.length > 50) {
+                log.warning(`Large number of images detected: ${imagePreviews.length}. This may impact performance.`);
+                statusText.innerText = `已加载 ${imagePreviews.length} 张图像（可能影响性能）`;
+                statusText.style.color = "#FFA500"; // Orange warning color
             }
 
             // Ensure enabledLayers matches imagePreviews length
@@ -440,8 +453,10 @@ app.registerExtension({
                 statusText.style.color = "#F55";
             }
 
-            statusText.innerText = imagePreviews.length > 0 ? `已加载 ${imagePreviews.length} 张图像（${enabledLayers.filter(x => x).length} 张启用）` : "等待图像...";
-            statusText.style.color = imagePreviews.length > 0 ? "#2ECC71" : "#F5F6F5";
+            if (imagePreviews.length <= 50) {
+                statusText.innerText = imagePreviews.length > 0 ? `已加载 ${imagePreviews.length} 张图像（${enabledLayers.filter(x => x).length} 张启用）` : "等待图像...";
+                statusText.style.color = imagePreviews.length > 0 ? "#2ECC71" : "#F5F6F5";
+            }
         }
 
         // Debounced update card list
@@ -492,15 +507,13 @@ app.registerExtension({
         node.onResize = function (size) {
             const cardHeight = 84;
             const extraHeight = 96;
-            const panelHeight = imagePreviews.length > 0 
-                ? Math.min(Math.max(imagePreviews.length * cardHeight + extraHeight, 120), 800)
-                : 120;
+            const panelHeight = 600;
             // Lock height, enforce min-width 360px
             size[0] = Math.max(size[0], 360);
             size[1] = panelHeight + 100;
             mainContainer.style.width = `${size[0]-22}px`;
             mainContainer.style.height = `${panelHeight-20}px`;
-            mainContainer.style.maxHeight = `${panelHeight-20}px`;
+            mainContainer.style.maxHeight = `${panelHeight-44}px`;
         };
 
         // Add node styles

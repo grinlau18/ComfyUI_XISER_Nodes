@@ -5,6 +5,7 @@ from PIL import Image
 from psd_tools import PSDImage
 import folder_paths
 import logging
+import shutil
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -33,9 +34,30 @@ class XIS_PSDLayerExtractor:
             logger.error("No file uploaded")
             raise ValueError("No file uploaded")
 
-        # 构造完整文件路径
+        # 构造文件路径
         input_dir = folder_paths.get_input_directory()
-        file_path = os.path.join(input_dir, os.path.basename(uploaded_file))
+        psd_dir = os.path.join(input_dir, "psd_files")
+        # 确保 psd_files 目录存在
+        if not os.path.exists(psd_dir):
+            os.makedirs(psd_dir, exist_ok=True)
+            logger.debug(f"Created directory: {psd_dir}")
+
+        # 规范化路径
+        normalized_path = uploaded_file.replace("input/", "").replace("psd_files/", "")
+        file_name = os.path.basename(normalized_path)
+        file_path = os.path.join(psd_dir, file_name)
+        logger.debug(f"Input uploaded_file: {uploaded_file}")
+        logger.debug(f"Normalized file path: {file_path}")
+
+        # 检查 input 目录（可能文件保存到 input）
+        input_file_path = os.path.join(input_dir, file_name)
+        if os.path.exists(input_file_path) and not os.path.exists(file_path):
+            try:
+                shutil.move(input_file_path, file_path)
+                logger.debug(f"Moved file from {input_file_path} to {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to move file from {input_file_path} to {file_path}: {str(e)}")
+                raise ValueError(f"Failed to move file: {str(e)}")
 
         # 验证文件是否存在
         if not os.path.exists(file_path):

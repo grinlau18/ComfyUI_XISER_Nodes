@@ -1,6 +1,8 @@
 import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
+const DEBUG = false; // 调试模式开关
+
 app.registerExtension({
     name: "XISER.XIS_CanvasMaskProcessor",
     async setup() {
@@ -40,6 +42,7 @@ app.registerExtension({
 
         nodeType.prototype.layerCount = 8;
 
+        // 确保节点 ID 有效
         async function ensureNodeId(node) {
             let attempts = 0;
             const maxAttempts = 100;
@@ -47,10 +50,13 @@ app.registerExtension({
                 await new Promise(resolve => setTimeout(resolve, 50));
                 attempts++;
             }
-            if (node.id === -1) throw new Error("Failed to get valid node ID");
+            if (node.id === -1) {
+                throw new Error(`Node ${node.id}: Failed to get valid node ID`);
+            }
             return node.id;
         }
 
+        // 根据输入蒙版数量更新层数
         function updateLayerCount(node) {
             const masksInput = node.inputs?.find(i => i.name === "masks");
             if (masksInput && masksInput.link) {
@@ -63,7 +69,7 @@ app.registerExtension({
                         if (batchSize > node.layerCount) {
                             node.layerCount = batchSize;
                             node.rebuildWidgets();
-                            console.log(`Node ${node.id}: Updated layerCount to ${batchSize} for ${batchSize} masks`);
+                            if (DEBUG) console.log(`Node ${node.id}: Updated layerCount to ${batchSize}`);
                         }
                     }
                 }
@@ -72,128 +78,156 @@ app.registerExtension({
 
         const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = async function () {
-            if (origOnNodeCreated) origOnNodeCreated.apply(this);
+            try {
+                if (origOnNodeCreated) origOnNodeCreated.apply(this);
+                await ensureNodeId(this);
 
-            await ensureNodeId(this);
+                const buttonContainer = document.createElement("div");
+                buttonContainer.className = "xis-canvas-mask-buttons";
+                buttonContainer.dataset.nodeId = this.id;
 
-            const buttonContainer = document.createElement("div");
-            buttonContainer.className = "xis-canvas-mask-buttons";
-            buttonContainer.dataset.nodeId = this.id;
-
-            const addButton = document.createElement("button");
-            addButton.innerText = "Add Layer";
-            addButton.className = "xis-canvas-mask-button";
-            addButton.onclick = () => {
-                this.layerCount++;
-                this.rebuildWidgets();
-                app.graph.setDirtyCanvas(true, true);
-                console.log(`Node ${this.id}: Added layer, total: ${this.layerCount}`);
-            };
-            buttonContainer.appendChild(addButton);
-
-            const removeButton = document.createElement("button");
-            removeButton.innerText = "Remove Layer";
-            removeButton.className = "xis-canvas-mask-button";
-            removeButton.onclick = () => {
-                if (this.layerCount > 1) {
-                    this.layerCount--;
+                const addButton = document.createElement("button");
+                addButton.innerText = "Add Layer";
+                addButton.className = "xis-canvas-mask-button";
+                addButton.onclick = () => {
+                    this.layerCount++;
                     this.rebuildWidgets();
-                    app.graph.setDirtyCanvas(true, true);
-                    console.log(`Node ${this.id}: Removed layer, total: ${this.layerCount}`);
-                }
-            };
-            buttonContainer.appendChild(removeButton);
+                    app.graph.setDirtyCanvas(true, false);
+                    if (DEBUG) console.log(`Node ${this.id}: Added layer, total: ${this.layerCount}`);
+                };
+                buttonContainer.appendChild(addButton);
 
-            this.addDOMWidget("buttons", "buttons", buttonContainer, { after: "invert_output" });
+                const removeButton = document.createElement("button");
+                removeButton.innerText = "Remove Layer";
+                removeButton.className = "xis-canvas-mask-button";
+                removeButton.onclick = () => {
+                    if (this.layerCount > 1) {
+                        this.layerCount--;
+                        this.rebuildWidgets();
+                        app.graph.setDirtyCanvas(true, false);
+                        if (DEBUG) console.log(`Node ${this.id}: Removed layer, total: ${this.layerCount}`);
+                    }
+                };
+                buttonContainer.appendChild(removeButton);
 
-            updateLayerCount(this);
-            this.rebuildWidgets();
+                this.addDOMWidget("buttons", "buttons", buttonContainer, { after: "invert_output" });
+
+                updateLayerCount(this);
+                this.rebuildWidgets();
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onNodeCreated: ${error.message}`);
+            }
         };
 
         const origOnConnectionsChange = nodeType.prototype.onConnectionsChange;
         nodeType.prototype.onConnectionsChange = function (type, index, connected, link_info) {
-            if (origOnConnectionsChange) origOnConnectionsChange.apply(this, arguments);
-            if (type === "input" && link_info?.name === "masks" && connected) {
-                updateLayerCount(this);
+            try {
+                if (origOnConnectionsChange) origOnConnectionsChange.apply(this, arguments);
+                if (type === "input" && link_info?.name === "masks" && connected) {
+                    updateLayerCount(this);
+                }
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onConnectionsChange: ${error.message}`);
             }
         };
 
+        // 重建控件，仅更新高度
         nodeType.prototype.rebuildWidgets = function () {
-            const currentValues = {};
-            for (const widget of this.widgets || []) {
-                if (widget.name.startsWith("Layer_Mask_")) {
-                    currentValues[widget.name] = widget.value;
+            try {
+                const currentValues = this.properties.widgetValues || {};
+                this.widgets = this.widgets?.filter(w => !w.name.startsWith("Layer_Mask_")) || [];
+
+                for (let i = 1; i <= this.layerCount; i++) {
+                    const widgetName = `Layer_Mask_${i}`;
+                    const widget = ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app).widget;
+                    widget.value = currentValues[widgetName] === true;
                 }
+
+                this.properties.widgetValues = this.widgets.reduce((acc, w) => {
+                    if (w.name.startsWith("Layer_Mask_")) {
+                        acc[w.name] = !!w.value;
+                    }
+                    return acc;
+                }, {});
+
+                const newSize = this.computeSize();
+                this.setSize([this.size[0], Math.max(newSize[1], 150)]);
+                this.onResize?.();
+                app.graph.setDirtyCanvas(true, false);
+                if (DEBUG) console.log(`Node ${this.id}: Resized to ${this.size}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in rebuildWidgets: ${error.message}`);
             }
-
-            this.widgets = this.widgets?.filter(w => !w.name.startsWith("Layer_Mask_")) || [];
-
-            for (let i = 1; i <= this.layerCount; i++) {
-                const widgetName = `Layer_Mask_${i}`;
-                const widget = ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app).widget;
-                if (widgetName in currentValues) {
-                    widget.value = currentValues[widgetName];
-                }
-            }
-
-            // 保存控件状态
-            this.properties.widgetValues = currentValues;
-
-            // 仅调整高度，保留宽度
-            const newSize = this.computeSize();
-            this.setSize([this.size[0], Math.max(newSize[1], 150)]);
-            this.onResize?.();
-            app.graph.setDirtyCanvas(true, true);
-            console.log(`Node ${this.id}: Resized to ${this.size}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
         };
 
         // 序列化节点状态
         const origSerialize = nodeType.prototype.serialize;
         nodeType.prototype.serialize = function () {
-            const data = origSerialize ? origSerialize.apply(this) : {};
-            data.properties = data.properties || {};
-            data.properties.layerCount = this.layerCount;
-            data.properties.widgetValues = {};
-            for (const widget of this.widgets || []) {
-                if (widget.name.startsWith("Layer_Mask_")) {
-                    data.properties.widgetValues[widget.name] = widget.value;
-                }
+            try {
+                const data = origSerialize ? origSerialize.apply(this) : {};
+                data.properties = data.properties || {};
+                data.properties.layerCount = this.layerCount;
+                data.properties.width = this.size[0];
+                data.properties.widgetValues = this.widgets.reduce((acc, w) => {
+                    if (w.name.startsWith("Layer_Mask_")) {
+                        acc[w.name] = !!w.value;
+                    }
+                    return acc;
+                }, {});
+                data.widgets_values = this.widgets.filter(w => w.name.startsWith("Layer_Mask_")).map(w => w.value);
+                if (DEBUG) console.log(`Node ${this.id}: Serialized widgetValues: ${JSON.stringify(data.properties.widgetValues)}, widgets_values: ${data.widgets_values}`);
+                return data;
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in serialize: ${error.message}`);
+                return {};
             }
-            data.widgets_values = this.widgets ? this.widgets.map(w => w.value) : [];
-            return data;
         };
 
         // 加载节点状态
         const origOnConfigure = nodeType.prototype.onConfigure;
         nodeType.prototype.onConfigure = function (config) {
-            if (origOnConfigure) origOnConfigure.apply(this, [config]);
-            if (config.properties?.layerCount) {
-                this.layerCount = config.properties.layerCount;
-            }
-            if (config.properties?.widgetValues) {
-                this.properties.widgetValues = config.properties.widgetValues;
-            }
-            this.rebuildWidgets();
-            if (config.widgets_values && this.widgets) {
-                for (let i = 0; i < Math.min(config.widgets_values.length, this.widgets.length); i++) {
-                    this.widgets[i].value = config.widgets_values[i];
+            try {
+                if (origOnConfigure) origOnConfigure.apply(this, [config]);
+                if (config.properties) {
+                    this.layerCount = config.properties.layerCount || 8;
+                    this.properties.widgetValues = config.properties.widgetValues || {};
+                    if (config.properties.width) {
+                        this.setSize([config.properties.width, this.size[1]]);
+                    }
                 }
+                this.rebuildWidgets();
+                for (const widget of this.widgets) {
+                    if (widget.name.startsWith("Layer_Mask_") && this.properties.widgetValues[widget.name] !== undefined) {
+                        widget.value = !!this.properties.widgetValues[widget.name];
+                    }
+                }
+                if (DEBUG) console.log(`Node ${this.id}: Configured with widgetValues: ${JSON.stringify(this.properties.widgetValues)}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onConfigure: ${error.message}`);
             }
         };
 
         const origOnRemoved = nodeType.prototype.onRemoved;
         nodeType.prototype.onRemoved = function () {
-            if (origOnRemoved) origOnRemoved.apply(this);
-            const container = document.querySelector(`.xis-canvas-mask-buttons[data-nodeId="${this.id}"]`);
-            if (container) container.remove();
+            try {
+                if (origOnRemoved) origOnRemoved.apply(this);
+                const container = document.querySelector(`.xis-canvas-mask-buttons[data-nodeId="${this.id}"]`);
+                if (container) container.remove();
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onRemoved: ${error.message}`);
+            }
         };
 
-        // 确保控件值在执行时传递
+        // 确保执行时传递控件值
         const origOnExecute = nodeType.prototype.onExecute;
         nodeType.prototype.onExecute = function () {
-            if (origOnExecute) origOnExecute.apply(this);
-            this.widgets_values = this.widgets ? this.widgets.map(w => w.value) : [];
-            console.log(`Node ${this.id}: Executing with widgets_values: ${this.widgets_values}`);
+            try {
+                if (origOnExecute) origOnExecute.apply(this);
+                this.widgets_values = this.widgets.filter(w => w.name.startsWith("Layer_Mask_")).map(w => w.value);
+                if (DEBUG) console.log(`Node ${this.id}: Executing with widgets_values: ${this.widgets_values}`);
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onExecute: ${error.message}`);
+            }
         };
     }
 });

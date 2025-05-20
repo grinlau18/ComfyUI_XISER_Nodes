@@ -32,8 +32,8 @@ class XIS_ReorderImages:
             }
         }
 
-    RETURN_TYPES = ("XIS_IMAGES",)
-    RETURN_NAMES = ("pack_images",)
+    RETURN_TYPES = ("XIS_IMAGES", "IMAGE",)
+    RETURN_NAMES = ("pack_images", "images",)
     FUNCTION = "reorder_images"
     CATEGORY = "XISER_Nodes/Canvas"
     OUTPUT_NODE = False
@@ -64,21 +64,38 @@ class XIS_ReorderImages:
         logger.info(f"Validated order: {valid_order}, enabled: {enabled_layers}")
         return valid_order
 
+    def _normalize_images_for_preview(self, image_list):
+        """Normalize images to maintain original size and preserve RGBA format for IMAGE type output"""
+        if not image_list:
+            return None
+
+        # Convert each image to torch.Tensor with original size, preserving RGBA
+        normalized_images = []
+        for img in image_list:
+            # Ensure the tensor is on CPU and in the correct format
+            img = img.cpu()
+            # Scale to [0, 1] range if not already
+            img_normalized = img.clamp(0, 1)  # Ensure values are in [0, 1]
+            normalized_images.append(img_normalized)
+
+        # Return as a list of tensors to support variable sizes
+        return normalized_images
+
     def reorder_images(self, pack_images, image_order="[]", enabled_layers="[]"):
         logger.info(f"Received pack_images: {len(pack_images)} images, image_order: {image_order}, enabled_layers: {enabled_layers}")
 
         # Validate input
         if pack_images is None or not isinstance(pack_images, list):
-            logger.error(f"Invalid pack_images: expected list, got {type(pack_images)}")
+            logger.error(f"Variable pack_images: expected list, got {type(pack_images)}")
             raise ValueError("pack_images must be provided as a list")
         
         if not pack_images:
             logger.error("No images provided")
             raise ValueError("At least one image must be provided")
 
-        if len(pack_images) > 8:
-            logger.error(f"Too many images: {len(pack_images)}, maximum 8 allowed")
-            raise ValueError("Maximum 8 images allowed")
+        # Warn about potential performance issues with large number of images
+        if len(pack_images) > 50:
+            logger.warning(f"Large number of images detected: {len(pack_images)}. This may impact performance.")
 
         for img in pack_images:
             if not isinstance(img, torch.Tensor) or img.shape[-1] != 4:
@@ -128,23 +145,26 @@ class XIS_ReorderImages:
                 "height": img.shape[0]
             })
 
-        # Reorder and filter images
+        # Reorder and filter images for pack_images output
         reordered_images = [pack_images[i] for i in order if enabled[i]]
         logger.info(f"Filtered order: {order}, enabled: {enabled}, output_images: {len(reordered_images)}")
+
+        # Prepare images output (original order and quantity, maintaining original size and RGBA)
+        images = self._normalize_images_for_preview(pack_images)
 
         # Save properties
         self.properties["image_previews"] = image_previews
         self.properties["image_order"] = order
         self.properties["enabled_layers"] = enabled
 
-        logger.info(f"Returning reordered images: order={order}, enabled_layers={enabled}, output_images={len(reordered_images)}")
+        logger.info(f"Returning reordered images: order={order}, enabled_layers={enabled}, pack_images_output={len(reordered_images)}, images_output={len(images)}")
         return {
             "ui": {
                 "image_previews": image_previews,
                 "image_order": order,
                 "enabled_layers": enabled
             },
-            "result": (reordered_images,)
+            "result": (reordered_images, images,)
         }
 
 # Register node

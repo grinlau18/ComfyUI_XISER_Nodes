@@ -823,6 +823,8 @@ class XIS_MaskBatchProcessor:
 
 # 多蒙版混合节点，支持最多 8 张蒙版
 class XIS_CanvasMaskProcessor:
+    DEBUG = False  # 调试模式开关
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -856,66 +858,57 @@ class XIS_CanvasMaskProcessor:
     CATEGORY = "XISER_Nodes/ImageAndMask"
 
     def blend_masks(self, invert_output, masks, **kwargs):
-        # 检查蒙版批次大小
         batch_size = masks.shape[0] if masks.dim() == 3 else 1
         if batch_size < 1:
             raise ValueError("At least one mask must be provided.")
         
-        # 验证输入蒙版值
         if torch.isnan(masks).any() or torch.isinf(masks).any():
             raise ValueError("Input masks contain NaN or Inf values.")
         masks = torch.clamp(masks, 0.0, 1.0)
-        print(f"Input masks shape: {masks.shape}, min: {masks.min().item()}, max: {masks.max().item()}")
         
-        # 收集开关值（优先使用 INPUT_TYPES 的参数，备用使用 kwargs）
-        enables = []
-        for i in range(batch_size):
-            key = f"Layer_Mask_{i+1}"
-            value = kwargs.get(key, False)
-            enables.append(value)
-        print(f"Received kwargs: {list(kwargs.keys())}")
-        print(f"Switches: {enables}")
+        if self.DEBUG:
+            print(f"Input masks shape: {masks.shape}, min: {masks.min().item()}, max: {masks.max().item()}")
         
-        # 处理单张蒙版
+        enables = [kwargs.get(f"Layer_Mask_{i+1}", False) for i in range(batch_size)]
+        if self.DEBUG:
+            print(f"Received kwargs: {list(kwargs.keys())}")
+            print(f"Switches: {enables}")
+        
         if masks.dim() == 2:
             masks = masks.unsqueeze(0)
         
-        # 验证蒙版尺寸
         shape = masks[0].shape
         for mask in masks[1:]:
             if mask.shape != shape:
                 raise ValueError("All masks must have the same dimensions.")
         
-        # 初始化输出蒙版
         output_mask = torch.zeros_like(masks[0])
         
-        # 检查是否有启用的开关
         if not any(enables):
-            print("No layers enabled, returning default mask")
+            if self.DEBUG:
+                print("No layers enabled, returning default mask")
             if invert_output:
                 output_mask = torch.ones_like(output_mask)
             return (output_mask,)
         
-        # 处理每张蒙版
         for i, (mask, enable) in enumerate(zip(masks, enables)):
             if enable:
                 upper_opacity = torch.zeros_like(mask)
                 for j in range(i + 1, batch_size):
                     upper_opacity = torch.max(upper_opacity, masks[j])
                 visible_part = mask * (1.0 - upper_opacity)
-                print(f"Layer {i+1}, Enable: {enable}, Upper Opacity Max: {upper_opacity.max().item()}, Visible Part Max: {visible_part.max().item()}")
+                if self.DEBUG:
+                    print(f"Layer {i+1}, Enable: {enable}, Upper Opacity Max: {upper_opacity.max().item()}, Visible Part Max: {visible_part.max().item()}")
                 output_mask = output_mask + visible_part
         
-        # 确保输出在 [0, 1]
         output_mask = torch.clamp(output_mask, 0.0, 1.0)
-        print(f"Output mask min: {output_mask.min().item()}, max: {output_mask.max().item()}")
+        if self.DEBUG:
+            print(f"Output mask min: {output_mask.min().item()}, max: {output_mask.max().item()}")
         
-        # 反向蒙版
         if invert_output:
             output_mask = 1.0 - output_mask
         
         return (output_mask,)
-
 
 class XIS_ImagesToCanvas:
     @classmethod
@@ -933,6 +926,8 @@ class XIS_ImagesToCanvas:
                 "image6": ("IMAGE", {"default": None}),
                 "image7": ("IMAGE", {"default": None}),
                 "image8": ("IMAGE", {"default": None}),
+                "image9": ("IMAGE", {"default": None}),
+                "image10": ("IMAGE", {"default": None}),
                 "mask1": ("MASK", {"default": None}),
                 "mask2": ("MASK", {"default": None}),
                 "mask3": ("MASK", {"default": None}),
@@ -941,6 +936,8 @@ class XIS_ImagesToCanvas:
                 "mask6": ("MASK", {"default": None}),
                 "mask7": ("MASK", {"default": None}),
                 "mask8": ("MASK", {"default": None}),
+                "mask9": ("MASK", {"default": None}),
+                "mask10": ("MASK", {"default": None}),
             }
         }
 
@@ -950,9 +947,9 @@ class XIS_ImagesToCanvas:
     CATEGORY = "XISER_Nodes/Canvas"
 
     def pack_images(self, image1, invert_mask, image2=None, image3=None, image4=None, image5=None, 
-                   image6=None, image7=None, image8=None,
+                   image6=None, image7=None, image8=None, image9=None, image10=None,
                    mask1=None, mask2=None, mask3=None, mask4=None, 
-                   mask5=None, mask6=None, mask7=None, mask8=None):
+                   mask5=None, mask6=None, mask7=None, mask8=None, mask9=None, mask10=None):
         
         # 确保 image1 不为 None
         if image1 is None:
@@ -960,14 +957,14 @@ class XIS_ImagesToCanvas:
             raise ValueError("image1 must be provided")
 
         # 收集所有图像和蒙版输入
-        input_images = [image1, image2, image3, image4, image5, image6, image7, image8]
-        input_masks = [mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8]
+        input_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
+        input_masks = [mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8, mask9, mask10]
         
         # 过滤掉 None 的图像输入
         images = [img for img in input_images if img is not None]
         
         # 验证图像数量
-        if len(images) > 8:
+        if len(images) > 20:
             logger.error(f"Too many images: {len(images)}, maximum 8 allowed")
             raise ValueError("Maximum 8 images allowed")
 
