@@ -206,7 +206,7 @@ class XIS_PromptProcessor:
         return {
             "required": {
                 "positive_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入自定义正向提示词"}),
-                "positive_prompt2": ("STRING", {"default": "", "multiline": True, "placeholder": "输入生成的反推提示词"}),
+                "positive_prompt2": ("STRING", {"default": ""}),  # Changed to input interface
                 "negative_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "输入反向提示词"}),
                 "merge_positive": ("BOOLEAN", {
                     "default": True,
@@ -252,6 +252,7 @@ class XIS_PromptProcessor:
     @classmethod
     def IS_CHANGED(cls, positive_prompt1, positive_prompt2, negative_prompt, merge_positive):
         # 根据所有输入参数生成唯一的哈希值
+        import hashlib
         input_hash = hashlib.sha256(
             f"{positive_prompt1}_{positive_prompt2}_{negative_prompt}_{merge_positive}".encode()
         ).hexdigest()
@@ -259,6 +260,115 @@ class XIS_PromptProcessor:
 
     def __init__(self):
         pass
+
+
+class XIS_MultiPromptSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "positive_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入正向提示词"}),
+                "positive_prompt2": ("STRING", {"default": ""}),
+                "enable_prompt2": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "positive_prompt3": ("STRING", {"default": ""}),
+                "enable_prompt3": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "positive_prompt4": ("STRING", {"default": ""}),
+                "enable_prompt4": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "positive_prompt5": ("STRING", {"default": ""}),
+                "enable_prompt5": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "negative_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入反向提示词"}),
+                "negative_prompt2": ("STRING", {"default": ""}),
+                "enable_neg_prompt2": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "negative_prompt3": ("STRING", {"default": ""}),
+                "enable_neg_prompt3": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "negative_prompt4": ("STRING", {"default": ""}),
+                "enable_neg_prompt4": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
+                "negative_prompt5": ("STRING", {"default": ""}),
+                "enable_neg_prompt5": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),  
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("combined_positive_prompt", "combined_negative_prompt")
+
+    FUNCTION = "process_prompts"
+
+    CATEGORY = "XISER_Nodes/Other"
+
+    def process_prompts(self, positive_prompt1, positive_prompt2, positive_prompt3, positive_prompt4, positive_prompt5,
+                        enable_prompt2, enable_prompt3, enable_prompt4, enable_prompt5,
+                        negative_prompt1, negative_prompt2, negative_prompt3, negative_prompt4, negative_prompt5,
+                        enable_neg_prompt2, enable_neg_prompt3, enable_neg_prompt4, enable_neg_prompt5):
+        # 扩展结束符号集合
+        end_symbols = {".", "。", ",", "，", ")", "!", "！", "?", "？", ";", "；"}
+
+        # 处理正向提示词合并
+        positive_prompts = [positive_prompt1.strip()]
+        for prompt, enabled in [
+            (positive_prompt2, enable_prompt2),
+            (positive_prompt3, enable_prompt3),
+            (positive_prompt4, enable_prompt4),
+            (positive_prompt5, enable_prompt5)
+        ]:
+            if enabled and prompt and prompt.strip() != "none":
+                positive_prompts.append(prompt.strip())
+
+        combined_positive = ""
+        for i, prompt in enumerate(positive_prompts):
+            if not prompt:
+                continue
+            if i == 0:
+                combined_positive = prompt
+            else:
+                prev_prompt = positive_prompts[i-1]
+                if prev_prompt and prev_prompt[-1] not in end_symbols:
+                    combined_positive += ".\n" + prompt
+                else:
+                    combined_positive += "\n" + prompt
+
+        # 处理反向提示词合并
+        negative_prompts = [negative_prompt1.strip()]
+        for prompt, enabled in [
+            (negative_prompt2, enable_neg_prompt2),
+            (negative_prompt3, enable_neg_prompt3),
+            (negative_prompt4, enable_neg_prompt4),
+            (negative_prompt5, enable_neg_prompt5)
+        ]:
+            if enabled and prompt and prompt.strip() != "none":
+                negative_prompts.append(prompt.strip())
+
+        combined_negative = ""
+        for i, prompt in enumerate(negative_prompts):
+            if not prompt:
+                continue
+            if i == 0:
+                combined_negative = prompt
+            else:
+                prev_prompt = negative_prompts[i-1]
+                if prev_prompt and prev_prompt[-1] not in end_symbols:
+                    combined_negative += ".\n" + prompt
+                else:
+                    combined_negative += "\n" + prompt
+
+        return (combined_positive, combined_negative)
+
+    @classmethod
+    def IS_CHANGED(cls, positive_prompt1, positive_prompt2, positive_prompt3, positive_prompt4, positive_prompt5,
+                   enable_prompt2, enable_prompt3, enable_prompt4, enable_prompt5,
+                   negative_prompt1, negative_prompt2, negative_prompt3, negative_prompt4, negative_prompt5,
+                   enable_neg_prompt2, enable_neg_prompt3, enable_neg_prompt4, enable_neg_prompt5):
+        # 根据所有输入参数生成唯一的哈希值
+        input_string = f"{positive_prompt1}_{positive_prompt2}_{positive_prompt3}_{positive_prompt4}_{positive_prompt5}_" \
+                       f"{enable_prompt2}_{enable_prompt3}_{enable_prompt4}_{enable_prompt5}_" \
+                       f"{negative_prompt1}_{negative_prompt2}_{negative_prompt3}_{negative_prompt4}_{negative_prompt5}_" \
+                       f"{enable_neg_prompt2}_{enable_neg_prompt3}_{enable_neg_prompt4}_{enable_neg_prompt5}"
+        input_hash = hashlib.sha256(input_string.encode()).hexdigest()
+        return input_hash
+
+    def __init__(self):
+        pass
+
+
 
 # 处理分辨率选择
 class XIS_ResolutionSelector:
@@ -350,4 +460,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
     "XIS_PromptProcessor": XIS_PromptProcessor,
     "XIS_ResolutionSelector": XIS_ResolutionSelector,
+    "XIS_MultiPromptSwitch": XIS_MultiPromptSwitch,
 }
