@@ -51,6 +51,13 @@ XISER_Canvas 画板拓展功能节点：
 
 ![画板工作流展示](img/img_00003.jpeg)
 
+**画板操作视频演示**
+
+<video controls>
+  <source src="http://www.lmxsf.cn/videos/xis_canvas.mp4" type="video/mp4">
+  您的浏览器不支持视频播放。
+</video>
+
 ---
 
 ##  Node color adjustment function
