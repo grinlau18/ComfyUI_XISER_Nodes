@@ -20,7 +20,7 @@ app.registerExtension({
             div.xis-canvas-mask-buttons button.xis-canvas-mask-button {
                 flex: 1;
                 padding: 5px;
-                background: #444;
+                background: rgba(220, 220, 220, 0.1);
                 color: #fff;
                 border: 1px solid #666;
                 border-radius: 4px;
@@ -32,7 +32,7 @@ app.registerExtension({
                 box-sizing: border-box;
             }
             div.xis-canvas-mask-buttons button.xis-canvas-mask-button:hover {
-                background: #555;
+                background:rgba(255, 255, 255, 0.2);
             }
         `;
         document.head.appendChild(style);
