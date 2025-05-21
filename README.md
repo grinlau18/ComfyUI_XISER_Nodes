@@ -4,37 +4,6 @@ Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://
 
 ---
 
-## Introduction to Nodes and Their Functions
-
-
-**配合图生图工作可以生成指定构图，配合文字图层可以轻松制作海报**
-
-![画板工作流展示](img/XIS_Canvas_02.png)
-
-
-**简易画板工作流展示**
-
-![画板工作流展示](img/XIS_Canvas_01.png)
-
-
-XISER_Canvas 是 ComfyUI 中的一个强大扩展节点，旨在提供交互式画布功能，方便用户在工作流中进行图像编辑与管理。用户可以通过设置画布宽高（board_width、board_height）和边框尺寸（border_width），自定义画布大小，并选择背景颜色（canvas_color）。节点支持加载多张图像，显示在画布上，用户可通过拖动、缩放、旋转等操作调整图像位置与大小，同时支持图层管理，选择和切换不同图层以进行精细编辑。画布边界线框始终显示在图层之上，确保视觉清晰。此外，节点提供撤销、重做功能，方便操作回溯；通过“运行节点”按钮可触发工作流更新，“重置画板”则快速恢复初始状态。XISER_Canvas 适用于需要直观图像布局与编辑的场景，提升工作流效率。
-
-
-XISER_Canvas 画板拓展功能节点：
-
-- **XIS_ImagesToCanvas**：通过配套图像打包节点可以同时添加不同尺寸的RGB以及RGBA图像；
-- **XIS_CanvasMaskProcessor**：接收画板输出的蒙版列表，可以自由选择合并指定图层蒙版。
-
-
-XISER_Canvas is a powerful extension node in ComfyUI, designed to provide an interactive canvas function, facilitating image editing and management within workflows. Users can customize the canvas size by setting board_width, board_height, and border_width, and select a background color via canvas_color. The node supports loading multiple images onto the canvas, allowing users to adjust their position, size, and rotation through drag, zoom, and rotate actions, while also offering layer management to select and switch between layers for precise editing. The canvas border frame is always displayed above the layers, ensuring clear visibility. Additionally, the node provides undo/redo functionality for easy operation rollback, a "Run Node" button to trigger workflow updates, and a "Reset Canvas" option to quickly restore the initial state. XISER_Canvas is ideal for scenarios requiring intuitive image layout and editing, enhancing workflow efficiency.
-
-XISER_Canvas Canvas Extension Features:
-
-- **XIS_ImagesToCanvas**: With the companion image packing node, it allows simultaneous addition of RGB and RGBA images of different sizes.
-- **XIS_CanvasMaskProcessor**: Accepts the mask list output from the canvas, enabling free selection and merging of specified layer masks.
-
----
-
 ## Installation
 
 To get started, follow these steps:
@@ -47,6 +16,67 @@ To get started, follow these steps:
 3. Look for nodes under the `XISER_Nodes` category in the ComfyUI interface.
 
 **Dependencies**: Requires `torch`, `PIL`, `numpy`, `opencv-python`, and ComfyUI core libraries (typically installed with ComfyUI).
+
+---
+
+## XISER_Canvas Node Overview
+
+XISER_Canvas is a powerful extension node in ComfyUI, designed to provide an interactive canvas function, facilitating image editing and management within workflows. Users can customize the canvas size by setting board_width, board_height, and border_width, and select a background color via canvas_color. The node supports loading multiple images onto the canvas, allowing users to adjust their position, size, and rotation through drag, zoom, and rotate actions, while also offering layer management to select and switch between layers for precise editing. The canvas border frame is always displayed above the layers, ensuring clear visibility. Additionally, the node provides undo/redo functionality for easy operation rollback, a "Run Node" button to trigger workflow updates, and a "Reset Canvas" option to quickly restore the initial state. XISER_Canvas is ideal for scenarios requiring intuitive image layout and editing, enhancing workflow efficiency.
+
+XISER_Canvas 是 ComfyUI 中的一个强大扩展节点，旨在提供交互式画布功能，方便用户在工作流中进行图像编辑与管理。用户可以通过设置画布宽高（board_width、board_height）和边框尺寸（border_width），自定义画布大小，并选择背景颜色（canvas_color）。节点支持加载多张图像，显示在画布上，用户可通过拖动、缩放、旋转等操作调整图像位置与大小，同时支持图层管理，选择和切换不同图层以进行精细编辑。画布边界线框始终显示在图层之上，确保视觉清晰。此外，节点提供撤销、重做功能，方便操作回溯；通过“运行节点”按钮可触发工作流更新，“重置画板”则快速恢复初始状态。XISER_Canvas 适用于需要直观图像布局与编辑的场景，提升工作流效率。
+
+XISER_Canvas Canvas Extension Features:
+
+XISER_Canvas 画板拓展功能节点：
+
+- **XIS_ImagesToCanvas**: With the companion image packing node, it allows simultaneous addition of RGB and RGBA images of different sizes.
+- **XIS_ImagesToCanvas**：通过配套图像打包节点可以同时添加不同尺寸的RGB以及RGBA图像；
+  
+- **XIS_CanvasMaskProcessor**: Accepts the mask list output from the canvas, enabling free selection and merging of specified layer masks.
+- **XIS_CanvasMaskProcessor**：接收画板输出的蒙版列表，可以自由选择合并指定图层蒙版。
+
+
+**It supports the import of PSD files. You can directly import them into the artboard after dividing the layers in Photoshop.**
+
+**支持导入PSD文件，在Photoshop分好图层后直接导入画板**
+
+![画板工作流展示](img/img_00002.jpeg)
+
+![画板工作流展示](img/img_00001.jpeg)
+
+
+**Multiple images can be imported into the artboard for composition.**
+
+**可接入多张图片到画板中进行构图**
+
+![画板工作流展示](img/img_00003.jpeg)
+
+**画板操作视频演示**
+
+<video controls>
+  <source src="http://www.lmxsf.cn/videos/xis_canvas.mp4" type="video/mp4">
+  您的浏览器不支持视频播放。
+</video>
+
+---
+
+##  Node color adjustment function
+
+**Right-click on the node, select "Change Node Color", and you can separately modify the background colors of the node title and the content area.**
+
+**节点调色功能。在节点上点击鼠标右键，选择更改节点颜色，可以分别修改节点标题以及内容区域的背景颜色**
+
+![画板工作流展示](img/img_00005.jpeg)
+
+---
+
+##  XIS_Label Node Overview
+
+**After adding a node, right-click above the node and select "Edit Text" from the menu. You can use HTML language to input text and set the text style.**
+
+**添加节点后，在节点上方点击鼠标右键，在菜单中选择编辑文字，可以使用html语言来输入文字以及设置文字样式。**
+
+![画板工作流展示](img/img_00004.jpeg)
 
 ---
 
