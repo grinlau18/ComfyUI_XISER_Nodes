@@ -3,6 +3,8 @@
  * @module canvas_konva
  */
 
+import { throttle } from './canvas_state.js';
+
 /**
  * Initializes the Konva.js stage and layers for the canvas.
  * @param {Object} node - The ComfyUI node instance.
@@ -18,19 +20,23 @@
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
 
+  // 定义步长常量
+  const SCALE_STEP = 0.01; // 设置滚轮缩放步长为 5%
+  const ROTATION_STEP = 1; // 设置滚轮旋转步长为 5 度
+
   if (!window.Konva) {
     log.error(`Konva.js not available for node ${node.id}`);
-    throw new Error("Konva.js not loaded");
+    throw new Error('Konva.js not loaded');
   }
 
-  const stageContainer = document.createElement("div");
-  stageContainer.className = "xiser-canvas-stage";
+  const stageContainer = document.createElement('div');
+  stageContainer.className = `xiser-canvas-stage-${node.id}`;
   boardContainer.appendChild(stageContainer);
 
   const stage = new Konva.Stage({
     container: stageContainer,
     width: boardWidth + 2 * borderWidth,
-    height: boardHeight + 2 * borderWidth
+    height: boardHeight + 2 * borderWidth,
   });
 
   const canvasLayer = new Konva.Layer();
@@ -45,7 +51,8 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     y: borderWidth,
     width: boardWidth,
     height: boardHeight,
-    fill: canvasColor
+    fill: canvasColor,
+    listening: false,
   });
 
   const borderRect = new Konva.Rect({
@@ -54,8 +61,9 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     width: boardWidth + 2 * borderWidth,
     height: boardHeight + 2 * borderWidth,
     fill: borderColor,
-    stroke: "#808080",
-    strokeWidth: 2
+    stroke: '#808080',
+    strokeWidth: 2,
+    listening: false,
   });
 
   const borderFrame = new Konva.Rect({
@@ -63,10 +71,10 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     y: borderWidth,
     width: boardWidth,
     height: boardHeight,
-    stroke: "#808080",
+    stroke: '#808080',
     strokeWidth: 2,
     fill: null,
-    listening: false
+    listening: false,
   });
 
   canvasLayer.add(borderRect);
@@ -75,23 +83,21 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
 
   // Initialize transformer
   nodeState.transformer = new Konva.Transformer({
-    centeredScaling: true,
-    rotationSnaps: [0, 45, 90, 135, 180, 225, 270, 315]
+    nodes: [],
+    keepRatio: true,
+    enabledAnchors: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+    rotateEnabled: true,
+    boundBoxFunc: (oldBox, newBox) => {
+      if (newBox.width < 10 || newBox.height < 10) {
+        return oldBox;
+      }
+      return newBox;
+    },
   });
   imageLayer.add(nodeState.transformer);
 
-  // Debounce wheel history updates
-  let wheelTimeout = null;
-  const debounceWheelHistory = () => {
-    if (wheelTimeout) clearTimeout(wheelTimeout);
-    wheelTimeout = setTimeout(() => {
-      if (nodeState.updateHistory) nodeState.updateHistory();
-      log.debug(`Wheel history updated for node ${node.id}`);
-    }, 300);
-  };
-
-  // Event handlers
-  stage.on("click tap", (e) => {
+  // Event handlers for stage
+  stage.on('click tap', (e) => {
     const target = e.target;
     if (target === canvasRect || target === stage || target === borderRect) {
       deselectLayer(nodeState);
@@ -99,98 +105,21 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     }
     if (nodeState.imageNodes.includes(target)) {
       const index = nodeState.imageNodes.indexOf(target);
-      if (nodeState.selectedLayer !== target) selectLayer(nodeState, index);
+      if (nodeState.selectedLayer !== target) {
+        selectLayer(nodeState, index);
+      }
     }
   });
 
-  stage.on("mousedown", (e) => {
-    if (nodeState.imageNodes.includes(e.target)) {
-      const index = nodeState.imageNodes.indexOf(e.target);
+  stage.on('mousedown', (e) => {
+    const target = e.target;
+    if (nodeState.imageNodes.includes(target)) {
+      const index = nodeState.imageNodes.indexOf(target);
       selectLayer(nodeState, index);
     }
   });
 
-  // Transformer event handlers
-  nodeState.transformer.on("dragmove transform", (e) => {
-    const target = e.target;
-    if (!nodeState.imageNodes.includes(target)) return;
-    const index = nodeState.imageNodes.indexOf(target);
-    if (index === -1) return;
-
-    nodeState.initialStates[index] = {
-      x: target.x(),
-      y: target.y(),
-      scaleX: target.scaleX(),
-      scaleY: target.scaleY(),
-      rotation: target.rotation()
-    };
-    node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
-    node.setProperty("image_states", nodeState.initialStates);
-    nodeState.imageLayer.batchDraw();
-    log.debug(`Transformer updated layer ${index} for node ${node.id}: ${JSON.stringify(nodeState.initialStates[index])}`);
-  });
-
-  nodeState.transformer.on("transformend", (e) => {
-    const target = e.target;
-    if (!nodeState.imageNodes.includes(target)) return;
-    const index = nodeState.imageNodes.indexOf(target);
-    if (index === -1) return;
-
-    nodeState.initialStates[index] = {
-      x: target.x(),
-      y: target.y(),
-      scaleX: target.scaleX(),
-      scaleY: target.scaleY(),
-      rotation: target.rotation()
-    };
-    node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
-    node.setProperty("image_states", nodeState.initialStates);
-    if (nodeState.updateHistory) nodeState.updateHistory();
-    nodeState.imageLayer.batchDraw();
-    log.debug(`Transform ended for layer ${index} for node ${node.id}, history updated`);
-  });
-
-  stage.on("wheel", (e) => {
-    e.evt.preventDefault();
-    const target = nodeState.transformer.nodes()[0];
-    if (!target || !nodeState.imageNodes.includes(target)) return;
-
-    const index = nodeState.imageNodes.indexOf(target);
-    if (index === -1) return;
-
-    const isAltPressed = e.evt.altKey;
-    if (isAltPressed) {
-      const rotationStep = 1;
-      const currentRotation = target.rotation();
-      const delta = e.evt.deltaY > 0 ? -rotationStep : rotationStep;
-      target.rotation(currentRotation + delta);
-    } else {
-      const scaleBy = 1.01;
-      const oldScale = target.scaleX();
-      let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-      newScale = Math.min(Math.max(newScale, 0.1), 10);
-      target.scaleX(newScale);
-      target.scaleY(newScale);
-    }
-
-    nodeState.initialStates[index] = {
-      x: target.x(),
-      y: target.y(),
-      scaleX: target.scaleX(),
-      scaleY: target.scaleY(),
-      rotation: target.rotation()
-    };
-    node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
-    node.setProperty("image_states", nodeState.initialStates);
-    debounceWheelHistory();
-    nodeState.imageLayer.batchDraw();
-    log.debug(`Wheel event updated layer ${index} for node ${node.id}`);
-  });
-
-  log.info(`Konva stage initialized for node ${node.id}`);
+  log.info(`Konva stage initialized for node ${node.id} with size ${boardWidth}x${boardHeight}`);
   return {
     stage,
     canvasLayer,
@@ -198,7 +127,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     borderLayer,
     canvasRect,
     borderRect,
-    borderFrame
+    borderFrame,
   };
 }
 
@@ -218,8 +147,15 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
     return;
   }
 
+  // Validate dimensions
+  boardWidth = Math.min(Math.max(parseInt(boardWidth) || 1024, 256), 8192);
+  boardHeight = Math.min(Math.max(parseInt(boardHeight) || 1024, 256), 8192);
+  borderWidth = Math.min(Math.max(parseInt(borderWidth) || 40, 10), 200);
+
   const containerWidth = boardWidth + 2 * borderWidth;
   const containerHeight = boardHeight + 2 * borderWidth;
+
+  log.debug(`Resizing stage for node ${nodeState.nodeId}: board=${boardWidth}x${boardHeight}, container=${containerWidth}x${containerHeight}`);
 
   nodeState.stage.width(containerWidth);
   nodeState.stage.height(containerHeight);
@@ -229,7 +165,7 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
     y: 0,
     width: containerWidth,
     height: containerHeight,
-    fill: borderColor
+    fill: borderColor,
   });
 
   nodeState.canvasRect.setAttrs({
@@ -237,18 +173,21 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
     y: borderWidth,
     width: boardWidth,
     height: boardHeight,
-    fill: canvasColor
+    fill: canvasColor,
   });
 
   nodeState.borderFrame.setAttrs({
     x: borderWidth,
     y: borderWidth,
     width: boardWidth,
-    height: boardHeight
+    height: boardHeight,
   });
 
-  // Update image positions to stay centered
   nodeState.imageNodes.forEach((node, i) => {
+    if (!node) {
+      log.warn(`Skipping resize for null imageNode at index ${i} in node ${nodeState.nodeId}`);
+      return; // Skip null entries
+    }
     const state = nodeState.initialStates[i] || {};
     node.x(borderWidth + boardWidth / 2);
     node.y(borderWidth + boardHeight / 2);
@@ -257,7 +196,7 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
       y: node.y(),
       scaleX: state.scaleX || 1,
       scaleY: state.scaleY || 1,
-      rotation: state.rotation || 0
+      rotation: state.rotation || 0,
     };
   });
 
@@ -266,7 +205,7 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
   nodeState.borderLayer.batchDraw();
   nodeState.stage.draw();
 
-  log.debug(`Stage resized for node ${nodeState.nodeId}: ${containerWidth}x${containerHeight}`);
+  log.info(`Stage resized for node ${nodeState.nodeId}: ${containerWidth}x${containerHeight}`);
 }
 
 /**
@@ -275,43 +214,70 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
  */
 export function destroyKonva(nodeState) {
   const log = nodeState.log || console;
-  if (nodeState.stage) {
-    // Remove event listeners
-    nodeState.stage.off("click tap");
-    nodeState.stage.off("mousedown");
-    nodeState.stage.off("wheel");
-    if (nodeState.transformer) {
-      nodeState.transformer.off("dragmove transform");
-      nodeState.transformer.off("transformend");
-      nodeState.transformer.destroy();
+  try {
+    if (!nodeState.stage) {
+      log.debug(`No Konva stage to destroy for node ${nodeState.nodeId}`);
+      return;
     }
 
-    // Destroy nodes and layers
-    nodeState.imageNodes.forEach(node => node.destroy());
-    nodeState.imageNodes = [];
-    nodeState.canvasLayer.destroy();
-    nodeState.imageLayer.destroy();
-    nodeState.borderLayer.destroy();
-    nodeState.stage.destroy();
+    // Remove event listeners
+    nodeState.stage.off('click tap');
+    nodeState.stage.off('mousedown');
+    nodeState.stage.off('wheel');
 
-    // Reset nodeState properties
-    nodeState.stage = null;
-    nodeState.canvasLayer = null;
-    nodeState.imageLayer = null;
-    nodeState.borderLayer = null;
+    // Destroy transformer
+    if (nodeState.transformer) {
+      nodeState.transformer.off('dragmove transform');
+      nodeState.transformer.off('transformend');
+      nodeState.transformer.nodes([]);
+      nodeState.transformer.destroy();
+      nodeState.transformer = null;
+    }
+
+    // Destroy image nodes
+    nodeState.imageNodes.forEach((node, i) => {
+      if (node) {
+        node.off('dragend transformend');
+        node.destroy();
+      } else {
+        log.warn(`Null imageNode at index ${i} during cleanup for node ${nodeState.nodeId}`);
+      }
+    });
+    nodeState.imageNodes = [];
+
+    // Destroy layers
+    if (nodeState.canvasLayer) {
+      nodeState.canvasLayer.destroy();
+      nodeState.canvasLayer = null;
+    }
+    if (nodeState.imageLayer) {
+      nodeState.imageLayer.destroy();
+      nodeState.imageLayer = null;
+    }
+    if (nodeState.borderLayer) {
+      nodeState.borderLayer.destroy();
+      nodeState.borderLayer = null;
+    }
+
+    // Clear references
     nodeState.canvasRect = null;
     nodeState.borderRect = null;
     nodeState.borderFrame = null;
-    nodeState.transformer = null;
     nodeState.selectedLayer = null;
 
+    // Destroy stage
+    const stageContainer = nodeState.stage.container();
+    nodeState.stage.destroy();
+    nodeState.stage = null;
+
     // Remove stage container
-    const stageContainer = nodeState.stage?.container();
     if (stageContainer && stageContainer.parentNode) {
       stageContainer.remove();
     }
 
-    log.debug(`Konva stage destroyed for node ${nodeState.nodeId}`);
+    log.info(`Konva stage and resources destroyed for node ${nodeState.nodeId}`);
+  } catch (e) {
+    log.error(`Error destroying Konva stage for node ${nodeState.nodeId}: ${e.message}`);
   }
 }
 
@@ -321,7 +287,10 @@ export function destroyKonva(nodeState) {
  * @param {number} index - The layer index.
  */
 export function selectLayer(nodeState, index) {
-  if (index < 0 || index >= nodeState.imageNodes.length) return;
+  if (index < 0 || index >= nodeState.imageNodes.length || !nodeState.imageNodes[index]) {
+    nodeState.log.warn(`Invalid or null layer at index ${index} for node ${nodeState.nodeId}`);
+    return;
+  }
   const log = nodeState.log || console;
   const node = nodeState.imageNodes[index];
   deselectLayer(nodeState);
@@ -329,10 +298,12 @@ export function selectLayer(nodeState, index) {
   node.moveToTop();
   nodeState.transformer.nodes([node]);
   nodeState.imageLayer.batchDraw();
-  nodeState.layerItems.forEach(item => item.classList.remove("selected"));
+  nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
   const listItemIndex = nodeState.imageNodes.length - 1 - index;
-  if (nodeState.layerItems[listItemIndex]) nodeState.layerItems[listItemIndex].classList.add("selected");
-  log.debug(`Selecting layer index ${index} for node ${nodeState.nodeId}`);
+  if (nodeState.layerItems[listItemIndex]) {
+    nodeState.layerItems[listItemIndex].classList.add('selected');
+  }
+  log.debug(`Selected layer index ${index} for node ${nodeState.nodeId}`);
 }
 
 /**
@@ -342,11 +313,11 @@ export function selectLayer(nodeState, index) {
 export function deselectLayer(nodeState) {
   const log = nodeState.log || console;
   if (!nodeState.selectedLayer) return;
-  nodeState.defaultLayerOrder.forEach((node, index) => node.zIndex(index));
+  nodeState.defaultLayerOrder.forEach((node, index) => node?.zIndex(index));
   nodeState.selectedLayer = null;
   nodeState.transformer.nodes([]);
   nodeState.imageLayer.batchDraw();
-  nodeState.layerItems.forEach(item => item.classList.remove("selected"));
+  nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
   log.debug(`Deselected layer for node ${nodeState.nodeId}`);
 }
 
@@ -357,13 +328,84 @@ export function deselectLayer(nodeState) {
 export function applyStates(nodeState) {
   const log = nodeState.log || console;
   nodeState.imageNodes.forEach((node, i) => {
+    if (!node) {
+      log.warn(`Skipping applyStates for null imageNode at index ${i} in node ${nodeState.nodeId}`);
+      return; // Skip null entries
+    }
     const state = nodeState.initialStates[i] || {};
-    node.x(state.x || nodeState.canvasRect.x() + nodeState.canvasRect.width() / 2);
-    node.y(state.y || nodeState.canvasRect.y() + nodeState.canvasRect.height() / 2);
+    node.x(state.x || nodeState.canvasRect?.x() + nodeState.canvasRect?.width() / 2 || 512);
+    node.y(state.y || nodeState.canvasRect?.y() + nodeState.canvasRect?.height() / 2 || 512);
     node.scaleX(state.scaleX || 1);
     node.scaleY(state.scaleY || 1);
     node.rotation(state.rotation || 0);
   });
   nodeState.imageLayer.batchDraw();
   log.debug(`Applied states to ${nodeState.imageNodes.length} image nodes for node ${nodeState.nodeId}`);
+}
+
+/**
+ * Sets up wheel event handlers for zooming and rotating selected layers.
+ * @param {Object} node - The ComfyUI node instance.
+ * @param {Object} nodeState - The node state object.
+ */
+export function setupWheelEvents(node, nodeState) {
+  const log = nodeState.log || console;
+
+  // Throttled function for wheel-based updates (300ms interval)
+  const throttledWheelUpdate = throttle(() => {
+    if (!nodeState.isInteracting) return;
+    const target = nodeState.transformer.nodes()[0];
+    if (!target || !nodeState.imageNodes.includes(target)) return;
+
+    const index = nodeState.imageNodes.indexOf(target);
+    if (index === -1 || !nodeState.imageNodes[index]) {
+      log.warn(`Invalid or null target at index ${index} in node ${node.id}`);
+      return;
+    }
+
+    nodeState.initialStates[index] = {
+      x: target.x(),
+      y: target.y(),
+      scaleX: target.scaleX(),
+      scaleY: target.scaleY(),
+      rotation: target.rotation(),
+    };
+    node.properties.image_states = nodeState.initialStates;
+    node.widgets.find((w) => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+    node.setProperty('image_states', nodeState.initialStates);
+    nodeState.imageLayer.batchDraw();
+    nodeState.updateHistory();
+    log.debug(`Throttled wheel update for layer ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates[index])}`);
+  }, 300);
+
+  // Wheel event handler for zooming and rotating
+  nodeState.stage.on('wheel', (e) => {
+    e.evt.preventDefault();
+    const target = nodeState.transformer.nodes()[0];
+    if (!target || !nodeState.imageNodes.includes(target)) return;
+
+    const index = nodeState.imageNodes.indexOf(target);
+    if (index === -1 || !nodeState.imageNodes[index]) {
+      log.warn(`Invalid or null target at index ${index} in node ${node.id}`);
+      return;
+    }
+
+    nodeState.isInteracting = true;
+    const isAltPressed = e.evt.altKey;
+    if (isAltPressed) {
+      const rotationStep = 1;
+      const currentRotation = target.rotation();
+      const delta = e.evt.deltaY > 0 ? -rotationStep : rotationStep;
+      target.rotation(currentRotation + delta);
+    } else {
+      const scaleBy = 1.01;
+      const oldScale = target.scaleX();
+      let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+      newScale = Math.min(Math.max(newScale, 0.1), 10);
+      target.scaleX(newScale);
+      target.scaleY(newScale);
+    }
+
+    throttledWheelUpdate();
+  });
 }

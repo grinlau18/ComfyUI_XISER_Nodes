@@ -1,28 +1,38 @@
-# 小贴纸节点
+import logging
 from typing import Any
 
-print("注册 XIS_Label 节点")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("XIS_Label")
+
+logger.info("Registering XIS_Label node")
 
 class XIS_Label:
     @classmethod
     def INPUT_TYPES(cls) -> dict:
-        return {}  # 无输入参数
+        """Returns the input types for the node."""
+        return {}  # No input parameters
 
-    RETURN_TYPES = ()  # 无返回值
-    FUNCTION = "execute"  # 节点执行的函数名
-    CATEGORY = "XISER_Nodes/UIControl"  # 节点分类
+    RETURN_TYPES = ()  # No return values
+    FUNCTION = "execute"  # Node execution function
+    CATEGORY = "XISER_Nodes/UIControl"  # Node category
 
     def execute(self) -> None:
-        """空函数，节点无实际功能"""
+        """Executes the node, performing no functional logic."""
+        logger.debug("Executing XIS_Label node")
         pass
 
-    def onNodeCreated(self):
-        """初始化节点属性"""
+    def onNodeCreated(self) -> None:
+        """Initializes node properties on creation."""
+        logger.debug("Creating XIS_Label node")
         self.properties = self.properties or {}
-        self.properties["textData"] = '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'
-        self.color = "#333355"  # 默认深灰色
+        self.properties["textData"] = (
+            '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p>'
+            '<p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'
+        )
+        self.color = "#333355"  # Default dark gray
 
-# 节点映射
+# Node mappings for registration
 NODE_CLASS_MAPPINGS = {
     "XIS_Label": XIS_Label,
 }

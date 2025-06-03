@@ -8,9 +8,12 @@ import base64
 from io import BytesIO
 import json
 
+# Log level control
+LOG_LEVEL = "error"  # Options: "info", "warning", "error" (default: "error" for production)
+
 # Initialize logger
 logger = logging.getLogger("XISER_ReorderImages")
-logger.setLevel(logging.INFO)
+logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.ERROR))
 
 class XIS_ReorderImages:
     """A custom node for reordering images with support for single mode and layer toggling."""
@@ -22,7 +25,8 @@ class XIS_ReorderImages:
         os.makedirs(self.output_dir, exist_ok=True)
         self.last_input_hash = None
         self.image_order = []
-        logger.info(f"XIS_ReorderImages initialized with output directory: {self.output_dir}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"XIS_ReorderImages initialized with output directory: {self.output_dir}")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -85,16 +89,19 @@ class XIS_ReorderImages:
             list: Validated order of image indices.
         """
         if not isinstance(order, list) or not order:
-            logger.warning(f"Invalid image_order: {order}, using enabled layers")
+            if logger.isEnabledFor(logging.WARNING):
+                logger.warning(f"Invalid image_order: {order}, using enabled layers")
             return [i for i in range(num_images) if enabled_layers[i]]
         valid_order = [
             idx for idx in order
             if isinstance(idx, int) and 0 <= idx < num_images and enabled_layers[idx]
         ]
         if not valid_order:
-            logger.warning(f"No valid enabled indices in image_order: {order}, using enabled layers")
+            if logger.isEnabledFor(logging.WARNING):
+                logger.warning(f"No valid enabled indices in image_order: {order}, using enabled layers")
             return [i for i in range(num_images) if enabled_layers[i]]
-        logger.info(f"Validated order: {valid_order}, enabled: {enabled_layers}")
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(f"Validated order: {valid_order}, enabled: {enabled_layers}")
         return valid_order
 
     def _normalize_images_for_preview(self, image_list):
@@ -128,22 +135,25 @@ class XIS_ReorderImages:
         Returns:
             dict: Contains UI data and result tuple with reordered pack_images and images.
         """
-        logger.info(
-            f"Received pack_images: {len(pack_images)} images, "
-            f"image_order: {image_order}, enabled_layers: {enabled_layers}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"Received pack_images: {len(pack_images)} images, "
+                f"image_order: {image_order}, enabled_layers: {enabled_layers}"
+            )
 
         # Validate input
         if pack_images is None or not isinstance(pack_images, list):
-            logger.error(f"Invalid pack_images: expected list, got {type(pack_images)}")
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error(f"Invalid pack_images: expected list, got {type(pack_images)}")
             raise ValueError("pack_images must be provided as a list")
 
         if not pack_images:
-            logger.error("No images provided")
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error("No images provided")
             raise ValueError("At least one image must be provided")
 
         # Warn about potential performance issues
-        if len(pack_images) > 50:
+        if len(pack_images) > 50 and logger.isEnabledFor(logging.WARNING):
             logger.warning(
                 f"Large number of images detected: {len(pack_images)}. "
                 "This may impact performance."
@@ -151,9 +161,10 @@ class XIS_ReorderImages:
 
         for img in pack_images:
             if not isinstance(img, torch.Tensor) or img.shape[-1] != 4:
-                logger.error(
-                    f"Invalid image format: expected RGBA torch.Tensor, got {img.shape}"
-                )
+                if logger.isEnabledFor(logging.ERROR):
+                    logger.error(
+                        f"Invalid image format: expected RGBA torch.Tensor, got {img.shape}"
+                    )
                 raise ValueError("All images must be RGBA torch.Tensor")
 
         # Parse and validate enabled layers
@@ -164,13 +175,15 @@ class XIS_ReorderImages:
                 else [True] * len(pack_images)
             )
             if len(enabled) != len(pack_images):
-                logger.warning(
-                    f"Invalid enabled_layers length: {len(enabled)}, "
-                    "aligning with pack_images"
-                )
+                if logger.isEnabledFor(logging.WARNING):
+                    logger.warning(
+                        f"Invalid enabled_layers length: {len(enabled)}, "
+                        "aligning with pack_images"
+                    )
                 enabled = [True] * len(pack_images)
         except Exception as e:
-            logger.error(f"Failed to parse enabled_layers: {e}")
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error(f"Failed to parse enabled_layers: {e}")
             enabled = [True] * len(pack_images)
 
         # Parse and validate image order
@@ -180,9 +193,11 @@ class XIS_ReorderImages:
                 if image_order and image_order != "[]"
                 else [i for i in range(len(pack_images)) if enabled[i]]
             )
-            logger.info(f"Parsed image_order: {order}")
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Parsed image_order: {order}")
         except Exception as e:
-            logger.error(f"Failed to parse image_order: {e}")
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error(f"Failed to parse image_order: {e}")
             order = [i for i in range(len(pack_images)) if enabled[i]]
 
         # Check if image count has changed
@@ -190,10 +205,11 @@ class XIS_ReorderImages:
         image_count_changed = prev_image_count != len(pack_images)
 
         if image_count_changed:
-            logger.info(
-                f"Image count changed from {prev_image_count} to {len(pack_images)}, "
-                "resetting order and enabled layers"
-            )
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(
+                    f"Image count changed from {prev_image_count} to {len(pack_images)}, "
+                    "resetting order and enabled layers"
+                )
             # Initialize enabled_layers based on single_mode
             enabled = (
                 [True] + [False] * (len(pack_images) - 1)
@@ -203,10 +219,11 @@ class XIS_ReorderImages:
             # Initialize order to only include enabled indices
             order = [i for i in range(len(pack_images)) if enabled[i]]
         else:
-            logger.info(
-                f"Image count unchanged ({len(pack_images)}), "
-                "preserving order and enabled layers"
-            )
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(
+                    f"Image count unchanged ({len(pack_images)}), "
+                    "preserving order and enabled layers"
+                )
             order = self._validate_image_order(order, len(pack_images), enabled)
 
         # Generate image previews and metadata
@@ -224,10 +241,11 @@ class XIS_ReorderImages:
 
         # Reorder and filter images for both pack_images and images outputs
         reordered_images = [pack_images[i] for i in order if enabled[i]]
-        logger.info(
-            f"Filtered order: {order}, enabled: {enabled}, "
-            f"output_images: {len(reordered_images)}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"Filtered order: {order}, enabled: {enabled}, "
+                f"output_images: {len(reordered_images)}"
+            )
 
         # Prepare images output (filtered and ordered according to image_order and enabled_layers)
         normalized_images = self._normalize_images_for_preview(
@@ -239,11 +257,12 @@ class XIS_ReorderImages:
         self.properties["image_order"] = order
         self.properties["enabled_layers"] = enabled
 
-        logger.info(
-            f"Returning reordered images: order={order}, "
-            f"enabled_layers={enabled}, pack_images_output={len(reordered_images)}, "
-            f"images_output={len(normalized_images)}"
-        )
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                f"Returning reordered images: order={order}, "
+                f"enabled_layers={enabled}, pack_images_output={len(reordered_images)}, "
+                f"images_output={len(normalized_images)}"
+            )
         return {
             "ui": {
                 "image_previews": image_previews,
@@ -257,4 +276,5 @@ class XIS_ReorderImages:
 NODE_CLASS_MAPPINGS = {
     "XIS_ReorderImages": XIS_ReorderImages
 }
-logger.info("XIS_ReorderImages node registered")
+if logger.isEnabledFor(logging.INFO):
+    logger.info("XIS_ReorderImages node registered")

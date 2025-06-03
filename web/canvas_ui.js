@@ -7,10 +7,20 @@
  * Initializes UI components for the XISER_Canvas node.
  * @param {Object} node - The ComfyUI node instance.
  * @param {Object} nodeState - The node state object containing log and other properties.
+ * @param {HTMLDivElement} widgetContainer - The container for the DOM widget.
  * @returns {Object} UI elements and related functions.
  */
-export function initializeUI(node, nodeState) {
+export function initializeUI(node, nodeState, widgetContainer) {
   const log = nodeState.log || console;
+
+  // Configurable button positions (px, at displayScale = 1)
+  const BUTTON_POSITIONS = {
+    trigger: 130, // Queue button
+    instruction: 30, // Tips button
+    reset: 254, // Reset button
+    undo: 480, // Undo button
+    redo: 370 // Redo button
+  };
 
   /**
    * Creates and appends CSS styles for the UI components.
@@ -19,29 +29,23 @@ export function initializeUI(node, nodeState) {
   function setupStyles() {
     const style = document.createElement("style");
     style.textContent = `
-      .xiser-canvas-container {
-        position: absolute;
+      .xiser-canvas-container-${nodeState.nodeId} {
+        position: relative;
         box-sizing: border-box;
-        overflow: visible;
-        z-index: 1000;
+        overflow: hidden;
+        z-index: 10;
         pointer-events: none;
+        display: block;
+        background: transparent;
       }
-      .xiser-canvas-stage {
+      .xiser-canvas-stage-${nodeState.nodeId} {
         position: absolute;
         top: 0;
         left: 0;
         background: transparent;
         pointer-events: auto;
       }
-      .xiser-main-container {
-        position: absolute;
-        display: block;
-        background: transparent;
-        overflow: visible;
-        pointer-events: none;
-        transform-origin: top left;
-      }
-      .xiser-status-text {
+      .xiser-status-text-${nodeState.nodeId} {
         position: absolute;
         top: 10px;
         left: 10px;
@@ -50,17 +54,17 @@ export function initializeUI(node, nodeState) {
         border-radius: 5px;
         padding: 5px;
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 20px;
         z-index: 10;
         pointer-events: none;
       }
-      .xiser-button {
+      .xiser-button-${nodeState.nodeId} {
         position: absolute;
         top: 10px;
         color: #fff;
         padding: 6px 10px;
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 20px;
         border: none;
         cursor: pointer;
         z-index: 10;
@@ -68,15 +72,15 @@ export function initializeUI(node, nodeState) {
         border-radius: 5px;
         pointer-events: auto;
       }
-      .xiser-button:hover {
+      .xiser-button-${nodeState.nodeId}:hover {
         background-color: rgb(30, 121, 195);
       }
-      .xiser-trigger-button { right: 80px; }
-      .xiser-instruction-button { right: 10px; }
-      .xiser-reset-button { right: 164px; }
-      .xiser-undo-button { right: 320px; }
-      .xiser-redo-button { right: 244px; }
-      .xiser-layer-panel {
+      .xiser-trigger-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.trigger}px; }
+      .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction}px; }
+      .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset}px; }
+      .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo}px; }
+      .xiser-redo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.redo}px; }
+      .xiser-layer-panel-${nodeState.nodeId} {
         position: absolute;
         top: 50px;
         left: 10px;
@@ -84,27 +88,27 @@ export function initializeUI(node, nodeState) {
         color: #fff;
         padding: 10px;
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 20px;
         z-index: 10;
         max-height: 200px;
         overflow-y: auto;
         border-radius: 5px;
         pointer-events: auto;
       }
-      .xiser-layer-item {
+      .xiser-layer-item-${nodeState.nodeId} {
         padding: 5px;
         cursor: pointer;
         border-bottom: 1px solid #444;
         pointer-events: auto;
       }
-      .xiser-layer-item:hover {
+      .xiser-layer-item-${nodeState.nodeId}:hover {
         background-color: #555;
       }
-      .xiser-layer-item.selected {
+      .xiser-layer-item-${nodeState.nodeId}.selected {
         background-color: rgb(30, 121, 195);
         color: #fff;
       }
-      .xiser-modal {
+      .xiser-modal-${nodeState.nodeId} {
         display: none;
         position: fixed;
         top: 0;
@@ -117,7 +121,7 @@ export function initializeUI(node, nodeState) {
         align-items: center;
         pointer-events: auto;
       }
-      .xiser-modal-content {
+      .xiser-modal-content-${nodeState.nodeId} {
         background-color: rgb(30, 35, 49);
         padding: 20px;
         border-radius: 5px;
@@ -129,16 +133,16 @@ export function initializeUI(node, nodeState) {
         color: #aaa;
         pointer-events: auto;
       }
-      .xiser-modal-content h3 {
+      .xiser-modal-content-${nodeState.nodeId} h3 {
         margin-top: 0;
         font-size: 18px;
         color: #fff;
       }
-      .xiser-modal-content ul {
+      .xiser-modal-content-${nodeState.nodeId} ul {
         padding-left: 20px;
         margin: 10px 0;
       }
-      .xiser-modal-content li {
+      .xiser-modal-content-${nodeState.nodeId} li {
         margin-bottom: 10px;
       }
     `;
@@ -147,29 +151,19 @@ export function initializeUI(node, nodeState) {
   }
 
   /**
-   * Creates the main container for the canvas UI.
-   * @returns {HTMLDivElement} The main container element.
-   */
-  function createMainContainer() {
-    const mainContainer = document.createElement("div");
-    mainContainer.className = "xiser-main-container";
-    mainContainer.dataset.nodeId = nodeState.nodeId;
-    document.body.appendChild(mainContainer);
-    return mainContainer;
-  }
-
-  /**
-   * Creates the board container and status text.
+   * Creates the board container and status text within the widget container.
+   * @param {HTMLDivElement} container - The container provided by addDOMWidget.
    * @returns {Object} Container and status text elements.
    */
-  function createBoardContainer() {
-    const boardContainer = document.createElement("div");
-    boardContainer.className = "xiser-canvas-container";
+  function createBoardContainer(container) {
+    container.className = `xiser-canvas-container-${nodeState.nodeId}`;
+    container.style.display = "block";
     const statusText = document.createElement("div");
-    statusText.className = "xiser-status-text";
+    statusText.className = `xiser-status-text-${nodeState.nodeId}`;
     statusText.innerText = "等待图像...";
-    boardContainer.appendChild(statusText);
-    return { boardContainer, statusText };
+    container.appendChild(statusText);
+    log.debug(`Board container created for node ${nodeState.nodeId}, display: ${container.style.display}`);
+    return { boardContainer: container, statusText };
   }
 
   /**
@@ -178,7 +172,7 @@ export function initializeUI(node, nodeState) {
    */
   function createButtons() {
     const triggerButton = document.createElement("button");
-    triggerButton.className = "xiser-button xiser-trigger-button";
+    triggerButton.className = `xiser-button-${nodeState.nodeId} xiser-trigger-button-${nodeState.nodeId}`;
     triggerButton.innerText = "▶️ Queue";
     triggerButton.onclick = () => {
       log.info(`Queue button clicked for node ${nodeState.nodeId}`);
@@ -186,15 +180,16 @@ export function initializeUI(node, nodeState) {
     };
 
     const instructionButton = document.createElement("button");
-    instructionButton.className = "xiser-button xiser-instruction-button";
+    instructionButton.className = `xiser-button-${nodeState.nodeId} xiser-instruction-button-${nodeState.nodeId}`;
     instructionButton.innerText = "ℹ️ Tips";
     instructionButton.onclick = () => {
       log.info(`Tips button clicked for node ${nodeState.nodeId}`);
+      nodeState.modalVisible = true;
       modal.style.display = "flex";
     };
 
     const resetButton = document.createElement("button");
-    resetButton.className = "xiser-button xiser-reset-button";
+    resetButton.className = `xiser-button-${nodeState.nodeId} xiser-reset-button-${nodeState.nodeId}`;
     resetButton.innerText = "🔁 Reset";
     resetButton.onclick = () => {
       log.info(`Reset button clicked for node ${nodeState.nodeId}`);
@@ -202,7 +197,7 @@ export function initializeUI(node, nodeState) {
     };
 
     const undoButton = document.createElement("button");
-    undoButton.className = "xiser-button xiser-undo-button";
+    undoButton.className = `xiser-button-${nodeState.nodeId} xiser-undo-button-${nodeState.nodeId}`;
     undoButton.innerText = "↩️ Undo";
     undoButton.onclick = () => {
       log.info(`Undo button clicked for node ${nodeState.nodeId}`);
@@ -210,7 +205,7 @@ export function initializeUI(node, nodeState) {
     };
 
     const redoButton = document.createElement("button");
-    redoButton.className = "xiser-button xiser-redo-button";
+    redoButton.className = `xiser-button-${nodeState.nodeId} xiser-redo-button-${nodeState.nodeId}`;
     redoButton.innerText = "↪️ Redo";
     redoButton.onclick = () => {
       log.info(`Redo button clicked for node ${nodeState.nodeId}`);
@@ -226,10 +221,10 @@ export function initializeUI(node, nodeState) {
    */
   function createModal() {
     const modal = document.createElement("div");
-    modal.className = "xiser-modal";
+    modal.className = `xiser-modal-${nodeState.nodeId}`;
     modal.id = `xiser-modal-${nodeState.nodeId}`;
     const modalContent = document.createElement("div");
-    modalContent.className = "xiser-modal-content";
+    modalContent.className = `xiser-modal-content-${nodeState.nodeId}`;
     modalContent.innerHTML = `
       <h3>操作方法</h3>
       <ul>
@@ -238,6 +233,7 @@ export function initializeUI(node, nodeState) {
         <li>通过左上角的图层面板可选择图层并置顶</li>
         <li>取消图层选择可恢复原始图层顺序</li>
         <li>打开"auto_size"开关后，画板会自动调整为第一张图的尺寸</li>
+        <li>调整"display_scale"可改变画板显示大小，不影响实际输出尺寸</li>
       </ul>
       <h3>Operation Method</h3>
       <ul>
@@ -246,6 +242,7 @@ export function initializeUI(node, nodeState) {
         <li>Use the layer panel in the top-left to select and bring layers to top</li>
         <li>Deselect a layer to restore original layer order</li>
         <li>Enable "auto_size" to adjust the canvas to the first image's size</li>
+        <li>Adjust "display_scale" to change the canvas display size without affecting output</li>
       </ul>
     `;
     modal.appendChild(modalContent);
@@ -259,7 +256,7 @@ export function initializeUI(node, nodeState) {
    */
   function createLayerPanel() {
     const layerPanel = document.createElement("div");
-    layerPanel.className = "xiser-layer-panel";
+    layerPanel.className = `xiser-layer-panel-${nodeState.nodeId}`;
     return layerPanel;
   }
 
@@ -274,7 +271,7 @@ export function initializeUI(node, nodeState) {
     nodeState.layerItems = [];
     for (let index = nodeState.imageNodes.length - 1; index >= 0; index--) {
       const item = document.createElement("div");
-      item.className = "xiser-layer-item";
+      item.className = `xiser-layer-item-${nodeState.nodeId}`;
       item.innerText = `Layer ${index + 1}`;
       item.dataset.index = index;
       layerPanel.appendChild(item);
@@ -294,44 +291,92 @@ export function initializeUI(node, nodeState) {
     log.debug(`Layer panel updated for node ${nodeState.nodeId}, items: ${nodeState.layerItems.length}`);
   }
 
+  /**
+   * Updates UI element scales based on display_scale.
+   * @param {number} displayScale - The display scale factor (e.g., 1.5 for 150%).
+   */
+  function updateUIScale(displayScale) {
+    // Remove existing node-specific styles
+    document.querySelectorAll(`style#xiser-styles-${nodeState.nodeId}`).forEach(s => s.remove());
+
+    // Create new styles with scaled positions and sizes
+    const style = document.createElement("style");
+    style.id = `xiser-styles-${nodeState.nodeId}`;
+    style.textContent = `
+      .xiser-status-text-${nodeState.nodeId} {
+        top: ${10 * displayScale}px;
+        left: ${10 * displayScale}px;
+        border-radius: ${5 * displayScale}px;
+        padding: ${5 * displayScale}px;
+        font-size: ${20 * displayScale}px;
+      }
+      .xiser-button-${nodeState.nodeId} {
+        top: ${10 * displayScale}px;
+        padding: ${6 * displayScale}px ${10 * displayScale}px;
+        font-size: ${20 * displayScale}px;
+        border-radius: ${5 * displayScale}px;
+      }
+      .xiser-trigger-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.trigger * displayScale}px; }
+      .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction * displayScale}px; }
+      .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset * displayScale}px; }
+      .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo * displayScale}px; }
+      .xiser-redo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.redo * displayScale}px; }
+      .xiser-layer-panel-${nodeState.nodeId} {
+        top: ${50 * displayScale}px;
+        left: ${10 * displayScale}px;
+        padding: ${10 * displayScale}px;
+        font-size: ${20 * displayScale}px;
+        max-height: ${200 * displayScale}px;
+        border-radius: ${5 * displayScale}px;
+      }
+      .xiser-layer-item-${nodeState.nodeId} {
+        padding: ${5 * displayScale}px;
+        border-bottom: ${1 * displayScale}px solid #444;
+      }
+    `;
+    document.head.appendChild(style);
+    log.debug(`UI elements scaled for node ${nodeState.nodeId} with displayScale: ${displayScale}`);
+  }
+
   // Initialize UI components
   setupStyles();
-  const mainContainer = createMainContainer();
-  const { boardContainer, statusText } = createBoardContainer();
+  const { boardContainer, statusText } = createBoardContainer(widgetContainer);
   const { modal, modalContent } = createModal();
   const layerPanel = createLayerPanel();
   const buttons = createButtons();
 
-  // Append elements
+  // Append UI elements
   boardContainer.appendChild(buttons.triggerButton);
   boardContainer.appendChild(buttons.instructionButton);
   boardContainer.appendChild(buttons.resetButton);
   boardContainer.appendChild(buttons.undoButton);
   boardContainer.appendChild(buttons.redoButton);
   boardContainer.appendChild(layerPanel);
-  mainContainer.appendChild(boardContainer);
 
   // Modal close event
   modal.addEventListener("click", (e) => {
     if (e.target === modal) {
       log.debug(`Modal closed for node ${nodeState.nodeId}`);
+      nodeState.modalVisible = false;
       modal.style.display = "none";
     }
   });
 
   // Add node-specific CSS class
-  if (node.getHTMLElement) {
-    const element = node.getHTMLElement();
-    if (element) element.classList.add("xiser-node");
-  }
+  node.addCustomCssClass?.("xiser-node");
 
+  // Initialize scaling
+  updateUIScale(node.properties?.ui_config?.display_scale || 1);
+
+  log.debug(`UI initialized for node ${nodeState.nodeId}, widgetContainer display: ${widgetContainer.style.display}`);
   return {
-    mainContainer,
+    widgetContainer,
     boardContainer,
     statusText,
     modal,
     layerPanel,
     buttons,
-    updateLayerPanel
+    updateLayerPanel,
+    updateUIScale
   };
 }

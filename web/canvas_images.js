@@ -41,16 +41,41 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   const imageCache = globalImageCache.get(nodeId);
   const loadedImageUrls = globalLoadedImageUrls.get(nodeId);
 
-  if (!imagePaths?.length) {
-    log.info(`No image paths provided for node ${nodeId}`);
+  // Validate imagePaths
+  if (!Array.isArray(imagePaths) || !imagePaths.length || imagePaths.every(path => !path || typeof path !== 'string')) {
+    log.info(`No valid image paths provided for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
     statusText.innerText = "无图像数据";
     statusText.style.color = "#f00";
     return;
   }
 
-  // Check for duplicate imagePaths
-  const pathsHash = JSON.stringify(imagePaths);
-  if (nodeState.lastImagePathsHash === pathsHash) {
+  // Filter valid image paths
+  const validImagePaths = imagePaths.filter(path => typeof path === 'string' && path.trim().length > 0);
+  if (validImagePaths.length === 0) {
+    log.info(`No valid image paths after filtering for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
+    statusText.innerText = "无有效图像路径";
+    statusText.style.color = "#f00";
+    return;
+  }
+
+  // Log invalid paths for debugging
+  const invalidPaths = imagePaths.filter(path => !validImagePaths.includes(path));
+  if (invalidPaths.length) {
+    log.warn(`Invalid image paths filtered out for node ${nodeId}: ${JSON.stringify(invalidPaths)}`);
+  }
+
+  // Clear cache for provided image paths
+  validImagePaths.forEach((path) => {
+    if (imageCache.has(path)) {
+      log.debug(`Clearing cache for path ${path} in node ${nodeId}`);
+      imageCache.delete(path);
+      loadedImageUrls.delete(path);
+    }
+  });
+
+  const autoSize = node.properties.ui_config.auto_size || "off";
+  const pathsHash = JSON.stringify(validImagePaths);
+  if (nodeState.lastImagePathsHash === pathsHash && autoSize !== "on") {
     log.debug(`Skipping loadImages for node ${nodeId}: identical imagePaths`);
     return;
   }
@@ -62,20 +87,25 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   }
   nodeState.isLoading = true;
 
-  log.info(`Starting loadImages for node ${nodeId}, imagePaths: ${JSON.stringify(imagePaths)}, length: ${imagePaths.length}, current imageNodes: ${nodeState.imageNodes.length}`);
+  log.info(`Starting loadImages for node ${nodeId}, imagePaths: ${JSON.stringify(validImagePaths)}, length: ${validImagePaths.length}, current imageNodes: ${nodeState.imageNodes.length}`);
 
-  nodeState.imageNodes.forEach(node => node.destroy());
-  nodeState.imageNodes = [];
+  // Clear existing image nodes
+  nodeState.imageNodes.forEach(node => node?.destroy());
+  nodeState.imageNodes = new Array(validImagePaths.length).fill(null); // Initialize with nulls
   nodeState.imageLayer.destroyChildren();
   nodeState.imageLayer.batchDraw();
 
   const borderWidth = node.properties.ui_config.border_width || 40;
-  const boardWidth = node.properties.ui_config.board_width || 1024;
-  const boardHeight = node.properties.ui_config.board_height || 1024;
-  const autoSize = node.properties.ui_config.auto_size || "off";
-  log.debug(`Auto_size state for node ${nodeId}: ${autoSize}`);
+  let boardWidth = node.properties.ui_config.board_width || 1024;
+  let boardHeight = node.properties.ui_config.board_height || 1024;
 
-  nodeState.initialStates = imagePaths.map(() => ({
+  // Handle auto_size with first image dimensions
+  if (autoSize === "on" && validImagePaths.length) {
+    log.debug(`Auto_size enabled for node ${nodeId}, will adjust based on first image`);
+  }
+
+  // Initialize states
+  nodeState.initialStates = validImagePaths.map(() => ({
     x: borderWidth + boardWidth / 2,
     y: borderWidth + boardHeight / 2,
     scaleX: 1,
@@ -86,55 +116,104 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     if (i < nodeState.initialStates.length) nodeState.initialStates[i] = { ...nodeState.initialStates[i], ...state };
   });
 
-  const images = imagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
+  const images = validImagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
   statusText.innerText = `加载图像... 0/${images.length}`;
   statusText.style.color = "#fff";
 
   let loadedCount = 0;
-  let originalBoardWidth = boardWidth;
-  let originalBoardHeight = boardHeight;
 
-  for (let i = 0; i < images.length; i++) {
-    const imgData = images[i];
-    try {
-      let img = imageCache.get(imgData.filename);
-      if (!img) {
-        img = new Image();
-        const imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
-        const response = await fetch(imgUrl, { method: 'HEAD' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        img.src = imgUrl;
-        await new Promise((resolve, reject) => {
-          img.onload = () => {
-            imageCache.set(imgData.filename, img);
-            loadedImageUrls.set(imgData.filename, imgUrl);
-            resolve();
-          };
-          img.onerror = () => {
-            log.error(`Failed to load image ${imgData.filename} for node ${nodeId}`);
-            if (retryCount < maxRetries) setTimeout(() => loadImages(node, nodeState, [imgData.filename], [states[i]], statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks, retryCount + 1, maxRetries), 1000);
-            resolve();
-          };
-        });
+  // Load images concurrently with Promise.allSettled
+  const loadImagePromises = images.map((imgData, i) => {
+    return new Promise((resolve) => {
+      if (!imgData?.filename) {
+        log.error(`Invalid imgData at index ${i} for node ${nodeId}: ${JSON.stringify(imgData)}`);
+        resolve({ img: null, index: i, success: false });
+        return;
       }
 
-      if (autoSize === "on" && i === 0) {
-        originalBoardWidth = boardWidth;
-        originalBoardHeight = boardHeight;
-        node.properties.ui_config.board_width = Math.min(Math.max(parseInt(img.width), 256), 4096);
-        node.properties.ui_config.board_height = Math.min(Math.max(parseInt(img.height), 256), 4096);
-        statusText.innerText = `画板尺寸已调整为 ${node.properties.ui_config.board_width}x${node.properties.ui_config.board_height}`;
-        statusText.style.color = "#0f0";
-        if (typeof updateSize === 'function') {
-          updateSize(node, nodeState);
-          nodeState.stage.draw(); // Force full redraw
-          log.debug(`updateSize called for auto_size in node ${nodeId}: ${node.properties.ui_config.board_width}x${node.properties.ui_config.board_height}`);
-        } else {
-          log.info(`updateSize is not a function for node ${nodeId}, skipping canvas size update`);
+      let img = imageCache.get(imgData.filename);
+      if (img) {
+        resolve({ img, index: i, success: true });
+        return;
+      }
+
+      img = new Image();
+      const imgUrl = `/view?filename=${encodeURIComponent(imgData.filename)}&subfolder=${encodeURIComponent(imgData.subfolder || '')}&type=${imgData.type}&rand=${Math.random()}`;
+      img.src = imgUrl;
+
+      img.onload = () => {
+        imageCache.set(imgData.filename, img);
+        loadedImageUrls.set(imgData.filename, imgUrl);
+        resolve({ img, index: i, success: true });
+      };
+      img.onerror = () => {
+        log.error(`Failed to load image ${imgData.filename} for node ${nodeId}`);
+        if (retryCount < maxRetries) {
+          log.info(`Retrying image ${imgData.filename} for node ${nodeId}, attempt ${retryCount + 1}`);
+          setTimeout(() => loadImages(node, nodeState, [imgData.filename], [states[i] || {}], statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks, retryCount + 1, maxRetries), 1000);
+        }
+        resolve({ img: null, index: i, success: false });
+      };
+    });
+  });
+
+  const results = await Promise.allSettled(loadImagePromises);
+
+  for (const result of results) {
+    if (result.status !== 'fulfilled') {
+      log.error(`Promise rejected for image index ${result.reason?.index} in node ${nodeId}`);
+      continue;
+    }
+
+    const { img, index, success } = result.value;
+    if (!success || !img) {
+      log.warn(`Image at index ${index} failed to load for node ${nodeId}`);
+      continue;
+    }
+
+    try {
+      // Handle auto_size for first image
+      if (autoSize === "on" && index === 0) {
+        const newBoardWidth = Math.min(Math.max(parseInt(img.width), 256), 8192);
+        const newBoardHeight = Math.min(Math.max(parseInt(img.height), 256), 8192);
+        log.info(`First image dimensions for node ${nodeId}: ${img.width}x${img.height}, adjusted to ${newBoardWidth}x${newBoardHeight}`);
+        if (newBoardWidth !== boardWidth || newBoardHeight !== boardHeight) {
+          node.properties.ui_config.board_width = newBoardWidth;
+          node.properties.ui_config.board_height = newBoardHeight;
+          boardWidth = newBoardWidth;
+          boardHeight = newBoardHeight;
+          node.widgets.find(w => w.name === "board_width").value = boardWidth;
+          node.widgets.find(w => w.name === "board_height").value = boardHeight;
+          statusText.innerText = `画板尺寸已调整为 ${boardWidth}x${boardHeight}`;
+          statusText.style.color = "#0f0";
+          log.info(`Auto-size enabled, adjusted canvas to ${boardWidth}x${newBoardHeight} from first image for node ${nodeId}`);
+
+          // Update initial states with new dimensions
+          nodeState.initialStates = validImagePaths.map(() => ({
+            x: borderWidth + boardWidth / 2,
+            y: borderWidth + boardHeight / 2,
+            scaleX: 1,
+            scaleY: 1,
+            rotation: 0
+          }));
+          states.forEach((state, j) => {
+            if (j < nodeState.initialStates.length) nodeState.initialStates[j] = { ...nodeState.initialStates[j], ...state };
+          });
+          node.properties.image_states = nodeState.initialStates;
+          node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
+          node.setProperty("image_states", nodeState.initialStates);
+
+          if (typeof updateSize === 'function') {
+            updateSize();
+            nodeState.stage.draw();
+            log.debug(`updateSize called for auto_size in node ${nodeId}: ${boardWidth}x${boardHeight}`);
+          } else {
+            log.warn(`updateSize is not a function for node ${nodeId}, skipping canvas size update`);
+          }
         }
       }
 
-      const state = nodeState.initialStates[i] || {};
+      const state = nodeState.initialStates[index] || {};
       const konvaImg = new Konva.Image({
         image: img,
         x: state.x || borderWidth + boardWidth / 2,
@@ -145,11 +224,11 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         draggable: true,
         offsetX: img.width / 2,
         offsetY: img.height / 2,
-        filename: imgData.filename
+        filename: images[index].filename
       });
       nodeState.imageLayer.add(konvaImg);
-      nodeState.imageNodes.push(konvaImg);
-      nodeState.initialStates[i] = {
+      nodeState.imageNodes[index] = konvaImg;
+      nodeState.initialStates[index] = {
         x: konvaImg.x(),
         y: konvaImg.y(),
         scaleX: konvaImg.scaleX(),
@@ -158,7 +237,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
       };
 
       konvaImg.on("dragend transformend", () => {
-        nodeState.initialStates[i] = {
+        nodeState.initialStates[index] = {
           x: konvaImg.x(),
           y: konvaImg.y(),
           scaleX: konvaImg.scaleX(),
@@ -175,10 +254,10 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
       loadedCount++;
       statusText.innerText = `加载图像... ${loadedCount}/${images.length}`;
     } catch (e) {
-      log.error(`Error loading image ${i+1} for node ${nodeId}`, e);
+      log.error(`Error processing image ${index+1} for node ${nodeId}: ${e.message}, path: ${images[index]?.filename || 'unknown'}`);
       statusText.innerText = `加载失败：${e.message}`;
       statusText.style.color = "#f00";
-      continue;
+      nodeState.imageNodes[index] = null; // Mark failed image
     }
   }
 

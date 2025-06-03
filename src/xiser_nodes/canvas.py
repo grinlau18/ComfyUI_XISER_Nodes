@@ -49,8 +49,8 @@ class XISER_Canvas:
         return {
             "required": {
                 "pack_images": ("XIS_IMAGES", {"default": None}),
-                "board_width": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
-                "board_height": ("INT", {"default": 1024, "min": 256, "max": 4096, "step": 16}),
+                "board_width": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
+                "board_height": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
                 "border_width": ("INT", {"default": 40, "min": 10, "max": 200, "step": 1}),
                 "canvas_color": (["black", "white", "transparent"], {"default": "black"}),
                 "auto_size": (["off", "on"], {"default": "off"}),
@@ -207,25 +207,6 @@ class XISER_Canvas:
         image_states: str,
         file_data=None,
     ):
-        """
-        Renders images onto a canvas with specified parameters, optionally using file_data for layer properties.
-
-        Args:
-            pack_images (list): List of torch.Tensor images (RGBA).
-            board_width (int): Canvas width in pixels.
-            board_height (int): Canvas height in pixels.
-            border_width (int): Border width around the canvas.
-            canvas_color (str): Canvas background color ("black", "white", "transparent").
-            auto_size (str): Auto-size mode ("on" or "off").
-            image_states (str): JSON string of layer states (position, scale, rotation).
-            file_data (dict, optional): Metadata with layer properties.
-
-        Returns:
-            dict: Contains UI data (image_states, image_base64_chunks, image_paths) and result (canvas_tensor, image_paths, masks_tensor).
-
-        Raises:
-            ValueError: If inputs are invalid or no valid images are provided.
-        """
         logger.info(
             f"Instance {self.instance_id} - Rendering with inputs: board_width={board_width}, board_height={board_height}, "
             f"border_width={border_width}, canvas_color={canvas_color}, auto_size={auto_size}, "
@@ -255,60 +236,29 @@ class XISER_Canvas:
         if auto_size not in ["off", "on"]:
             logger.error(f"Instance {self.instance_id} - Invalid auto_size: {auto_size}")
             raise ValueError(f"Invalid auto_size: {auto_size}")
-        if not (256 <= board_width <= 4096 and 256 <= board_height <= 4096 and 10 <= border_width <= 200):
+        if not (256 <= board_width <= 8192 and 256 <= board_height <= 8192 and 10 <= border_width <= 200):
             logger.error(
                 f"Instance {self.instance_id} - Input values out of range: board_width={board_width}, "
                 f"board_height={board_height}, border_width={border_width}"
             )
             raise ValueError("Input values out of allowed range")
 
-        # Check first image dimensions and hash
+        # Check first image dimensions
         first_image_size = None
-        first_image_hash = None
         if images_list:
             first_img = (images_list[0].cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
             first_pil_img = Image.fromarray(first_img, mode="RGBA")
             first_image_size = (first_pil_img.width, first_pil_img.height)
-            first_image_hash = hash(images_list[0].cpu().numpy().tobytes())
+            logger.info(f"Instance {self.instance_id} - First image dimensions: {first_image_size}")
 
-        # Get previous state
-        last_first_image_size = self.properties.get("last_first_image_size")
-        last_first_image_hash = self.properties.get("last_first_image_hash")
-        last_auto_size = self.properties.get("last_auto_size", "off")
-
-        # Handle auto_size
-        should_reset = False
+        # Handle auto_size based on first image dimensions only
         if auto_size == "on" and images_list:
-            dynamic_board_width = min(max(first_pil_img.width, 256), 4096)
-            dynamic_board_height = min(max(first_pil_img.height, 256), 4096)
-            if last_auto_size == "on" and last_first_image_size and last_first_image_hash:
-                first_image_changed = first_image_hash != last_first_image_hash
-                size_changed = first_image_size != last_first_image_size
-                if first_image_changed and size_changed:
-                    logger.info(
-                        f"Instance {self.instance_id} - First image changed with different size, adjusting board to "
-                        f"{dynamic_board_width}x{dynamic_board_height}"
-                    )
-                    board_width = dynamic_board_width
-                    board_height = dynamic_board_height
-                    should_reset = True
-                elif first_image_changed:
-                    logger.info(f"Instance {self.instance_id} - First image changed but size unchanged, keeping board size")
-                else:
-                    logger.info(f"Instance {self.instance_id} - First image unchanged, keeping board size")
-            else:
-                logger.info(
-                    f"Instance {self.instance_id} - Auto-size enabled or no history, adjusting board to "
-                    f"{dynamic_board_width}x{dynamic_board_height}"
-                )
-                board_width = dynamic_board_width
-                board_height = dynamic_board_height
-                should_reset = True
-
-        # Update history
-        self.properties["last_first_image_size"] = first_image_size
-        self.properties["last_first_image_hash"] = first_image_hash
-        self.properties["last_auto_size"] = auto_size
+            # Use first image dimensions
+            board_width = min(max(first_pil_img.width, 256), 8192)
+            board_height = min(max(first_pil_img.height, 256), 8192)
+            logger.info(
+                f"Instance {self.instance_id} - Auto-size enabled, using board size {board_width}x{board_height} from first image"
+            )
 
         # Check for image or parameter changes
         current_params = {
@@ -365,8 +315,9 @@ class XISER_Canvas:
                     ]
                 )
             self.properties["image_paths"] = image_paths
+            logger.info(f"Instance {self.instance_id} - Updated image_paths: {image_paths}")
 
-            # Handle image_states based on file_data or auto_size
+            # Handle image_states based on file_data
             if file_data and file_data.get("layers"):
                 logger.info(f"Instance {self.instance_id} - Applying layer states from file_data")
                 image_states = []
@@ -399,20 +350,6 @@ class XISER_Canvas:
                             "rotation": 0.0,
                         }
                     )
-            elif auto_size == "on" and should_reset:
-                image_states = [
-                    {
-                        "x": border_width + board_width / 2,
-                        "y": border_width + board_height / 2,
-                        "scaleX": 1.0,
-                        "scaleY": 1.0,
-                        "rotation": 0.0,
-                    }
-                    for _ in range(len(image_paths))
-                ]
-                logger.info(
-                    f"Instance {self.instance_id} - Auto-size enabled and reset triggered, resetting image_states to center positions"
-                )
             elif not image_states or len(image_states) != len(image_paths):
                 new_image_states = []
                 for i in range(len(image_paths)):
@@ -572,13 +509,15 @@ class XISER_Canvas:
             }[canvas_color],
             "auto_size": auto_size,
             "image_paths": image_paths,
+            "display_scale": 1.0,  # Default value for consistency with frontend
+            "height_adjustment": 130,  # Default value for consistency with frontend
         }
         self.properties["image_states"] = image_states
         self.last_output = (canvas_tensor, ",".join(image_paths))
 
         logger.info(
-            f"Instance {self.instance_id} - Returning UI data: image_states={len(image_states)} items, "
-            f"image_base64_chunks={len(image_base64_chunks)}, image_paths={len(image_paths)} items"
+            f"Instance {self.instance_id} - Rendering completed: board_size={board_width}x{board_height}, "
+            f"image_count={len(image_paths)}, auto_size={auto_size}"
         )
         return {
             "ui": {

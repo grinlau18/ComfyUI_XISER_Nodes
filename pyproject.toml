@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "Custom nodes for customizing workflows. Efficient composition tools that can place images in layers on the drawing board, edit the images in the layers, and output the merged image and layer masks. It also includes some efficiency - enhancing image and mask processing, prompt editing, logic processing, UI controls, dynamic sampling, etc."
-version = "1.1.1"
+version = "1.1.2"
 license = {file = "LICENSE"}
 
 [project.urls]
