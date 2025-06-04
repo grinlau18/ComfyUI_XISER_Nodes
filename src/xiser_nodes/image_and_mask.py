@@ -910,34 +910,26 @@ class XIS_CanvasMaskProcessor:
         
         return (output_mask,)
 
+# 将多个图像和蒙版打包成一个 XIS_IMAGES 对象
 class XIS_ImagesToCanvas:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "image1": ("IMAGE", {"default": None}),
                 "invert_mask": ("BOOLEAN", {"default": False, "label_on": "Invert", "label_off": "Normal"}),
             },
             "optional": {
-                "image2": ("IMAGE", {"default": None}),
-                "image3": ("IMAGE", {"default": None}),
-                "image4": ("IMAGE", {"default": None}),
-                "image5": ("IMAGE", {"default": None}),
-                "image6": ("IMAGE", {"default": None}),
-                "image7": ("IMAGE", {"default": None}),
-                "image8": ("IMAGE", {"default": None}),
-                "image9": ("IMAGE", {"default": None}),
-                "image10": ("IMAGE", {"default": None}),
+                "pack_images": ("XIS_IMAGES", {"default": None}),
+                "image1": ("IMAGE", {"default": None}),
                 "mask1": ("MASK", {"default": None}),
+                "image2": ("IMAGE", {"default": None}),
                 "mask2": ("MASK", {"default": None}),
+                "image3": ("IMAGE", {"default": None}),
                 "mask3": ("MASK", {"default": None}),
+                "image4": ("IMAGE", {"default": None}),
                 "mask4": ("MASK", {"default": None}),
+                "image5": ("IMAGE", {"default": None}),
                 "mask5": ("MASK", {"default": None}),
-                "mask6": ("MASK", {"default": None}),
-                "mask7": ("MASK", {"default": None}),
-                "mask8": ("MASK", {"default": None}),
-                "mask9": ("MASK", {"default": None}),
-                "mask10": ("MASK", {"default": None}),
             }
         }
 
@@ -946,30 +938,33 @@ class XIS_ImagesToCanvas:
     FUNCTION = "pack_images"
     CATEGORY = "XISER_Nodes/Canvas"
 
-    def pack_images(self, image1, invert_mask, image2=None, image3=None, image4=None, image5=None, 
-                   image6=None, image7=None, image8=None, image9=None, image10=None,
-                   mask1=None, mask2=None, mask3=None, mask4=None, 
-                   mask5=None, mask6=None, mask7=None, mask8=None, mask9=None, mask10=None):
+    def pack_images(self, image1, invert_mask, pack_images=None, 
+                    mask1=None, image2=None, mask2=None, image3=None, mask3=None, 
+                    image4=None, mask4=None, image5=None, mask5=None):
         
         # 确保 image1 不为 None
         if image1 is None:
             logger.error("image1 cannot be None")
             raise ValueError("image1 must be provided")
 
-        # 收集所有图像和蒙版输入
-        input_images = [image1, image2, image3, image4, image5, image6, image7, image8, image9, image10]
-        input_masks = [mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8, mask9, mask10]
+        # 收集当前节点的图像和蒙版输入
+        input_images = [image1, image2, image3, image4, image5]
+        input_masks = [mask1, mask2, mask3, mask4, mask5]
         
         # 过滤掉 None 的图像输入
         images = [img for img in input_images if img is not None]
         
-        # 验证图像数量
-        if len(images) > 20:
-            logger.error(f"Too many images: {len(images)}, maximum 8 allowed")
-            raise ValueError("Maximum 8 images allowed")
-
-        # 规范化图像：处理 RGB/RGBA 和对应的蒙版
+        # 初始化输出图像列表
         normalized_images = []
+
+        # 如果有输入的 pack_images，添加到输出列表
+        if pack_images is not None:
+            if not isinstance(pack_images, (list, tuple)):
+                logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
+                raise ValueError("pack_images must be a list or tuple")
+            normalized_images.extend(pack_images)
+
+        # 规范化当前节点的图像和蒙版
         for idx, img in enumerate(images):
             if not isinstance(img, torch.Tensor):
                 logger.error(f"Invalid image type: expected torch.Tensor, got {type(img)}")
@@ -1048,7 +1043,6 @@ class XIS_ImagesToCanvas:
 
         logger.info(f"Packed {len(normalized_images)} images for canvas")
         return (normalized_images,)
-
 
 
 NODE_CLASS_MAPPINGS = {

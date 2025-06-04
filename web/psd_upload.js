@@ -1,3 +1,10 @@
+/**
+ * Extension for uploading PSD files and extracting layers in ComfyUI.
+ *
+ * @module XIS_PSDLayerExtractor_Upload
+ * @description Adds a PSD file uploader with progress bar and file selection combo box to the XIS_PSDLayerExtractor node.
+ */
+
 import { app } from "/scripts/app.js";
 
 // 唯一的命名空间前缀
@@ -56,10 +63,13 @@ app.registerExtension({
         // 缓存文件列表，避免频繁请求
         let cachedFiles = [];
 
-        // 获取 PSD 文件列表
+        /**
+         * Fetches the list of PSD files from the server.
+         * @async
+         * @returns {Promise<string[]>} List of PSD file paths
+         */
         async function fetchPsdFiles() {
           try {
-            // 防止缓存
             const response = await fetch(`/custom/list_psd_files?t=${Date.now()}`);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
@@ -81,14 +91,14 @@ app.registerExtension({
             console.log(`[XIS_PSDLayerExtractor] Selected PSD file: ${value}`);
           }
         }, {
-          values: () => cachedFiles, // 使用缓存
+          values: () => cachedFiles,
           multiselect: false
         });
 
         // 初始加载文件列表
         fetchPsdFiles().then(() => {
           fileListWidget.options.values = cachedFiles;
-          app.graph.setDirtyCanvas(true); // 强制重绘
+          app.graph.setDirtyCanvas(true);
         });
 
         // 添加上传按钮
@@ -162,7 +172,6 @@ app.registerExtension({
                   const result = JSON.parse(xhr.responseText);
                   console.log(`[XIS_PSDLayerExtractor] Upload response:`, result);
                   if (result.name && result.type === "input") {
-                    // 处理 subfolder 为空的情况
                     const subfolder = result.subfolder ? result.subfolder : "psd_files";
                     const file_path = `input/${subfolder}/${result.name}`.replace(/\/+/g, "/");
                     const uploadedFileWidget = node.widgets.find(w => w.name === "uploaded_file");
@@ -173,7 +182,7 @@ app.registerExtension({
                       throw new Error("Uploaded file widget not found");
                     }
 
-                    // 立即刷新文件列表，重试最多 3 次
+                    // 立即刷新文件列表
                     let attempts = 0;
                     const maxAttempts = 3;
                     while (attempts < maxAttempts) {
@@ -183,15 +192,13 @@ app.registerExtension({
                       }
                       attempts++;
                       console.log(`[XIS_PSDLayerExtractor] Retry fetchPsdFiles (${attempts}/${maxAttempts})`);
-                      await new Promise(resolve => setTimeout(resolve, 500)); // 等待 500ms
+                      await new Promise(resolve => setTimeout(resolve, 500));
                     }
 
-                    // 更新下拉列表
                     fileListWidget.options.values = cachedFiles;
                     fileListWidget.value = file_path;
-                    app.graph.setDirtyCanvas(true); // 强制重绘
+                    app.graph.setDirtyCanvas(true);
 
-                    // 显示成功状态
                     progressContainer.classList.add(`${NAMESPACE}_success`);
                     progressText.textContent = "Upload Successful!";
                     console.log("[XIS_PSDLayerExtractor] Upload successful:", file_path);
@@ -202,7 +209,7 @@ app.registerExtension({
                         node.widgets.splice(index, 1);
                         console.log(`[XIS_PSDLayerExtractor] Removed progress widget at index ${index}`);
                       }
-                    }, 1500); // 1.5 秒后隐藏
+                    }, 1500);
                   } else {
                     throw new Error(result.error || "Invalid upload response: No filename or type");
                   }
@@ -217,7 +224,7 @@ app.registerExtension({
                       node.widgets.splice(index, 1);
                       console.log(`[XIS_PSDLayerExtractor] Removed progress widget at index ${index}`);
                     }
-                  }, 3000); // 错误状态保持 3 秒
+                  }, 3000);
                 }
               } else {
                 progressContainer.classList.add(`${NAMESPACE}_error`);
@@ -248,7 +255,6 @@ app.registerExtension({
               }, 3000);
             };
 
-            // 发送请求
             const formData = new FormData();
             formData.append("image", file, file.name);
             console.log(`[XIS_PSDLayerExtractor] Uploading file: ${file.name}`);
@@ -257,7 +263,6 @@ app.registerExtension({
           input.click();
         });
 
-        // 确保按钮始终可见
         uploadButton.dynamic = true;
       };
     }

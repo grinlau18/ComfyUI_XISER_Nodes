@@ -1,0 +1,622 @@
+{
+  "id": "26f499d4-e18c-4c03-81e4-561dfc628fcc",
+  "revision": 0,
+  "last_node_id": 108,
+  "last_link_id": 134,
+  "nodes": [
+    {
+      "id": 74,
+      "type": "XIS_Label",
+      "pos": [
+        660,
+        140
+      ],
+      "size": [
+        660,
+        34
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">选择图层蒙版，自动排除遮挡部分</p>"
+      },
+      "widgets_values": [],
+      "color": "#00473f"
+    },
+    {
+      "id": 39,
+      "type": "MaskPreview+",
+      "pos": [
+        1000,
+        220
+      ],
+      "size": [
+        320,
+        400
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "mask",
+          "name": "mask",
+          "type": "MASK",
+          "link": 57
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfyui_essentials",
+        "ver": "1.1.0",
+        "Node name for S&R": "MaskPreview+",
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#2a2a2a"
+      },
+      "widgets_values": [],
+      "color": "#00695c",
+      "bgcolor": "#2a2a2a"
+    },
+    {
+      "id": 71,
+      "type": "XIS_Label",
+      "pos": [
+        -510,
+        140
+      ],
+      "size": [
+        360,
+        34
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">导入分层PSD文件</p>"
+      },
+      "widgets_values": [],
+      "color": "#00473f"
+    },
+    {
+      "id": 79,
+      "type": "XIS_Label",
+      "pos": [
+        660,
+        670
+      ],
+      "size": [
+        660,
+        34
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">获取分层图层图像及蒙版</p>"
+      },
+      "widgets_values": [],
+      "color": "#00473f"
+    },
+    {
+      "id": 70,
+      "type": "MaskPreview+",
+      "pos": [
+        1000,
+        750
+      ],
+      "size": [
+        320,
+        490
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "mask",
+          "name": "mask",
+          "type": "MASK",
+          "link": 116
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfyui_essentials",
+        "ver": "1.1.0",
+        "Node name for S&R": "MaskPreview+",
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#2a2a2a"
+      },
+      "widgets_values": [],
+      "color": "#00695c",
+      "bgcolor": "#2a2a2a"
+    },
+    {
+      "id": 76,
+      "type": "PreviewImage",
+      "pos": [
+        660,
+        750
+      ],
+      "size": [
+        320,
+        490
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 119
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.32",
+        "Node name for S&R": "PreviewImage",
+        "xiser_title_color": "#00695c"
+      },
+      "widgets_values": [],
+      "color": "#00695c"
+    },
+    {
+      "id": 104,
+      "type": "XIS_PSDLayerExtractor",
+      "pos": [
+        -510,
+        220
+      ],
+      "size": [
+        360,
+        150
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "pack_images",
+          "name": "pack_images",
+          "type": "XIS_IMAGES",
+          "links": [
+            120
+          ]
+        },
+        {
+          "label": "file_data",
+          "name": "file_data",
+          "type": "FILE_DATA",
+          "links": [
+            121
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "38b841678a128f5d3d78935c99b6358cc5f9d578",
+        "xiser_title_color": "#00695c"
+      },
+      "widgets_values": [
+        "input/psd_files/bear.psd",
+        false,
+        "input/psd_files/bear.psd",
+        null
+      ],
+      "color": "#00695c"
+    },
+    {
+      "id": 105,
+      "type": "XIS_Label",
+      "pos": [
+        -510,
+        430
+      ],
+      "size": [
+        360,
+        247.60000610351562
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:16px;color:#FFFFFF;\">PSDLayerExtrator节点说明</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">打开crop_by_canvas可以使用psd文件画布尺寸来对图层图像进行裁剪，关闭则输出完整的图层图像。</p>\n<br>\n<p style=\"font-size:16px;color:#FFFFFF;\">XISER_Canvas节点说明</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">\npack_images负责接收图像信号，file_data负责接收图层信息（画布尺寸，图像位置、比例和角度）。同时连接PSDLayerExtrator节点的两个对应端口，可以还原psd文件原始画面。\n</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">\nXISER_Canvas配合PSDLayerExtrator节点，可以实现根据输入的psd文件自动调整画布并对齐图像。方法：首先保证psd文件的第一个图层图像与原画布尺寸一致，连接pack_images和file_data端口，然后打开auto_size开关，画布会自动调整为第一张图片大小并同时对齐图像。\n</p>"
+      },
+      "color": "#00473f"
+    },
+    {
+      "id": 73,
+      "type": "XIS_Label",
+      "pos": [
+        -110,
+        140
+      ],
+      "size": [
+        740,
+        34
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">画板预览 & 编辑</p>"
+      },
+      "widgets_values": [],
+      "color": "#00473f"
+    },
+    {
+      "id": 44,
+      "type": "XIS_CanvasMaskProcessor",
+      "pos": [
+        660,
+        220
+      ],
+      "size": [
+        320,
+        400
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "masks",
+          "name": "masks",
+          "type": "MASK",
+          "link": 115
+        }
+      ],
+      "outputs": [
+        {
+          "label": "output_mask",
+          "name": "output_mask",
+          "type": "MASK",
+          "links": [
+            57
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "7bbdf4398ee31238151596c70421bdc6d747c0e2",
+        "Node name for S&R": "XIS_CanvasMaskProcessor",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "widgetValues": {
+          "Layer_Mask_1": false,
+          "Layer_Mask_2": false,
+          "Layer_Mask_3": true,
+          "Layer_Mask_4": false,
+          "Layer_Mask_5": false,
+          "Layer_Mask_6": false,
+          "Layer_Mask_7": false,
+          "Layer_Mask_8": false,
+          "Layer_Mask_9": false,
+          "Layer_Mask_10": false,
+          "Layer_Mask_11": false,
+          "Layer_Mask_12": false
+        },
+        "layerCount": 12,
+        "width": 320,
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#2a2a2a"
+      },
+      "widgets_values": [
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "color": "#00695c",
+      "bgcolor": "#2a2a2a"
+    },
+    {
+      "id": 103,
+      "type": "XISER_Canvas",
+      "pos": [
+        -110,
+        220
+      ],
+      "size": [
+        737,
+        947
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "XIS_IMAGES",
+          "link": 120
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA",
+          "link": 121
+        }
+      ],
+      "outputs": [
+        {
+          "label": "canvas_image",
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": [
+            119
+          ]
+        },
+        {
+          "label": "image_paths",
+          "name": "image_paths",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "label": "masks",
+          "name": "masks",
+          "type": "MASK",
+          "links": [
+            115,
+            116
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "ver": "38b841678a128f5d3d78935c99b6358cc5f9d578",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 876,
+          "board_height": 876,
+          "border_width": 40,
+          "canvas_color": "black",
+          "auto_size": "on",
+          "display_scale": 0.75,
+          "height_adjustment": 130,
+          "image_paths": [
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_8233e5ffd9d5472fb9257ad4902be52c.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_af83749d21834237b7320129564f104a.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_95b293898fd542e9967ca16d69d01e40.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_23215e43e3c1415c910570feb275be69.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_bb3c92e1f14940a6aac128f6b1bab29b.png"
+          ],
+          "border_color": "rgb(25, 25, 25)"
+        },
+        "image_states": [
+          {
+            "x": 478,
+            "y": 478,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          },
+          {
+            "x": 478,
+            "y": 478,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          },
+          {
+            "x": 498.5,
+            "y": 375,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          },
+          {
+            "x": 452,
+            "y": 654,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          },
+          {
+            "x": 459,
+            "y": 337,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
+          }
+        ],
+        "xiser_title_color": "#00695c"
+      },
+      "widgets_values": [
+        876,
+        876,
+        40,
+        "black",
+        "on",
+        0.75,
+        130,
+        "[{\"x\":478,\"y\":478,\"scaleX\":1,\"scaleY\":1,\"rotation\":0},{\"x\":478,\"y\":478,\"scaleX\":1,\"scaleY\":1,\"rotation\":0},{\"x\":498.5,\"y\":375,\"scaleX\":1,\"scaleY\":1,\"rotation\":0},{\"x\":452,\"y\":654,\"scaleX\":1,\"scaleY\":1,\"rotation\":0},{\"x\":459,\"y\":337,\"scaleX\":1,\"scaleY\":1,\"rotation\":0}]",
+        {
+          "image_states": [
+            {
+              "x": 478,
+              "y": 478,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            },
+            {
+              "x": 478,
+              "y": 478,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            },
+            {
+              "x": 498.5,
+              "y": 375,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            },
+            {
+              "x": 452,
+              "y": 654,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            },
+            {
+              "x": 459,
+              "y": 337,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0
+            }
+          ],
+          "ui_config": {
+            "board_width": 876,
+            "board_height": 876,
+            "border_width": 40,
+            "canvas_color": "black",
+            "auto_size": "on",
+            "display_scale": 0.75,
+            "height_adjustment": 130,
+            "image_paths": [
+              "xiser_canvas_16d27d644d59481cb655501491cf3def_8233e5ffd9d5472fb9257ad4902be52c.png",
+              "xiser_canvas_16d27d644d59481cb655501491cf3def_af83749d21834237b7320129564f104a.png",
+              "xiser_canvas_16d27d644d59481cb655501491cf3def_95b293898fd542e9967ca16d69d01e40.png",
+              "xiser_canvas_16d27d644d59481cb655501491cf3def_23215e43e3c1415c910570feb275be69.png",
+              "xiser_canvas_16d27d644d59481cb655501491cf3def_bb3c92e1f14940a6aac128f6b1bab29b.png"
+            ],
+            "border_color": "rgb(25, 25, 25)"
+          },
+          "image_paths": [
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_8233e5ffd9d5472fb9257ad4902be52c.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_af83749d21834237b7320129564f104a.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_95b293898fd542e9967ca16d69d01e40.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_23215e43e3c1415c910570feb275be69.png",
+            "xiser_canvas_16d27d644d59481cb655501491cf3def_bb3c92e1f14940a6aac128f6b1bab29b.png"
+          ]
+        }
+      ],
+      "color": "#00695c"
+    }
+  ],
+  "links": [
+    [
+      57,
+      44,
+      0,
+      39,
+      0,
+      "MASK"
+    ],
+    [
+      115,
+      103,
+      2,
+      44,
+      0,
+      "MASK"
+    ],
+    [
+      116,
+      103,
+      2,
+      70,
+      0,
+      "MASK"
+    ],
+    [
+      119,
+      103,
+      0,
+      76,
+      0,
+      "IMAGE"
+    ],
+    [
+      120,
+      104,
+      0,
+      103,
+      0,
+      "XIS_IMAGES"
+    ],
+    [
+      121,
+      104,
+      1,
+      103,
+      1,
+      "FILE_DATA"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Group",
+      "bounding": [
+        -530,
+        56.400001525878906,
+        1870,
+        1203.5999755859375
+      ],
+      "color": "#444",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "frontendVersion": "1.18.6",
+    "ue_links": [],
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

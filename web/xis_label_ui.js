@@ -1,17 +1,45 @@
 import { app } from "/scripts/app.js";
 
-// 资源加载状态
+// Set of loaded resources to prevent duplicate loading
 const loadedResources = new Set();
 
 /**
- * 加载JavaScript脚本，支持缓存、CDN回退和重试
- * @param {string} src - 脚本URL
- * @param {string} [fallbackSrc] - 回退CDN URL
- * @param {number} [retries=2] - 重试次数
- * @returns {Promise<void>} 加载完成或失败的Promise
+ * Logger utility for consistent logging with levels.
+ * @type {{debug: Function, info: Function, warn: Function, error: Function}}
+ */
+const logger = {
+    debug: (message, ...args) => logLevel >= 3 && console.debug(`[XIS_Label] ${message}`, ...args),
+    info: (message, ...args) => logLevel >= 2 && console.info(`[XIS_Label] ${message}`, ...args),
+    warn: (message, ...args) => logLevel >= 1 && console.warn(`[XIS_Label] ${message}`, ...args),
+    error: (message, ...args) => logLevel >= 0 && console.error(`[XIS_Label] ${message}`, ...args),
+};
+
+// Log level: 0=error, 1=warn, 2=info, 3=debug
+let logLevel = 2; // Default to info level
+
+/**
+ * Sets the logging level for the extension.
+ * @param {number} level - Log level (0=error, 1=warn, 2=info, 3=debug).
+ */
+function setLogLevel(level) {
+    if (typeof level === 'number' && level >= 0 && level <= 3) {
+        logLevel = level;
+        logger.info(`Log level set to ${level}`);
+    } else {
+        logger.warn(`Invalid log level: ${level}. Keeping current level: ${logLevel}`);
+    }
+}
+
+/**
+ * Loads a JavaScript script with caching, CDN fallback, and retries.
+ * @param {string} src - The script URL.
+ * @param {string} [fallbackSrc] - Fallback CDN URL.
+ * @param {number} [retries=2] - Number of retries.
+ * @returns {Promise<void>} Resolves when loaded, rejects on failure.
  */
 async function loadScript(src, fallbackSrc, retries = 2) {
     if (loadedResources.has(src)) {
+        logger.debug(`Script already loaded: ${src}`);
         return Promise.resolve();
     }
     for (let i = 0; i < retries; i++) {
@@ -24,33 +52,36 @@ async function loadScript(src, fallbackSrc, retries = 2) {
                     loadedResources.add(src);
                     resolve();
                 };
-                script.onerror = () => reject(new Error(`加载脚本失败: ${src}`));
+                script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
                 document.head.appendChild(script);
             });
             return;
         } catch (e) {
             if (i === retries - 1 && fallbackSrc) {
+                logger.warn(`Retrying with fallback: ${fallbackSrc}`);
                 await loadScript(fallbackSrc);
                 return;
             }
         }
     }
-    throw new Error(`加载脚本失败: ${src}`);
+    throw new Error(`Failed to load script after retries: ${src}`);
 }
 
 /**
- * 加载CSS样式表，支持缓存和CDN回退
- * @param {string} href - CSS URL
- * @param {string} [fallbackHref] - 回退CDN URL
- * @returns {Promise<void>} 加载完成或失败的Promise
+ * Loads a CSS stylesheet with caching and CDN fallback.
+ * @param {string} href - The CSS URL.
+ * @param {string} [fallbackHref] - Fallback CDN URL.
+ * @returns {Promise<void>} Resolves when loaded or on fallback success.
  */
 function loadCss(href, fallbackHref) {
     if (loadedResources.has(href)) {
+        logger.debug(`CSS already loaded: ${href}`);
         return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
         if (!navigator.onLine) {
             loadedResources.add(href);
+            logger.info(`Offline mode, skipping CSS load: ${href}`);
             resolve();
             return;
         }
@@ -64,9 +95,11 @@ function loadCss(href, fallbackHref) {
         };
         link.onerror = () => {
             if (fallbackHref) {
+                logger.warn(`CSS load failed, trying fallback: ${fallbackHref}`);
                 loadCss(fallbackHref).then(resolve).catch(reject);
             } else {
                 loadedResources.add(href);
+                logger.info(`No fallback for CSS, continuing: ${href}`);
                 resolve();
             }
         };
@@ -75,8 +108,8 @@ function loadCss(href, fallbackHref) {
 }
 
 /**
- * 异步加载CodeMirror相关资源，字体为可选
- * @returns {Promise<void>} 所有关键资源加载完成的Promise
+ * Asynchronously loads CodeMirror resources in sequence, with fonts being optional.
+ * @returns {Promise<void>} Resolves when all critical resources are loaded.
  */
 async function loadCodeMirrorResources() {
     const criticalResources = [
@@ -109,26 +142,41 @@ async function loadCodeMirrorResources() {
         }
     ];
 
-    await Promise.all(
-        criticalResources.map(res =>
-            res.type === "script"
-                ? loadScript(res.src, res.fallback)
-                : loadCss(res.src, res.fallback)
-        )
-    );
+    // Load critical resources sequentially to ensure dependencies
+    for (const res of criticalResources) {
+        try {
+            if (res.type === "script") {
+                await loadScript(res.src, res.fallback);
+                logger.info(`Loaded script: ${res.src}`);
+            } else {
+                await loadCss(res.src, res.fallback);
+                logger.info(`Loaded CSS: ${res.src}`);
+            }
+        } catch (e) {
+            logger.error(`Failed to load resource: ${res.src}`, e);
+            throw e;
+        }
+    }
+
+    // Load optional resources in parallel
     await Promise.all(
         optionalResources.map(res =>
             res.type === "script"
-                ? loadScript(res.src, res.fallback).catch(() => {})
-                : loadCss(res.src, res.fallback).catch(() => {})
+                ? loadScript(res.src, res.fallback).catch(e => logger.warn(`Failed to load optional script: ${res.src}`, e))
+                : loadCss(res.src, res.fallback).catch(e => logger.warn(`Failed to load optional CSS: ${res.src}`, e))
         )
     );
 }
 
-// 单例CodeMirror编辑器
+// Singleton CodeMirror editor instance
 let codeMirrorInstance = null;
 
-// 防抖函数
+/**
+ * Debounces a function to limit execution rate.
+ * @param {Function} fn - The function to debounce.
+ * @param {number} wait - The wait time in milliseconds.
+ * @returns {Function} The debounced function.
+ */
 function debounce(fn, wait) {
     let timeout;
     return function (...args) {
@@ -141,18 +189,21 @@ app.registerExtension({
     name: "ComfyUI.XISER.Label",
     async setup() {
         try {
+            setLogLevel(window.XISER_CONFIG?.logLevel || 2);
             await loadCodeMirrorResources();
+            codeMirrorInstance = null; // Reset CodeMirror instance
+            logger.info("XIS_Label extension setup completed");
         } catch (e) {
-            console.error("资源加载失败，节点可能不可用", e);
+            logger.error("Failed to load resources, node may be unavailable", e);
         }
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "XIS_Label") return;
 
         /**
-         * 解析HTML格式的文本数据，转换为结构化行数据
-         * @param {string} html - 输入的HTML字符串
-         * @returns {Object} 包含行数据的对象，格式为 { lines: Array }
+         * Parses HTML-formatted text into structured line data.
+         * @param {string} html - The input HTML string.
+         * @returns {Object} Structured data with lines array.
          */
         function parseHtmlFormat(html) {
             const defaultData = {
@@ -162,7 +213,6 @@ app.registerExtension({
                 ]
             };
             try {
-                // 清理HTML，限制允许的标签，添加中性父容器
                 const cleanedHtml = `<div style="margin:0;padding:0;">${html || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'}</div>`;
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(cleanedHtml, "text/html");
@@ -195,7 +245,7 @@ app.registerExtension({
                     }
 
                     const text = node.textContent.trim();
-                    if ((text || blockTags.includes(node.tagName))) {
+                    if (text || blockTags.includes(node.tagName)) {
                         const inlineStyles = node.style;
                         const computedStyles = getComputedStyle(node);
                         const isBlock = blockTags.includes(node.tagName) || computedStyles.display === "block";
@@ -216,7 +266,7 @@ app.registerExtension({
                             marginBottom = styleMatch ? parseInt(styleMatch[1]) : 0;
                         }
                         lines.push({
-                            text: text,
+                            text,
                             font_size: fontSize,
                             color: inlineStyles.color || computedStyles.color || "#FFFFFF",
                             font_weight: inlineStyles.fontWeight || computedStyles.fontWeight || "normal",
@@ -235,14 +285,15 @@ app.registerExtension({
                 container.childNodes.forEach(child => processNode(child));
                 return lines.length ? { lines } : defaultData;
             } catch (e) {
+                logger.error("Failed to parse HTML format:", e);
                 return defaultData;
             }
         }
 
         /**
-         * 更新节点的textData和背景色，并缓存解析结果
-         * @param {Object} node - 节点对象
-         * @param {string} newColor - 新背景色
+         * Updates node's textData and background color, caching parsed results.
+         * @param {Object} node - The node object.
+         * @param {string} newColor - The new background color.
          */
         function updateTextDataBackground(node, newColor) {
             let textData = node.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
@@ -259,9 +310,9 @@ app.registerExtension({
         }
 
         /**
-         * 更新节点的textData，并缓存解析结果
-         * @param {Object} node - 节点对象
-         * @param {string} newText - 新文本数据
+         * Updates node's textData and caches parsed results.
+         * @param {Object} node - The node object.
+         * @param {string} newText - The new text data.
          */
         function updateTextData(node, newText) {
             if (node.properties.textData !== newText) {
@@ -272,8 +323,13 @@ app.registerExtension({
             app.canvas.setDirty(true);
         }
 
-        // 绘制节点
+        // Cache for fonts to improve performance
         const fontCache = new Map();
+
+        /**
+         * Renders the node's foreground, displaying text with word-wrapping and justified alignment.
+         * @param {CanvasRenderingContext2D} ctx - The canvas context for rendering.
+         */
         nodeType.prototype.onDrawForeground = function (ctx) {
             try {
                 if (!this.properties.parsedTextData) {
@@ -285,7 +341,7 @@ app.registerExtension({
                 const isPassMode = this.mode === 4 || this.flags?.bypassed === true;
                 const baseColor = this.color || this.properties.color || "#333355";
                 const backgroundColor = isPassMode ? "rgba(128, 0, 128, 0.5)" : baseColor;
-                const alpha = (isMuteMode || isPassMode) ? 0.5 : 1.0;
+                const alpha = isMuteMode || isPassMode ? 0.5 : 1.0;
 
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = backgroundColor;
@@ -294,7 +350,7 @@ app.registerExtension({
                 const margin = 20;
                 let currentY = margin - 30;
                 const lineHeightFactor = 1.2;
-                const maxWidth = this.size[0] - 2 * margin; // 可用宽度
+                const maxWidth = this.size[0] - 2 * margin;
 
                 textData.lines.forEach(line => {
                     ctx.fillStyle = line.color || "#FFFFFF";
@@ -312,21 +368,18 @@ app.registerExtension({
                     ctx.textAlign = "left";
                     ctx.textBaseline = "top";
 
-                    // 应用margin-top
-                    currentY += (line.margin_top || 0);
+                    currentY += line.margin_top || 0;
 
-                    // 如果文本为空或仅为换行符，直接处理
                     if (!line.text) {
                         currentY += (line.font_size || 24) * lineHeightFactor;
-                        currentY += (line.margin_bottom || 0);
+                        currentY += line.margin_bottom || 0;
                         return;
                     }
 
-                    // 计算换行
-                    const words = line.text.split(/(\s+)/); // 按空格和空白字符分割
+                    const words = line.text.match(/(\S+|\s+)/g) || [];
                     let currentLine = "";
-                    const wrappedLines = [];
                     let currentWidth = 0;
+                    const wrappedLines = [];
 
                     for (const word of words) {
                         const wordWidth = ctx.measureText(word).width;
@@ -334,8 +387,7 @@ app.registerExtension({
                             currentLine += word;
                             currentWidth += wordWidth;
                         } else {
-                            if (currentLine) wrappedLines.push(currentLine);
-                            // 对于长单词或中文，按字符分割
+                            if (currentLine) wrappedLines.push(currentLine.trim());
                             if (wordWidth > maxWidth) {
                                 let tempWord = "";
                                 let tempWidth = 0;
@@ -359,20 +411,36 @@ app.registerExtension({
                             }
                         }
                     }
-                    if (currentLine) wrappedLines.push(currentLine);
+                    if (currentLine.trim()) wrappedLines.push(currentLine.trim());
 
-                    // 渲染每一行
                     wrappedLines.forEach((wrappedText, index) => {
+                        const isLastLine = index === wrappedLines.length - 1;
                         const textWidth = ctx.measureText(wrappedText).width;
                         let xPos = margin + (line.margin_left || 0);
+
                         if (line.text_align === "center") {
                             xPos = (this.size[0] - textWidth) / 2;
                         } else if (line.text_align === "right") {
                             xPos = this.size[0] - margin - textWidth - (line.margin_left || 0);
+                        } else if (line.text_align === "justify" && !isLastLine) {
+                            const wordsInLine = wrappedText.match(/(\S+)/g) || [wrappedText];
+                            if (wordsInLine.length > 1) {
+                                const totalWordWidth = wordsInLine.reduce((sum, word) => sum + ctx.measureText(word).width, 0);
+                                const spaceCount = wordsInLine.length - 1;
+                                const extraSpace = (maxWidth - totalWordWidth) / spaceCount;
+                                let currentX = margin + (line.margin_left || 0);
+                                wordsInLine.forEach((word, wordIndex) => {
+                                    ctx.fillText(word, currentX, currentY);
+                                    currentX += ctx.measureText(word).width + (wordIndex < wordsInLine.length - 1 ? extraSpace : 0);
+                                });
+                                currentY += (line.font_size || 24) * lineHeightFactor;
+                                if (isLastLine) currentY += line.margin_bottom || 0;
+                                return;
+                            }
                         }
+
                         xPos = Math.max(margin, Math.min(xPos, this.size[0] - margin - textWidth));
 
-                        // 下划线
                         if ((line.text_decoration || "none").includes("underline") && wrappedText) {
                             ctx.beginPath();
                             ctx.strokeStyle = line.color || "#FFFFFF";
@@ -385,51 +453,69 @@ app.registerExtension({
                         ctx.fillText(wrappedText, xPos, currentY);
                         currentY += (line.font_size || 24) * lineHeightFactor;
 
-                        // 仅在最后一行应用margin-bottom
-                        if (index === wrappedLines.length - 1) {
-                            currentY += (line.margin_bottom || 0);
-                        }
+                        if (isLastLine) currentY += line.margin_bottom || 0;
                     });
                 });
 
-                // 动态调整节点高度
                 this.size[1] = Math.max(this.size[1], currentY + margin);
             } catch (e) {
+                logger.error("Error rendering node foreground:", e);
             } finally {
                 ctx.globalAlpha = 1.0;
             }
         };
 
-        // 监听模式变化
+        /**
+         * Handles node mode changes, triggering a redraw.
+         * @param {number} newMode - The new mode.
+         * @param {number} oldMode - The previous mode.
+         */
         nodeType.prototype.onModeChange = function (newMode, oldMode) {
             this.setDirtyCanvas(true, false);
             app.canvas.setDirty(true);
+            logger.debug(`Mode changed from ${oldMode} to ${newMode}`);
         };
 
-        // 监听颜色变化
+        /**
+         * Handles property changes, updating color and triggering redraw.
+         * @param {string} property - The changed property.
+         * @param {any} value - The new value.
+         * @returns {boolean} True to indicate successful handling.
+         */
         nodeType.prototype.onPropertyChanged = debounce(function (property, value) {
             if (property === "color" && value) {
-                this.properties.color = value; // 同步到properties.color
+                this.properties.color = value;
                 updateTextDataBackground(this, value);
                 this.setDirtyCanvas(true, false);
                 app.canvas.setDirty(true);
+                logger.info(`Property changed: ${property} = ${value}`);
             }
             return true;
         }, 100);
 
-        // 确保节点加载后渲染
+        /**
+         * Ensures node is redrawn after being added.
+         */
         nodeType.prototype.onAdded = function () {
             this.setDirtyCanvas(true, false);
+            logger.debug("Node added to canvas");
         };
 
-        // 自定义序列化，防止缓存数据保存
+        /**
+         * Serializes node data, excluding cached parsed data.
+         * @returns {Object} The serialized node data.
+         */
         nodeType.prototype.serialize = function () {
             const data = LiteGraph.LGraphNode.prototype.serialize.call(this);
             delete data.properties.parsedTextData;
             return data;
         };
 
-        // 右键菜单（仅保留文本编辑）
+        /**
+         * Adds a right-click menu option to edit text.
+         * @param {Object} graphCanvas - The graph canvas instance.
+         * @param {Array} options - The menu options array.
+         */
         nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
             options.push({
                 content: "编辑文本",
@@ -530,6 +616,7 @@ app.registerExtension({
                         }
                         editor = codeMirrorInstance;
                     } else {
+                        logger.warn("CodeMirror not loaded, falling back to textarea");
                         const errorMsg = document.createElement("div");
                         errorMsg.style.color = "#FF5555";
                         errorMsg.textContent = "CodeMirror 加载失败，使用普通文本编辑器";
@@ -558,7 +645,9 @@ app.registerExtension({
                             if (editor !== codeMirrorInstance) editor.remove();
                             saveButton.onclick = null;
                             cancelButton.onclick = null;
+                            logger.info("Text saved and node updated");
                         } catch (e) {
+                            logger.error("Error saving text:", e);
                         }
                     };
 
@@ -573,7 +662,9 @@ app.registerExtension({
                             }
                             saveButton.onclick = null;
                             cancelButton.onclick = null;
+                            logger.info("Edit cancelled");
                         } catch (e) {
+                            logger.error("Error cancelling edit:", e);
                         }
                     };
 

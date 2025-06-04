@@ -231,8 +231,7 @@ app.registerExtension({
                                             const message = {
                                                 node_id: node.id,
                                                 color: color,
-                                                color_type: "title",
-                                                workflow: app.graph.serialize()
+                                                color_type: "title"
                                             };
                                             console.log("[XISER] 发送颜色更改请求:", message);
 
@@ -246,6 +245,8 @@ app.registerExtension({
                                                 console.log("[XISER] 收到响应:", result);
                                                 if (result.type === "xiser_node_color_change_response") {
                                                     console.log(`[XISER] 节点 ${result.node_id} ${result.color_type} 颜色更改为 ${result.color}`);
+                                                } else {
+                                                    console.error("[XISER] 意外响应:", result);
                                                 }
                                             } catch (e) {
                                                 console.error("[XISER] 颜色更改请求失败:", e);
@@ -270,8 +271,7 @@ app.registerExtension({
                                             const message = {
                                                 node_id: node.id,
                                                 color: color,
-                                                color_type: "content",
-                                                workflow: app.graph.serialize()
+                                                color_type: "content"
                                             };
                                             console.log("[XISER] 发送颜色更改请求:", message);
 
@@ -285,6 +285,8 @@ app.registerExtension({
                                                 console.log("[XISER] 收到响应:", result);
                                                 if (result.type === "xiser_node_color_change_response") {
                                                     console.log(`[XISER] 节点 ${result.node_id} ${result.color_type} 颜色更改为 ${result.color}`);
+                                                } else {
+                                                    console.error("[XISER] 意外响应:", result);
                                                 }
                                             } catch (e) {
                                                 console.error("[XISER] 颜色更改请求失败:", e);
@@ -317,8 +319,7 @@ app.registerExtension({
                                             const message = {
                                                 node_id: node.id,
                                                 color: color,
-                                                color_type: "title",
-                                                workflow: app.graph.serialize()
+                                                color_type: "title"
                                             };
                                             console.log("[XISER] 发送颜色更改请求:", message);
 
@@ -332,6 +333,8 @@ app.registerExtension({
                                                 console.log("[XISER] 收到响应:", result);
                                                 if (result.type === "xiser_node_color_change_response") {
                                                     console.log(`[XISER] 节点 ${result.node_id} ${result.color_type} 颜色更改为 ${result.color}`);
+                                                } else {
+                                                    console.error("[XISER] 意外响应:", result);
                                                 }
                                             } catch (e) {
                                                 console.error("[XISER] 颜色更改请求失败:", e);
@@ -355,8 +358,7 @@ app.registerExtension({
                                             const message = {
                                                 node_id: node.id,
                                                 color: color,
-                                                color_type: "content",
-                                                workflow: app.graph.serialize()
+                                                color_type: "content"
                                             };
                                             console.log("[XISER] 发送颜色更改请求:", message);
 
@@ -370,6 +372,8 @@ app.registerExtension({
                                                 console.log("[XISER] 收到响应:", result);
                                                 if (result.type === "xiser_node_color_change_response") {
                                                     console.log(`[XISER] 节点 ${result.node_id} ${result.color_type} 颜色更改为 ${result.color}`);
+                                                } else {
+                                                    console.error("[XISER] 意外响应:", result);
                                                 }
                                             } catch (e) {
                                                 console.error("[XISER] 颜色更改请求失败:", e);
