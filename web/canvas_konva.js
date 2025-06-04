@@ -105,9 +105,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     }
     if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
-      if (nodeState.selectedLayer !== target) {
-        selectLayer(nodeState, index);
-      }
+      selectLayer(nodeState, index);
     }
   });
 
@@ -286,9 +284,9 @@ export function destroyKonva(nodeState) {
 }
 
 /**
- * Selects a layer by index.
- * @param {Object} nodeState - The node state object.
- * @param {number} index - The layer index.
+ * Selects a layer by index and updates the UI accordingly.
+ * @param {Object} nodeState - The node state object containing image nodes and layer items.
+ * @param {number} index - The index of the layer in imageNodes to select.
  */
 export function selectLayer(nodeState, index) {
   const log = nodeState.log || console;
@@ -303,25 +301,31 @@ export function selectLayer(nodeState, index) {
   node.moveToTop();
   nodeState.transformer.nodes([node]);
   nodeState.imageLayer.batchDraw();
+
+  // Update layer panel selection
   nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
-  const listItemIndex = nodeState.imageNodes.length - 1 - index;
+  const listItemIndex = nodeState.imageNodes.length - 1 - index; // Map imageNodes index to layerItems index
   if (nodeState.layerItems[listItemIndex]) {
-    nodeState.layerItems[index].classList.add('selected');
+    nodeState.layerItems[listItemIndex].classList.add('selected');
+    log.debug(`Selected layer item at listItemIndex ${listItemIndex} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
+  } else {
+    log.warn(`Layer item at listItemIndex ${listItemIndex} not found for node ${nodeState.nodeId}`);
   }
+
   // Sync state
   nodeState.initialStates[index] = {
     x: node.x(),
     y: node.y(),
     scaleX: node.scaleX(),
     scaleY: node.scaleY(),
-    rotation: node.rotation,
+    rotation: node.rotation(),
   };
-  log.debug(`Selected layer index ${index} for node ${nodeState.nodeId}`);
+  log.info(`Selected layer index ${index} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
 }
 
 /**
- * Deselects the current layer.
- * @param {Object} nodeState - The node state object.
+ * Deselects the current layer and resets the UI.
+ * @param {Object} nodeState - The node state object containing image nodes and layer items.
  */
 export function deselectLayer(nodeState) {
   const log = nodeState.log || console;
@@ -345,7 +349,7 @@ export function deselectLayer(nodeState) {
 
 /**
  * Applies the current states to image nodes.
- * @param {Object} nodeState - The node state object.
+ * @param {Object} nodeState - The node state object containing image nodes and initial states.
  */
 export function applyStates(nodeState) {
   const log = nodeState.log || console;
@@ -379,7 +383,7 @@ export function applyStates(nodeState) {
 /**
  * Sets up wheel event handlers for zooming and rotating selected layers.
  * @param {Object} node - The ComfyUI node instance.
- * @param {Object} nodeState - The node state object.
+ * @param {Object} nodeState - The node state object containing stage and image nodes.
  */
 export function setupWheelEvents(node, nodeState) {
   const log = nodeState.log || console;

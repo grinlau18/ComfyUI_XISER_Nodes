@@ -632,28 +632,30 @@ app.registerExtension({
           log.warn(`Invalid image paths in onExecuted for node ${node.id}: ${JSON.stringify(invalidPaths)}`);
         }
 
-        // Process file_data for layer states only
+        // Process file_data for layer states and names
         if (fileData?.layers?.length) {
-          log.info(`Processing file_data.layers for node ${node.id}`);
+          log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(fileData)}`);
           states = fileData.layers.map((layer, i) => {
             if (i >= newImagePaths.length) return null;
             return {
-              x: layer.offset_x + borderWidth + (layer.width || 512) / 2, // Fallback width
-              y: layer.offset_y + borderWidth + (layer.height || 512) / 2, // Fallback height
+              x: layer.offset_x + borderWidth + (layer.width || 512) / 2,
+              y: layer.offset_y + borderWidth + (layer.height || 512) / 2,
               scaleX: layer.scale_x || 1,
               scaleY: layer.scale_y || 1,
               rotation: layer.rotation || 0,
             };
           }).filter(s => s !== null);
-          nodeState.fileData = fileData; // Store file_data
+          nodeState.file_data = fileData; // Use consistent naming
+          log.debug(`Stored file_data in nodeState for node ${node.id}: ${JSON.stringify(nodeState.file_data)}`);
         } else {
-          nodeState.fileData = null; // Clear file_data
+          nodeState.file_data = null;
+          log.debug(`No valid file_data.layers for node ${node.id}`);
         }
 
         if (newImagePaths.length) {
           log.info(`onExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
           imagePaths = newImagePaths;
-          nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+          nodeState.imageNodes = new Array(imagePaths.length).fill(null);
           node.properties.ui_config.image_paths = imagePaths;
 
           // Apply latest states before rendering
@@ -679,6 +681,7 @@ app.registerExtension({
           }
 
           updateSize();
+          uiElements.updateLayerPanel(selectLayer, deselectLayer); // Explicitly update layer panel
           updateHistory(nodeState);
 
           const outputCanvas = nodeState.stage.toCanvas();

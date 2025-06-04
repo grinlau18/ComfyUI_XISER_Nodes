@@ -261,26 +261,53 @@ export function initializeUI(node, nodeState, widgetContainer) {
   }
 
   /**
-   * Updates the layer panel with current image nodes.
+   * Updates the layer panel with current image nodes, displaying layer names from file_data if available.
    * @param {Function} selectLayer - Callback to select a layer.
    * @param {Function} deselectLayer - Callback to deselect a layer.
    */
   function updateLayerPanel(selectLayer, deselectLayer) {
     log.debug(`Updating layer panel for node ${nodeState.nodeId}, imageNodes: ${nodeState.imageNodes?.length || 0}`);
+    log.debug(`file_data: ${JSON.stringify(nodeState.file_data)}`);
     layerPanel.innerHTML = "";
     nodeState.layerItems = [];
-    for (let index = nodeState.imageNodes.length - 1; index >= 0; index--) {
+
+    const layers = nodeState.file_data?.layers || [];
+    log.debug(`Layers from file_data: ${JSON.stringify(layers)}`);
+
+    for (let index = 0; index < nodeState.imageNodes.length; index++) {
       const item = document.createElement("div");
       item.className = `xiser-layer-item-${nodeState.nodeId}`;
-      item.innerText = `Layer ${index + 1}`;
-      item.dataset.index = index;
+
+      const layerIndex = nodeState.imageNodes.length - 1 - index; // Map to imageNodes index
+      let layerName = `Layer ${layerIndex + 1}`;
+      const layerData = layers[layerIndex];
+
+      if (layerData?.name) {
+        try {
+          let decodedName = layerData.name;
+          if (decodedName.includes('\\u')) {
+            decodedName = decodeURIComponent(escape(decodeURIComponent(unescape(layerData.name))));
+          }
+          const chars = [...decodedName];
+          layerName = chars.length > 8 ? chars.slice(0, 8).join('') + '...' : decodedName;
+          log.debug(`Layer ${layerIndex} name: ${layerName} (original: ${layerData.name})`);
+        } catch (e) {
+          log.warn(`Failed to decode layer name at index ${layerIndex}: ${e.message}`);
+          layerName = `Layer ${layerIndex + 1}`;
+        }
+      } else {
+        log.debug(`No name for layer at index ${layerIndex}, using default: ${layerName}`);
+      }
+
+      item.innerText = layerName;
+      item.dataset.index = layerIndex.toString(); // Store imageNodes index
       layerPanel.appendChild(item);
       nodeState.layerItems.push(item);
 
       item.addEventListener("click", () => {
-        log.info(`Layer item ${index} clicked for node ${nodeState.nodeId}`);
+        log.info(`Layer item ${layerIndex} (${layerName}) clicked for node ${nodeState.nodeId}`);
         const currentIndex = parseInt(item.dataset.index);
-        if (currentIndex >= 0 && currentIndex < nodeState.imageNodes.length) {
+        if (currentIndex >= 0 && currentIndex < nodeState.imageNodes.length && nodeState.imageNodes[currentIndex]) {
           selectLayer(nodeState, currentIndex);
         } else {
           log.warn(`Invalid layer index ${currentIndex} for node ${nodeState.nodeId}`);
