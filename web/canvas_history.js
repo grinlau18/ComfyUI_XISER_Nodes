@@ -3,7 +3,7 @@
  * @module canvas_history
  */
 
-import { log, throttle } from './canvas_state.js';
+import { log } from './canvas_state.js';
 import { applyStates, selectLayer, deselectLayer } from './canvas_konva.js';
 
 /**
@@ -18,11 +18,11 @@ export function updateHistory(nodeState) {
   // Ensure initialStates is an array
   const initialStates = Array.isArray(nodeState.initialStates) ? nodeState.initialStates : [];
   const currentState = initialStates.map(state => ({
-    x: state.x,
-    y: state.y,
+    x: state.x || 0,
+    y: state.y || 0,
     scaleX: state.scaleX || 1,
     scaleY: state.scaleY || 1,
-    rotation: state.rotation || 0
+    rotation: state.rotation || 0,
   }));
 
   // Only push to history if the state has changed
@@ -59,11 +59,14 @@ export function undo(node, nodeState) {
       y: state.y,
       scaleX: state.scaleX || 1,
       scaleY: state.scaleY || 1,
-      rotation: state.rotation || 0
+      rotation: state.rotation || 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+    const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
     node.setProperty('image_states', nodeState.initialStates);
     nodeState.imageLayer.batchDraw();
     log.info(`Undo performed for node ${node.id}, historyIndex: ${nodeState.historyIndex}`);
@@ -89,11 +92,14 @@ export function redo(node, nodeState) {
       y: state.y,
       scaleX: state.scaleX || 1,
       scaleY: state.scaleY || 1,
-      rotation: state.rotation || 0
+      rotation: state.rotation || 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+    const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
     node.setProperty('image_states', nodeState.initialStates);
     nodeState.imageLayer.batchDraw();
     log.info(`Redo performed for node ${node.id}, historyIndex: ${nodeState.historyIndex}`);
@@ -112,19 +118,22 @@ export function redo(node, nodeState) {
 export function resetCanvas(node, nodeState, imagePaths, updateSize) {
   try {
     const boardWidth = node.properties.ui_config.board_width || 1024;
-    const boardHeight = node.properties.ui_config.board_height || 1024;
     const borderWidth = node.properties.ui_config.border_width || 40;
+    const boardHeight = node.properties.ui_config.board_height || 1024;
 
     nodeState.initialStates = imagePaths.map(() => ({
       x: borderWidth + boardWidth / 2,
       y: borderWidth + boardHeight / 2,
       scaleX: 1,
       scaleY: 1,
-      rotation: 0
+      rotation: 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;
-    node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+    const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
     node.setProperty('image_states', nodeState.initialStates);
     nodeState.imageLayer.batchDraw();
     deselectLayer(nodeState);
@@ -142,39 +151,43 @@ export function resetCanvas(node, nodeState, imagePaths, updateSize) {
  * @param {Object} nodeState - The node state containing layer and interaction information.
  */
 export function setupLayerEventListeners(node, nodeState) {
-  // Throttled function for scale/rotate updates (300ms interval)
-  const throttledTransformUpdate = throttle(() => {
-    if (!nodeState.isInteracting) return;
-    let updated = false;
-    nodeState.imageNodes.forEach((imageNode, i) => {
-      const state = nodeState.initialStates[i] || {};
-      if (
-        state.scaleX !== imageNode.scaleX() ||
-        state.scaleY !== imageNode.scaleY() ||
-        state.rotation !== imageNode.rotation()
-      ) {
-        nodeState.initialStates[i] = {
-          x: imageNode.x(),
-          y: imageNode.y(),
-          scaleX: imageNode.scaleX(),
-          scaleY: imageNode.scaleY(),
-          rotation: imageNode.rotation()
-        };
-        updated = true;
-      }
-    });
-    if (updated) {
-      node.properties.image_states = nodeState.initialStates;
-      node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
-      node.setProperty('image_states', nodeState.initialStates);
-      updateHistory(nodeState);
-      nodeState.imageLayer.batchDraw();
-      log.debug(`Transform update for node ${nodeState.nodeId}, states: ${JSON.stringify(nodeState.initialStates)}`);
-    }
-  }, 300);
+  const log = nodeState.log || console;
 
-  // Add drag and transform event listeners to image nodes
-  nodeState.imageNodes.forEach((imageNode, index) => {
+  // Filter valid imageNodes
+  const validNodes = nodeState.imageNodes.filter(node => node !== null);
+  if (validNodes.length !== nodeState.imageNodes.length) {
+    log.warn(`Found ${nodeState.imageNodes.length - validNodes.length} null imageNodes in node ${node.id}`);
+  }
+
+  // Update state function
+  const updateState = (imageNode, index) => {
+    if (!imageNode) {
+      log.warn(`Skipping state update for null imageNode at index ${index} in node ${node.id}`);
+      return;
+    }
+    nodeState.initialStates[index] = {
+      x: imageNode.x(),
+      y: imageNode.y(),
+      scaleX: imageNode.scaleX(),
+      scaleY: imageNode.scaleY(),
+      rotation: imageNode.rotation(),
+    };
+    node.properties.image_states = nodeState.initialStates;
+    const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
+    node.setProperty('image_states', nodeState.initialStates);
+    updateHistory(nodeState);
+    nodeState.imageLayer.batchDraw();
+    log.debug(`State updated for node ${node.id}, layer ${index}: ${JSON.stringify(nodeState.initialStates[index])}`);
+  };
+
+  // Remove existing listeners and add new ones
+  validNodes.forEach((imageNode, index) => {
+    // Remove existing listeners to prevent duplicates
+    imageNode.off('dragstart dragend transformstart transform transformend');
+
     imageNode.on('dragstart', () => {
       nodeState.isInteracting = true;
       log.debug(`Drag started for image ${index} in node ${node.id}`);
@@ -182,19 +195,7 @@ export function setupLayerEventListeners(node, nodeState) {
 
     imageNode.on('dragend', () => {
       nodeState.isInteracting = false;
-      nodeState.initialStates[index] = {
-        x: imageNode.x(),
-        y: imageNode.y(),
-        scaleX: imageNode.scaleX(),
-        scaleY: imageNode.scaleY(),
-        rotation: imageNode.rotation()
-      };
-      node.properties.image_states = nodeState.initialStates;
-      node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
-      node.setProperty('image_states', nodeState.initialStates);
-      updateHistory(nodeState);
-      nodeState.imageLayer.batchDraw();
-      log.debug(`Drag ended for image ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates)}`);
+      updateState(imageNode, index);
     });
 
     imageNode.on('transformstart', () => {
@@ -202,25 +203,15 @@ export function setupLayerEventListeners(node, nodeState) {
       log.debug(`Transform started for image ${index} in node ${node.id}`);
     });
 
-    imageNode.on('transform', throttledTransformUpdate);
+    imageNode.on('transform', () => {
+      updateState(imageNode, index);
+    });
 
     imageNode.on('transformend', () => {
       nodeState.isInteracting = false;
-      nodeState.initialStates[index] = {
-        x: imageNode.x(),
-        y: imageNode.y(),
-        scaleX: imageNode.scaleX(),
-        scaleY: imageNode.scaleY(),
-        rotation: imageNode.rotation()
-      };
-      node.properties.image_states = nodeState.initialStates;
-      node.widgets.find(w => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
-      node.setProperty('image_states', nodeState.initialStates);
-      updateHistory(nodeState);
-      nodeState.imageLayer.batchDraw();
-      log.debug(`Transform ended for image ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates)}`);
+      updateState(imageNode, index);
     });
   });
 
-  // Wheel events are handled in canvas_konva.js
+  log.info(`Event listeners set up for ${validNodes.length} valid image nodes in node ${node.id}`);
 }

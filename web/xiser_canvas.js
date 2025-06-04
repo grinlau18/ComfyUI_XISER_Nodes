@@ -95,6 +95,7 @@ app.registerExtension({
       nodeState.isInteracting = false; // Track drag/transform interaction state
       nodeState.fileData = null; // Store file_data for layer states
       nodeState.pollIntervalId = null; // Initialize poll interval ID
+      nodeState.lastAutoSize = null; // Track last auto_size value
       node._state = nodeState; // Attach state to node for cleanup
 
       // Initialize canvas properties with defaults
@@ -109,6 +110,7 @@ app.registerExtension({
       uiConfig.display_scale = Math.min(Math.max(parseFloat(uiConfig.display_scale) || 1, 0.1), 2);
       uiConfig.height_adjustment = Math.min(Math.max(parseInt(uiConfig.height_adjustment) || 0, -100), 100);
       node.setProperty('ui_config', uiConfig);
+      nodeState.lastAutoSize = uiConfig.auto_size; // Initialize lastAutoSize
 
       // Sanitize imagePaths
       imagePaths = Array.isArray(imagePaths) ? imagePaths.filter(p => typeof p === 'string' && p.trim().length > 0) : [];
@@ -266,15 +268,20 @@ app.registerExtension({
             nodeState.borderFrame.setAttrs({ x: borderWidth, y: borderWidth, width: boardWidth, height: boardHeight });
           }
 
-          // Update image states
-          if (!nodeState.initialStates.length || nodeState.initialStates.length !== imagePaths.length) {
-            nodeState.initialStates = imagePaths.map(() => ({
+          // Preserve existing image states
+          if (nodeState.initialStates.length < imagePaths.length) {
+            // Append new states for additional images
+            const newStates = Array(imagePaths.length - nodeState.initialStates.length).fill().map(() => ({
               x: borderWidth + boardWidth / 2,
               y: borderWidth + boardHeight / 2,
               scaleX: 1,
               scaleY: 1,
               rotation: 0,
             }));
+            nodeState.initialStates = [...nodeState.initialStates, ...newStates];
+          } else if (nodeState.initialStates.length > imagePaths.length) {
+            // Truncate excess states
+            nodeState.initialStates = nodeState.initialStates.slice(0, imagePaths.length);
           }
           applyStates(nodeState);
 
@@ -283,6 +290,7 @@ app.registerExtension({
           if (imageStatesWidget) {
             imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
           }
+          node.setProperty('image_states', nodeState.initialStates);
 
           // Update node size with buffer and adjustment
           const nodeWidth = scaledWidth + SIDE_MARGIN;
@@ -333,7 +341,7 @@ app.registerExtension({
           if (autoSize === 'on' && imagePaths.length) {
             statusText.innerText = '正在调整画板并重置...';
             statusText.style.color = '#fff';
-            await debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+            await debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             boardWidth = node.properties.ui_config.board_width || 1024;
             boardHeight = node.properties.ui_config.board_height || 1024;
             borderWidth = node.properties.ui_config.border_width || 40;
@@ -413,10 +421,13 @@ app.registerExtension({
         autoSize = ['off', 'on'].includes(value) ? value : 'off';
         node.properties.ui_config.auto_size = autoSize;
         log.debug(`Auto_size changed to ${autoSize} for node ${node.id}`);
-        if (autoSize === 'on' && imagePaths.length) {
-          log.debug(`Auto_size toggled to on for node ${node.id}, triggering debounced loadImages`);
-          nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
-          debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+        const autoSizeChanged = nodeState.lastAutoSize !== autoSize;
+        nodeState.lastAutoSize = autoSize;
+        if (imagePaths.length && autoSizeChanged) {
+          log.debug(`Auto_size toggled to ${autoSize} for node ${node.id}, forcing loadImages`);
+          nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Reset imageNodes
+          nodeState.lastImagePathsHash = null; // Invalidate hash to force reload
+          debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
         } else {
           updateSize();
         }
@@ -534,7 +545,7 @@ app.registerExtension({
             node.setProperty('image_states', nodeState.initialStates);
             node.setProperty('ui_config', node.properties.ui_config);
             updateSize();
-            debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+            debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             updateHistory(nodeState);
           } else if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
             log.info(`Image paths changed for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
@@ -552,7 +563,7 @@ app.registerExtension({
             node.setProperty('image_states', nodeState.initialStates);
             node.setProperty('ui_config', node.properties.ui_config);
             updateSize();
-            debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+            debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             updateHistory(nodeState);
           }
           nodeState.lastImagePaths = imagePaths.slice();
@@ -586,7 +597,7 @@ app.registerExtension({
           node.setProperty('image_states', nodeState.initialStates);
           node.setProperty('ui_config', node.properties.ui_config);
           updateSize();
-          debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+          debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
           updateHistory(nodeState);
         } else {
           statusText.innerText = '无有效图像数据，请检查上游节点';
@@ -645,13 +656,11 @@ app.registerExtension({
           nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
           node.properties.ui_config.image_paths = imagePaths;
 
-          node.properties.image_states = Array.isArray(states) ? states : imagePaths.map(() => ({
-            x: borderWidth + boardWidth / 2,
-            y: borderWidth + boardHeight / 2,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0,
-          }));
+          // Apply latest states before rendering
+          applyStates(nodeState);
+          nodeState.imageLayer.batchDraw();
+
+          node.properties.image_states = Array.isArray(states) ? states : nodeState.initialStates;
           nodeState.initialStates = node.properties.image_states;
           node.setProperty('image_states', nodeState.initialStates);
           node.setProperty('ui_config', node.properties.ui_config);
@@ -659,7 +668,7 @@ app.registerExtension({
 
           log.debug(`onExecuted: Loading images for node ${node.id} with ${imagePaths.length} paths`);
           try {
-            await loadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+            await loadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             setupLayerEventListeners(node, nodeState);
             setupWheelEvents(node, nodeState);
           } catch (e) {
@@ -762,7 +771,7 @@ app.registerExtension({
       if (imagePaths.length) {
         log.info(`Initial loadImages call with paths: ${JSON.stringify(imagePaths)}`);
         nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
-        debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize);
+        debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
       } else {
         log.info(`No initial image paths, waiting for images`);
         statusText.innerText = '等待图片数据...';

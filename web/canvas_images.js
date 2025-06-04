@@ -28,10 +28,11 @@ const globalLoadedImageUrls = new Map();
  * @param {string[]} [base64Chunks=[]] - Array of base64 image chunks.
  * @param {number} [retryCount=0] - Current retry attempt.
  * @param {number} [maxRetries=3] - Maximum retry attempts.
+ * @param {boolean} [forceReload=false] - Forces reload even if paths and auto_size are unchanged.
  * @async
  * @throws {Error} If image loading fails critically.
  */
-export async function loadImages(node, nodeState, imagePaths, states, statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks = [], retryCount = 0, maxRetries = 3) {
+export async function loadImages(node, nodeState, imagePaths, states, statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks = [], retryCount = 0, maxRetries = 3, forceReload = false) {
   const log = nodeState.log || console;
   const nodeId = nodeState.nodeId;
 
@@ -44,7 +45,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   // Validate imagePaths
   if (!Array.isArray(imagePaths) || !imagePaths.length || imagePaths.every(path => !path || typeof path !== 'string')) {
     log.info(`No valid image paths provided for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
-    statusText.innerText = "无图像数据";
+    statusText.innerText = "No valid image data";
     statusText.style.color = "#f00";
     return;
   }
@@ -53,7 +54,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   const validImagePaths = imagePaths.filter(path => typeof path === 'string' && path.trim().length > 0);
   if (validImagePaths.length === 0) {
     log.info(`No valid image paths after filtering for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
-    statusText.innerText = "无有效图像路径";
+    statusText.innerText = "No valid image paths";
     statusText.style.color = "#f00";
     return;
   }
@@ -74,9 +75,12 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   });
 
   const autoSize = node.properties.ui_config.auto_size || "off";
-  const pathsHash = JSON.stringify(validImagePaths);
-  if (nodeState.lastImagePathsHash === pathsHash && autoSize !== "on") {
-    log.debug(`Skipping loadImages for node ${nodeId}: identical imagePaths`);
+  // Include auto_size in hash to detect changes
+  const pathsHash = JSON.stringify({ imagePaths: validImagePaths, autoSize });
+
+  // Skip hash check if forceReload is true or hash has changed
+  if (!forceReload && nodeState.lastImagePathsHash === pathsHash) {
+    log.debug(`Skipping loadImages for node ${nodeId}: identical imagePaths and auto_size`);
     return;
   }
   nodeState.lastImagePathsHash = pathsHash;
@@ -87,13 +91,27 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   }
   nodeState.isLoading = true;
 
-  log.info(`Starting loadImages for node ${nodeId}, imagePaths: ${JSON.stringify(validImagePaths)}, length: ${validImagePaths.length}, current imageNodes: ${nodeState.imageNodes.length}`);
+  log.info(`Starting loadImages for node ${nodeId}, imagePaths: ${JSON.stringify(validImagePaths)}, length: ${validImagePaths.length}, forceReload: ${forceReload}, current imageNodes: ${nodeState.imageNodes.length}`);
 
-  // Clear existing image nodes
-  nodeState.imageNodes.forEach(node => node?.destroy());
-  nodeState.imageNodes = new Array(validImagePaths.length).fill(null); // Initialize with nulls
-  nodeState.imageLayer.destroyChildren();
-  nodeState.imageLayer.batchDraw();
+  // Clean up existing image nodes and transformer
+  nodeState.imageNodes.forEach((node, i) => {
+    if (node) {
+      node.off('dragend transformend'); // Remove existing listeners
+      node.destroy();
+    } else {
+      log.warn(`Null imageNode at index ${i} during cleanup for node ${nodeId}`);
+    }
+  });
+  nodeState.imageNodes = new Array(validImagePaths.length).fill(null); // Reset with nulls
+  if (nodeState.imageLayer) {
+    nodeState.imageLayer.destroyChildren();
+    nodeState.imageLayer.batchDraw();
+  }
+  if (nodeState.transformer) {
+    nodeState.transformer.nodes([]);
+    nodeState.transformer.destroy();
+    nodeState.transformer = null;
+  }
 
   const borderWidth = node.properties.ui_config.border_width || 40;
   let boardWidth = node.properties.ui_config.board_width || 1024;
@@ -105,19 +123,16 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   }
 
   // Initialize states
-  nodeState.initialStates = validImagePaths.map(() => ({
-    x: borderWidth + boardWidth / 2,
-    y: borderWidth + boardHeight / 2,
-    scaleX: 1,
-    scaleY: 1,
-    rotation: 0
+  nodeState.initialStates = validImagePaths.map((_, i) => ({
+    x: states[i]?.x || borderWidth + boardWidth / 2,
+    y: states[i]?.y || borderWidth + boardHeight / 2,
+    scaleX: states[i]?.scaleX || 1,
+    scaleY: states[i]?.scaleY || 1,
+    rotation: states[i]?.rotation || 0,
   }));
-  states.forEach((state, i) => {
-    if (i < nodeState.initialStates.length) nodeState.initialStates[i] = { ...nodeState.initialStates[i], ...state };
-  });
 
   const images = validImagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
-  statusText.innerText = `加载图像... 0/${images.length}`;
+  statusText.innerText = `Loading images... 0/${images.length}`;
   statusText.style.color = "#fff";
 
   let loadedCount = 0;
@@ -150,7 +165,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         log.error(`Failed to load image ${imgData.filename} for node ${nodeId}`);
         if (retryCount < maxRetries) {
           log.info(`Retrying image ${imgData.filename} for node ${nodeId}, attempt ${retryCount + 1}`);
-          setTimeout(() => loadImages(node, nodeState, [imgData.filename], [states[i] || {}], statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks, retryCount + 1, maxRetries), 1000);
+          setTimeout(() => loadImages(node, nodeState, [imgData.filename], [states[i] || {}], statusText, uiElements, selectLayer, deselectLayer, updateSize, base64Chunks, retryCount + 1, maxRetries, forceReload), 1000);
         }
         resolve({ img: null, index: i, success: false });
       };
@@ -184,21 +199,18 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           boardHeight = newBoardHeight;
           node.widgets.find(w => w.name === "board_width").value = boardWidth;
           node.widgets.find(w => w.name === "board_height").value = boardHeight;
-          statusText.innerText = `画板尺寸已调整为 ${boardWidth}x${boardHeight}`;
+          statusText.innerText = `Canvas resized to ${boardWidth}x${boardHeight}`;
           statusText.style.color = "#0f0";
           log.info(`Auto-size enabled, adjusted canvas to ${boardWidth}x${newBoardHeight} from first image for node ${nodeId}`);
 
           // Update initial states with new dimensions
-          nodeState.initialStates = validImagePaths.map(() => ({
-            x: borderWidth + boardWidth / 2,
-            y: borderWidth + boardHeight / 2,
-            scaleX: 1,
-            scaleY: 1,
-            rotation: 0
+          nodeState.initialStates = validImagePaths.map((_, i) => ({
+            x: states[i]?.x || borderWidth + boardWidth / 2,
+            y: states[i]?.y || borderWidth + boardHeight / 2,
+            scaleX: states[i]?.scaleX || 1,
+            scaleY: states[i]?.scaleY || 1,
+            rotation: states[i]?.rotation || 0,
           }));
-          states.forEach((state, j) => {
-            if (j < nodeState.initialStates.length) nodeState.initialStates[j] = { ...nodeState.initialStates[j], ...state };
-          });
           node.properties.image_states = nodeState.initialStates;
           node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
           node.setProperty("image_states", nodeState.initialStates);
@@ -224,7 +236,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         draggable: true,
         offsetX: img.width / 2,
         offsetY: img.height / 2,
-        filename: images[index].filename
+        filename: images[index].filename,
       });
       nodeState.imageLayer.add(konvaImg);
       nodeState.imageNodes[index] = konvaImg;
@@ -233,51 +245,69 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         y: konvaImg.y(),
         scaleX: konvaImg.scaleX(),
         scaleY: konvaImg.scaleY(),
-        rotation: konvaImg.rotation()
+        rotation: konvaImg.rotation(),
       };
 
-      konvaImg.on("dragend transformend", () => {
-        nodeState.initialStates[index] = {
+      // Debounced state update to prevent rapid overwrites
+      const debouncedUpdateState = debounce((index, konvaImg) => {
+        const newState = {
           x: konvaImg.x(),
           y: konvaImg.y(),
           scaleX: konvaImg.scaleX(),
           scaleY: konvaImg.scaleY(),
-          rotation: konvaImg.rotation()
+          rotation: konvaImg.rotation(),
         };
+        log.debug(`Updating state for node ${nodeId}, layer ${index}: ${JSON.stringify(newState)}`);
+        nodeState.initialStates[index] = newState;
         node.properties.image_states = nodeState.initialStates;
         node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
         node.setProperty("image_states", nodeState.initialStates);
         nodeState.imageLayer.batchDraw();
         debounceSaveHistory(nodeState);
+      }, 100);
+
+      // Attach event listeners for drag and transform
+      konvaImg.on("dragend transformend", () => {
+        debouncedUpdateState(index, konvaImg);
       });
 
       loadedCount++;
-      statusText.innerText = `加载图像... ${loadedCount}/${images.length}`;
+      statusText.innerText = `Loading images... ${loadedCount}/${images.length}`;
     } catch (e) {
-      log.error(`Error processing image ${index+1} for node ${nodeId}: ${e.message}, path: ${images[index]?.filename || 'unknown'}`);
-      statusText.innerText = `加载失败：${e.message}`;
+      log.error(`Error processing image ${index + 1} for node ${nodeId}: ${e.message}, path: ${images[index]?.filename || 'unknown'}`);
+      statusText.innerText = `Load failed: ${e.message}`;
       statusText.style.color = "#f00";
       nodeState.imageNodes[index] = null; // Mark failed image
     }
   }
 
+  // Filter out null nodes and synchronize states
+  const validNodes = nodeState.imageNodes.filter(node => node !== null);
+  if (validNodes.length !== nodeState.imageNodes.length) {
+    log.warn(`Filtered ${nodeState.imageNodes.length - validNodes.length} null imageNodes for node ${nodeId}`);
+  }
+  nodeState.initialStates = validNodes.map((node, i) => nodeState.initialStates[nodeState.imageNodes.indexOf(node)]);
+  nodeState.imageNodes = validNodes;
   nodeState.defaultLayerOrder = [...nodeState.imageNodes];
-  uiElements.updateLayerPanel(selectLayer, deselectLayer);
+
+  // Initialize transformer
   nodeState.transformer = new Konva.Transformer({
     nodes: [],
     keepRatio: true,
     enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
-    rotateEnabled: true
+    rotateEnabled: true,
   });
   nodeState.imageLayer.add(nodeState.transformer);
   nodeState.imageLayer.batchDraw();
   nodeState.stage.batchDraw();
 
+  // Update UI and history
+  uiElements.updateLayerPanel(selectLayer, deselectLayer);
   if (loadedCount === 0) {
-    statusText.innerText = "无法加载任何图像，请检查上游节点";
+    statusText.innerText = "Unable to load any images, please check upstream nodes";
     statusText.style.color = "#f00";
   } else {
-    statusText.innerText = `已加载 ${loadedCount} 张图像`;
+    statusText.innerText = `Loaded ${loadedCount} images`;
     statusText.style.color = "#0f0";
   }
   saveHistory(nodeState);
@@ -286,7 +316,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
 }
 
 /**
- * Debounces history saving.
+ * Debounces history saving to reduce redundant history entries.
  * @param {Object} nodeState - The node state object.
  */
 function debounceSaveHistory(nodeState) {
@@ -303,11 +333,26 @@ function debounceSaveHistory(nodeState) {
  */
 function saveHistory(nodeState) {
   const currentState = nodeState.initialStates.map(state => ({ ...state }));
+  nodeState.history = nodeState.history || [];
   nodeState.history.splice(nodeState.historyIndex + 1);
   nodeState.history.push(currentState);
-  nodeState.historyIndex++;
+  nodeState.historyIndex = (nodeState.historyIndex || -1) + 1;
   if (nodeState.history.length > 20) {
     nodeState.history.shift();
     nodeState.historyIndex--;
   }
+}
+
+/**
+ * Debounces a function to limit its execution rate.
+ * @param {Function} func - The function to debounce.
+ * @param {number} wait - The debounce wait time in milliseconds.
+ * @returns {Function} The debounced function.
+ */
+function debounce(func, wait) {
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
 }

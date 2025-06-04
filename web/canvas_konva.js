@@ -3,7 +3,7 @@
  * @module canvas_konva
  */
 
-import { throttle } from './canvas_state.js';
+import { log } from './canvas_state.js';
 
 /**
  * Initializes the Konva.js stage and layers for the canvas.
@@ -20,9 +20,9 @@ import { throttle } from './canvas_state.js';
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
 
-  // 定义步长常量
-  const SCALE_STEP = 0.01; // 设置滚轮缩放步长为 5%
-  const ROTATION_STEP = 1; // 设置滚轮旋转步长为 5 度
+  // Define step constants for wheel interactions
+  const ROTATION_STEP = 1; // Rotation step size (1 degree)
+  const SCALE_STEP = 0.01; // Scaling step size (1%)
 
   if (!window.Konva) {
     log.error(`Konva.js not available for node ${node.id}`);
@@ -103,7 +103,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
       deselectLayer(nodeState);
       return;
     }
-    if (nodeState.imageNodes.includes(target)) {
+    if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
       if (nodeState.selectedLayer !== target) {
         selectLayer(nodeState, index);
@@ -113,7 +113,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
 
   stage.on('mousedown', (e) => {
     const target = e.target;
-    if (nodeState.imageNodes.includes(target)) {
+    if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
       selectLayer(nodeState, index);
     }
@@ -183,21 +183,25 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
     height: boardHeight,
   });
 
-  nodeState.imageNodes.forEach((node, i) => {
-    if (!node) {
-      log.warn(`Skipping resize for null imageNode at index ${i} in node ${nodeState.nodeId}`);
-      return; // Skip null entries
+  // Preserve existing image states
+  const validNodes = nodeState.imageNodes.filter(node => node !== null);
+  validNodes.forEach((node, i) => {
+    if (!nodeState.initialStates[i]) {
+      log.warn(`No initial state for image node ${i} in node ${nodeState.nodeId}, using defaults`);
+      nodeState.initialStates[i] = {
+        x: borderWidth + boardWidth / 2,
+        y: borderWidth + boardHeight / 2,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+      };
     }
-    const state = nodeState.initialStates[i] || {};
-    node.x(borderWidth + boardWidth / 2);
-    node.y(borderWidth + boardHeight / 2);
-    nodeState.initialStates[i] = {
-      x: node.x(),
-      y: node.y(),
-      scaleX: state.scaleX || 1,
-      scaleY: state.scaleY || 1,
-      rotation: state.rotation || 0,
-    };
+    // Apply preserved states
+    node.x(nodeState.initialStates[i].x);
+    node.y(nodeState.initialStates[i].y);
+    node.scaleX(nodeState.initialStates[i].scaleX || 1);
+    node.scaleY(nodeState.initialStates[i].scaleY || 1);
+    node.rotation(nodeState.initialStates[i].rotation || 0);
   });
 
   nodeState.canvasLayer.batchDraw();
@@ -287,11 +291,12 @@ export function destroyKonva(nodeState) {
  * @param {number} index - The layer index.
  */
 export function selectLayer(nodeState, index) {
+  const log = nodeState.log || console;
   if (index < 0 || index >= nodeState.imageNodes.length || !nodeState.imageNodes[index]) {
-    nodeState.log.warn(`Invalid or null layer at index ${index} for node ${nodeState.nodeId}`);
+    log.warn(`Invalid or null layer at index ${index} for node ${nodeState.nodeId}`);
+    deselectLayer(nodeState);
     return;
   }
-  const log = nodeState.log || console;
   const node = nodeState.imageNodes[index];
   deselectLayer(nodeState);
   nodeState.selectedLayer = node;
@@ -301,8 +306,16 @@ export function selectLayer(nodeState, index) {
   nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
   const listItemIndex = nodeState.imageNodes.length - 1 - index;
   if (nodeState.layerItems[listItemIndex]) {
-    nodeState.layerItems[listItemIndex].classList.add('selected');
+    nodeState.layerItems[index].classList.add('selected');
   }
+  // Sync state
+  nodeState.initialStates[index] = {
+    x: node.x(),
+    y: node.y(),
+    scaleX: node.scaleX(),
+    scaleY: node.scaleY(),
+    rotation: node.rotation,
+  };
   log.debug(`Selected layer index ${index} for node ${nodeState.nodeId}`);
 }
 
@@ -312,8 +325,17 @@ export function selectLayer(nodeState, index) {
  */
 export function deselectLayer(nodeState) {
   const log = nodeState.log || console;
-  if (!nodeState.selectedLayer) return;
-  nodeState.defaultLayerOrder.forEach((node, index) => node?.zIndex(index));
+  if (!nodeState.selectedLayer) {
+    log.debug(`No layer selected to deselect for node ${nodeState.nodeId}`);
+    return;
+  }
+  nodeState.defaultLayerOrder.forEach((node, index) => {
+    if (node) {
+      node.zIndex(index);
+    } else {
+      log.warn(`Null node in defaultLayerOrder at index ${index} for node ${nodeState.nodeId}`);
+    }
+  });
   nodeState.selectedLayer = null;
   nodeState.transformer.nodes([]);
   nodeState.imageLayer.batchDraw();
@@ -327,20 +349,31 @@ export function deselectLayer(nodeState) {
  */
 export function applyStates(nodeState) {
   const log = nodeState.log || console;
-  nodeState.imageNodes.forEach((node, i) => {
-    if (!node) {
-      log.warn(`Skipping applyStates for null imageNode at index ${i} in node ${nodeState.nodeId}`);
-      return; // Skip null entries
-    }
+  const validNodes = nodeState.imageNodes.filter(node => node !== null);
+  if (validNodes.length !== nodeState.imageNodes.length) {
+    log.warn(`Found ${nodeState.imageNodes.length - validNodes.length} null imageNodes in node ${nodeState.nodeId}`);
+  }
+  validNodes.forEach((node, i) => {
     const state = nodeState.initialStates[i] || {};
-    node.x(state.x || nodeState.canvasRect?.x() + nodeState.canvasRect?.width() / 2 || 512);
-    node.y(state.y || nodeState.canvasRect?.y() + nodeState.canvasRect?.height() / 2 || 512);
-    node.scaleX(state.scaleX || 1);
-    node.scaleY(state.scaleY || 1);
-    node.rotation(state.rotation || 0);
+    const x = state.x || (nodeState.canvasRect?.x() + nodeState.canvasRect?.width() / 2) || 512;
+    const y = state.y || (nodeState.canvasRect?.y() + nodeState.canvasRect?.height() / 2) || 512;
+    const scaleX = state.scaleX || 1;
+    const scaleY = state.scaleY || 1;
+    const rotation = state.rotation || 0;
+
+    try {
+      node.x(x);
+      node.y(y);
+      node.scaleX(scaleX);
+      node.scaleY(scaleY);
+      node.rotation(rotation);
+      nodeState.initialStates[i] = { x, y, scaleX, scaleY, rotation };
+    } catch (e) {
+      log.error(`Failed to apply state to image node ${i} for node ${nodeState.nodeId}: ${e.message}`);
+    }
   });
   nodeState.imageLayer.batchDraw();
-  log.debug(`Applied states to ${nodeState.imageNodes.length} image nodes for node ${nodeState.nodeId}`);
+  log.debug(`Applied states to ${validNodes.length} valid image nodes for node ${nodeState.nodeId}`);
 }
 
 /**
@@ -351,18 +384,13 @@ export function applyStates(nodeState) {
 export function setupWheelEvents(node, nodeState) {
   const log = nodeState.log || console;
 
-  // Throttled function for wheel-based updates (300ms interval)
-  const throttledWheelUpdate = throttle(() => {
-    if (!nodeState.isInteracting) return;
-    const target = nodeState.transformer.nodes()[0];
+  // Define constants for consistent transformation steps
+  const ROTATION_STEP = 1; // 1 degree per wheel tick
+  const SCALE_STEP = 0.01; // 1% scaling per wheel tick
+
+  // Update state function
+  const updateState = (target, index) => {
     if (!target || !nodeState.imageNodes.includes(target)) return;
-
-    const index = nodeState.imageNodes.indexOf(target);
-    if (index === -1 || !nodeState.imageNodes[index]) {
-      log.warn(`Invalid or null target at index ${index} in node ${node.id}`);
-      return;
-    }
-
     nodeState.initialStates[index] = {
       x: target.x(),
       y: target.y(),
@@ -371,12 +399,15 @@ export function setupWheelEvents(node, nodeState) {
       rotation: target.rotation(),
     };
     node.properties.image_states = nodeState.initialStates;
-    node.widgets.find((w) => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+    const imageStatesWidget = node.widgets.find((w) => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
     node.setProperty('image_states', nodeState.initialStates);
     nodeState.imageLayer.batchDraw();
     nodeState.updateHistory();
-    log.debug(`Throttled wheel update for layer ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates[index])}`);
-  }, 300);
+    log.debug(`Wheel update for layer ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates[index])}`);
+  };
 
   // Wheel event handler for zooming and rotating
   nodeState.stage.on('wheel', (e) => {
@@ -393,19 +424,18 @@ export function setupWheelEvents(node, nodeState) {
     nodeState.isInteracting = true;
     const isAltPressed = e.evt.altKey;
     if (isAltPressed) {
-      const rotationStep = 1;
       const currentRotation = target.rotation();
-      const delta = e.evt.deltaY > 0 ? -rotationStep : rotationStep;
+      const delta = e.evt.deltaY > 0 ? -ROTATION_STEP : ROTATION_STEP;
       target.rotation(currentRotation + delta);
     } else {
-      const scaleBy = 1.01;
       const oldScale = target.scaleX();
-      let newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
-      newScale = Math.min(Math.max(newScale, 0.1), 10);
-      target.scaleX(newScale);
-      target.scaleY(newScale);
+      const newScale = e.evt.deltaY > 0 ? oldScale * (1 - SCALE_STEP) : oldScale * (1 + SCALE_STEP);
+      const clampedScale = Math.min(Math.max(newScale, 0.1), 10);
+      target.scaleX(clampedScale);
+      target.scaleY(clampedScale);
     }
 
-    throttledWheelUpdate();
+    updateState(target, index);
+    nodeState.isInteracting = false;
   });
 }
