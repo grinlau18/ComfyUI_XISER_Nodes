@@ -4,6 +4,7 @@
  */
 
 import { log } from './canvas_state.js';
+import { updateHistory } from './canvas_history.js';
 
 /**
  * Initializes the Konva.js stage and layers for the canvas.
@@ -16,6 +17,7 @@ import { log } from './canvas_state.js';
  * @param {string} canvasColor - Canvas color.
  * @param {string} borderColor - Border color.
  * @returns {Object} Konva stage and layer objects.
+ * @throws {Error} If Konva.js is not loaded.
  */
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
@@ -223,23 +225,19 @@ export function destroyKonva(nodeState) {
     }
 
     // Remove event listeners
-    nodeState.stage.off('click tap');
-    nodeState.stage.off('mousedown');
-    nodeState.stage.off('wheel');
+    nodeState.stage.off('click tap mousedown wheel');
 
     // Destroy transformer
     if (nodeState.transformer) {
-      nodeState.transformer.off('dragmove transform');
-      nodeState.transformer.off('transformend');
+      nodeState.transformer.off('transform transformend');
       nodeState.transformer.nodes([]);
       nodeState.transformer.destroy();
       nodeState.transformer = null;
     }
 
-    // Destroy image nodes
+    // Destroy image nodes (event listeners handled by cleanupLayerEventListeners)
     nodeState.imageNodes.forEach((node, i) => {
       if (node) {
-        node.off('dragend transformend');
         node.destroy();
       } else {
         log.warn(`Null imageNode at index ${i} during cleanup for node ${nodeState.nodeId}`);
@@ -266,6 +264,7 @@ export function destroyKonva(nodeState) {
     nodeState.borderRect = null;
     nodeState.borderFrame = null;
     nodeState.selectedLayer = null;
+    nodeState.layerItems = [];
 
     // Destroy stage
     const stageContainer = nodeState.stage.container();
@@ -290,11 +289,14 @@ export function destroyKonva(nodeState) {
  */
 export function selectLayer(nodeState, index) {
   const log = nodeState.log || console;
-  if (index < 0 || index >= nodeState.imageNodes.length || !nodeState.imageNodes[index]) {
+  if (!nodeState.imageNodes || index < 0 || index >= nodeState.imageNodes.length || !nodeState.imageNodes[index]) {
     log.warn(`Invalid or null layer at index ${index} for node ${nodeState.nodeId}`);
     deselectLayer(nodeState);
     return;
   }
+  // Clear transformation state when selecting a new layer
+  nodeState.isTransforming = false;
+  nodeState.transformStartState = null;
   const node = nodeState.imageNodes[index];
   deselectLayer(nodeState);
   nodeState.selectedLayer = node;
@@ -303,13 +305,17 @@ export function selectLayer(nodeState, index) {
   nodeState.imageLayer.batchDraw();
 
   // Update layer panel selection
-  nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
-  const listItemIndex = nodeState.imageNodes.length - 1 - index; // Map imageNodes index to layerItems index
-  if (nodeState.layerItems[listItemIndex]) {
-    nodeState.layerItems[listItemIndex].classList.add('selected');
-    log.debug(`Selected layer item at listItemIndex ${listItemIndex} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
+  if (Array.isArray(nodeState.layerItems) && nodeState.layerItems.length > 0) {
+    nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
+    const listItemIndex = nodeState.imageNodes.length - 1 - index; // Map imageNodes index to layerItems index
+    if (nodeState.layerItems[listItemIndex]) {
+      nodeState.layerItems[listItemIndex].classList.add('selected');
+      log.debug(`Selected layer item at listItemIndex ${listItemIndex} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
+    } else {
+      log.warn(`Layer item at listItemIndex ${listItemIndex} not found for node ${nodeState.nodeId}`);
+    }
   } else {
-    log.warn(`Layer item at listItemIndex ${listItemIndex} not found for node ${nodeState.nodeId}`);
+    log.warn(`No valid layerItems array for node ${nodeState.nodeId}`);
   }
 
   // Sync state
@@ -343,7 +349,12 @@ export function deselectLayer(nodeState) {
   nodeState.selectedLayer = null;
   nodeState.transformer.nodes([]);
   nodeState.imageLayer.batchDraw();
-  nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
+  if (Array.isArray(nodeState.layerItems)) {
+    nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
+  }
+  // Clear transformation state
+  nodeState.isTransforming = false;
+  nodeState.transformStartState = null;
   log.debug(`Deselected layer for node ${nodeState.nodeId}`);
 }
 
@@ -381,9 +392,28 @@ export function applyStates(nodeState) {
 }
 
 /**
+ * Debounces a function to prevent multiple calls within a specified delay.
+ * @param {Function} func - The function to debounce.
+ * @param {number} delay - The debounce delay in milliseconds.
+ * @returns {Function} The debounced function.
+ * @private
+ */
+function debounce(func, delay) {
+  let timeoutId;
+  return function (...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      func.apply(this, args);
+      log.debug(`Debounced function executed`);
+    }, delay);
+  };
+}
+
+/**
  * Sets up wheel event handlers for zooming and rotating selected layers.
  * @param {Object} node - The ComfyUI node instance.
  * @param {Object} nodeState - The node state object containing stage and image nodes.
+ * @requires updateHistory from canvas_history.js to save state changes.
  */
 export function setupWheelEvents(node, nodeState) {
   const log = nodeState.log || console;
@@ -393,7 +423,7 @@ export function setupWheelEvents(node, nodeState) {
   const SCALE_STEP = 0.01; // 1% scaling per wheel tick
 
   // Update state function
-  const updateState = (target, index) => {
+  const updateState = (target, index, updateHistoryFlag = true) => {
     if (!target || !nodeState.imageNodes.includes(target)) return;
     nodeState.initialStates[index] = {
       x: target.x(),
@@ -409,9 +439,19 @@ export function setupWheelEvents(node, nodeState) {
     }
     node.setProperty('image_states', nodeState.initialStates);
     nodeState.imageLayer.batchDraw();
-    nodeState.updateHistory();
+    if (updateHistoryFlag) {
+      updateHistory(nodeState, true); // Force history update
+    }
     log.debug(`Wheel update for layer ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates[index])}`);
   };
+
+  // Debounced history update
+  const debouncedUpdateHistory = debounce(() => {
+    nodeState.isTransforming = false;
+    updateHistory(nodeState, true);
+    nodeState.transformStartState = null;
+    log.debug(`Debounced history update for wheel interaction in node ${node.id}`);
+  }, 300);
 
   // Wheel event handler for zooming and rotating
   nodeState.stage.on('wheel', (e) => {
@@ -426,6 +466,19 @@ export function setupWheelEvents(node, nodeState) {
     }
 
     nodeState.isInteracting = true;
+    if (!nodeState.isTransforming) {
+      // Start of transformation
+      nodeState.isTransforming = true;
+      nodeState.transformStartState = {
+        x: target.x(),
+        y: target.y(),
+        scaleX: target.scaleX(),
+        scaleY: target.scaleY(),
+        rotation: target.rotation(),
+      };
+      log.debug(`Wheel transform started for layer ${index} in node ${node.id}, initial state: ${JSON.stringify(nodeState.transformStartState)}`);
+    }
+
     const isAltPressed = e.evt.altKey;
     if (isAltPressed) {
       const currentRotation = target.rotation();
@@ -439,7 +492,8 @@ export function setupWheelEvents(node, nodeState) {
       target.scaleY(clampedScale);
     }
 
-    updateState(target, index);
+    updateState(target, index, false); // Update state without history
+    debouncedUpdateHistory(); // Schedule history update
     nodeState.isInteracting = false;
   });
 }

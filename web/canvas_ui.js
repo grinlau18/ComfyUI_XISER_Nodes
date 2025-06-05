@@ -23,11 +23,14 @@ export function initializeUI(node, nodeState, widgetContainer) {
   };
 
   /**
-   * Creates and appends CSS styles for the UI components.
+   * Creates and appends CSS styles for the UI components with node-specific scoping.
    * @private
+   * @returns {HTMLStyleElement} The created style element.
    */
   function setupStyles() {
     const style = document.createElement("style");
+    style.id = `xiser-styles-${nodeState.nodeId}`;
+    style.dataset.nodeId = nodeState.nodeId; // Add identifier for cleanup
     style.textContent = `
       .xiser-canvas-container-${nodeState.nodeId} {
         position: relative;
@@ -148,10 +151,12 @@ export function initializeUI(node, nodeState, widgetContainer) {
     `;
     document.head.appendChild(style);
     log.debug(`UI styles initialized for node ${nodeState.nodeId}`);
+    return style;
   }
 
   /**
    * Creates the board container and status text within the widget container.
+   * @private
    * @param {HTMLDivElement} container - The container provided by addDOMWidget.
    * @returns {Object} Container and status text elements.
    */
@@ -168,6 +173,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   /**
    * Creates control buttons (Queue, Tips, Reset, Undo, Redo).
+   * @private
    * @returns {Object} Button elements.
    */
   function createButtons() {
@@ -217,6 +223,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   /**
    * Creates the instruction modal.
+   * @private
    * @returns {Object} Modal and modal content elements.
    */
   function createModal() {
@@ -252,6 +259,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   /**
    * Creates the layer panel for managing image layers.
+   * @private
    * @returns {HTMLDivElement} The layer panel element.
    */
   function createLayerPanel() {
@@ -277,8 +285,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
     for (let index = 0; index < nodeState.imageNodes.length; index++) {
       const item = document.createElement("div");
       item.className = `xiser-layer-item-${nodeState.nodeId}`;
-
-      const layerIndex = nodeState.imageNodes.length - 1 - index; // Map to imageNodes index
+      const layerIndex = nodeState.imageNodes.length - 1 - index;
       let layerName = `Layer ${layerIndex + 1}`;
       const layerData = layers[layerIndex];
 
@@ -300,7 +307,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       }
 
       item.innerText = layerName;
-      item.dataset.index = layerIndex.toString(); // Store imageNodes index
+      item.dataset.index = layerIndex.toString();
       layerPanel.appendChild(item);
       nodeState.layerItems.push(item);
 
@@ -323,12 +330,10 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @param {number} displayScale - The display scale factor (e.g., 1.5 for 150%).
    */
   function updateUIScale(displayScale) {
-    // Remove existing node-specific styles
-    document.querySelectorAll(`style#xiser-styles-${nodeState.nodeId}`).forEach(s => s.remove());
-
-    // Create new styles with scaled positions and sizes
+    document.querySelectorAll(`style#xiser-styles-scale-${nodeState.nodeId}`).forEach(s => s.remove());
     const style = document.createElement("style");
-    style.id = `xiser-styles-${nodeState.nodeId}`;
+    style.id = `xiser-styles-scale-${nodeState.nodeId}`;
+    style.dataset.nodeId = nodeState.nodeId;
     style.textContent = `
       .xiser-status-text-${nodeState.nodeId} {
         top: ${10 * displayScale}px;
@@ -366,7 +371,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
   }
 
   // Initialize UI components
-  setupStyles();
+  const styleElement = setupStyles();
   const { boardContainer, statusText } = createBoardContainer(widgetContainer);
   const { modal, modalContent } = createModal();
   const layerPanel = createLayerPanel();
@@ -396,6 +401,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
   updateUIScale(node.properties?.ui_config?.display_scale || 1);
 
   log.debug(`UI initialized for node ${nodeState.nodeId}, widgetContainer display: ${widgetContainer.style.display}`);
+
   return {
     widgetContainer,
     boardContainer,
@@ -404,6 +410,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
     layerPanel,
     buttons,
     updateLayerPanel,
-    updateUIScale
+    updateUIScale,
+    styleElement // Return style element for cleanup
   };
 }

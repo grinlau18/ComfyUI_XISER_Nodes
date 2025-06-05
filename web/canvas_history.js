@@ -9,8 +9,15 @@ import { applyStates, selectLayer, deselectLayer } from './canvas_konva.js';
 /**
  * Updates the history state for a node after layer changes, capturing the full state of all layers.
  * @param {Object} nodeState - The node state containing history and layer information.
+ * @param {boolean} [force=false] - Forces history update even if transforming.
  */
-export function updateHistory(nodeState) {
+export function updateHistory(nodeState, force = false) {
+  // Skip history update during transformation unless forced
+  if (nodeState.isTransforming && !force) {
+    log.debug(`Skipping history update for node ${nodeState.nodeId} during transformation`);
+    return;
+  }
+
   // Ensure history is initialized
   nodeState.history = nodeState.history || [];
   nodeState.historyIndex = nodeState.historyIndex ?? -1;
@@ -32,13 +39,13 @@ export function updateHistory(nodeState) {
     nodeState.history.push(currentState);
     nodeState.historyIndex = nodeState.history.length - 1;
 
-    // Limit history to 100 entries
-    if (nodeState.history.length > 100) {
+    // Limit history to 20 entries
+    if (nodeState.history.length > 20) {
       nodeState.history.shift();
       nodeState.historyIndex--;
     }
 
-    log.debug(`Updated history for node ${nodeState.nodeId}, index: ${nodeState.historyIndex}, state: ${JSON.stringify(currentState)}`);
+    log.debug(`Updated history for node ${nodeState.nodeId}, index: ${nodeState.historyIndex}, entries: ${nodeState.history.length}`);
   }
 }
 
@@ -138,7 +145,7 @@ export function resetCanvas(node, nodeState, imagePaths, updateSize) {
     nodeState.imageLayer.batchDraw();
     deselectLayer(nodeState);
     updateSize();
-    updateHistory(nodeState);
+    updateHistory(nodeState, true); // Force history update
     log.debug(`Canvas reset for node ${node.id}`);
   } catch (e) {
     log.error(`Reset canvas failed for node ${node.id}:`, e);
@@ -160,7 +167,7 @@ export function setupLayerEventListeners(node, nodeState) {
   }
 
   // Update state function
-  const updateState = (imageNode, index) => {
+  const updateState = (imageNode, index, updateHistoryFlag = true) => {
     if (!imageNode) {
       log.warn(`Skipping state update for null imageNode at index ${index} in node ${node.id}`);
       return;
@@ -178,7 +185,9 @@ export function setupLayerEventListeners(node, nodeState) {
       imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
     }
     node.setProperty('image_states', nodeState.initialStates);
-    updateHistory(nodeState);
+    if (updateHistoryFlag) {
+      updateHistory(nodeState, true); // Force history update
+    }
     nodeState.imageLayer.batchDraw();
     log.debug(`State updated for node ${node.id}, layer ${index}: ${JSON.stringify(nodeState.initialStates[index])}`);
   };
@@ -200,18 +209,57 @@ export function setupLayerEventListeners(node, nodeState) {
 
     imageNode.on('transformstart', () => {
       nodeState.isInteracting = true;
-      log.debug(`Transform started for image ${index} in node ${node.id}`);
+      nodeState.isTransforming = true;
+      // Store initial state
+      nodeState.transformStartState = {
+        x: imageNode.x(),
+        y: imageNode.y(),
+        scaleX: imageNode.scaleX(),
+        scaleY: imageNode.scaleY(),
+        rotation: imageNode.rotation(),
+      };
+      log.debug(`Transform started for image ${index} in node ${node.id}, initial state: ${JSON.stringify(nodeState.transformStartState)}`);
     });
 
     imageNode.on('transform', () => {
-      updateState(imageNode, index);
+      // Update state without saving to history
+      updateState(imageNode, index, false);
     });
 
     imageNode.on('transformend', () => {
       nodeState.isInteracting = false;
+      nodeState.isTransforming = false;
       updateState(imageNode, index);
+      nodeState.transformStartState = null;
+      log.debug(`Transform ended for image ${index} in node ${node.id}`);
     });
   });
 
   log.info(`Event listeners set up for ${validNodes.length} valid image nodes in node ${node.id}`);
+}
+
+/**
+ * Removes all event listeners from image nodes to prevent memory leaks.
+ * @param {Object} nodeState - The node state containing imageNodes.
+ */
+export function cleanupLayerEventListeners(nodeState) {
+  const log = nodeState.log || console;
+  const validNodes = nodeState.imageNodes.filter(node => node !== null);
+  validNodes.forEach((imageNode, index) => {
+    imageNode.off('dragstart dragend transformstart transform transformend');
+    log.debug(`Removed event listeners for image ${index} in node ${nodeState.nodeId}`);
+  });
+  log.info(`Cleaned up event listeners for ${validNodes.length} image nodes in node ${nodeState.nodeId}`);
+}
+
+/**
+ * Clears the history for a node, resetting history array and index.
+ * @param {Object} nodeState - The node state containing history information.
+ */
+export function clearHistory(nodeState) {
+  nodeState.history = [];
+  nodeState.historyIndex = -1;
+  nodeState.isTransforming = false;
+  nodeState.transformStartState = null;
+  log.debug(`Cleared history for node ${nodeState.nodeId}`);
 }
