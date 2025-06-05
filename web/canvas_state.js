@@ -7,43 +7,23 @@
  * Logging utility for the XISER_Canvas node with configurable log levels.
  * @type {Object}
  */
-const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'debug'; // Default to 'debug' if not specified
+const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'error'; // Default to 'debug' if not specified
 export const log = {
-  /**
-   * Logs a debug message if the log level is 'debug'.
-   * @param {string} message - The message to log.
-   * @param {...any} args - Additional arguments to include in the log.
-   */
   debug: (message, ...args) => {
     if (LOG_LEVEL === 'debug') {
       console.log(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
     }
   },
-  /**
-   * Logs an info message if the log level is 'debug' or 'info'.
-   * @param {string} message - The message to log.
-   * @param {...any} args - Additional arguments to include in the log.
-   */
   info: (message, ...args) => {
     if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info') {
       console.log(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
     }
   },
-  /**
-   * Logs a warning message if the log level is 'debug', 'info', or 'warn'.
-   * @param {string} message - The message to log.
-   * @param {...any} args - Additional arguments to include in the log.
-   */
   warn: (message, ...args) => {
     if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info' || LOG_LEVEL === 'warn') {
       console.warn(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
     }
   },
-  /**
-   * Logs an error message unconditionally.
-   * @param {string} message - The error message to log.
-   * @param {...any} args - Additional arguments to include in the log.
-   */
   error: (message, ...args) => {
     console.error(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
   }
@@ -53,13 +33,29 @@ export const log = {
  * Creates and initializes the node state for an XISER_Canvas node.
  * @param {number} nodeId - The ID of the node.
  * @param {Object} app - The ComfyUI app instance.
- * @returns {Object} The initialized node state.
+ * @returns {Object|null} The initialized node state, or null if initialization fails.
  */
 export function createNodeState(nodeId, app) {
+  if (!app || !app.graph || !nodeId) {
+    log.error(`Invalid parameters for createNodeState: nodeId=${nodeId}, app=${!!app}`);
+    return null;
+  }
+
   const node = app.graph.getNodeById(nodeId);
-  const imagePaths = Array.isArray(node?.properties?.ui_config?.image_paths) 
-    ? node.properties.ui_config.image_paths.filter(p => typeof p === 'string' && p.trim().length > 0) 
-    : [];
+  if (!node) {
+    log.warn(`Node not found for id ${nodeId}`);
+    return null;
+  }
+
+  // Initialize properties if undefined
+  node.properties = node.properties || {};
+  node.properties.ui_config = node.properties.ui_config || {};
+
+  const imagePaths = Array.isArray(node.properties.ui_config.image_paths) 
+    ? node.properties.ui_config.image_paths.slice() : [];
+
+  log.debug(`Creating node state for node ${nodeId}, imagePaths: ${JSON.stringify(imagePaths)}`);
+
   return {
     nodeId,
     imageNodes: new Array(imagePaths.length).fill(null), // Initialize with nulls
@@ -82,7 +78,7 @@ export function createNodeState(nodeId, app) {
     lastNodeSize: [0, 0],
     lastScale: app.canvas?.ds?.scale || 1,
     lastOffset: app.canvas?.ds?.offset ? [...app.canvas.ds.offset] : [0, 0],
-    pollInterval: null,
+    pollInterval: null, // Used for polling node updates in xiser_canvas.js
     animationFrameId: null,
     stage: null,
     canvasLayer: null,
@@ -92,10 +88,52 @@ export function createNodeState(nodeId, app) {
     borderRect: null,
     borderFrame: null,
     isLoading: false,
+    isTransforming: false, // Tracks ongoing rotation/scaling operations
+    transformStartState: null, // Stores initial state at transform start
     historyDebounceTimeout: null,
-    fileData: null, // Initialize fileData
     log,
   };
+}
+
+/**
+ * Cleans up node state by clearing timers and arrays.
+ * @param {Object} nodeState - The node state object.
+ */
+export function cleanupNodeState(nodeState) {
+  if (!nodeState) {
+    log.warn('No nodeState provided for cleanup');
+    return;
+  }
+
+  // Clear timers
+  if (nodeState.pollInterval) {
+    clearInterval(nodeState.pollInterval);
+    nodeState.pollInterval = null;
+    log.debug(`Cleared pollInterval for node ${nodeState.nodeId}`);
+  }
+  if (nodeState.animationFrameId) {
+    cancelAnimationFrame(nodeState.animationFrameId);
+    nodeState.animationFrameId = null;
+    log.debug(`Cleared animationFrameId for node ${nodeState.nodeId}`);
+  }
+  if (nodeState.historyDebounceTimeout) {
+    clearTimeout(nodeState.historyDebounceTimeout);
+    nodeState.historyDebounceTimeout = null;
+    log.debug(`Cleared historyDebounceTimeout for node ${nodeState.nodeId}`);
+  }
+
+  // Clear arrays and references
+  nodeState.imageNodes = [];
+  nodeState.defaultLayerOrder = [];
+  nodeState.initialStates = [];
+  nodeState.history = [];
+  nodeState.historyIndex = -1;
+  nodeState.layerItems = [];
+  nodeState.selectedLayer = null;
+  nodeState.isTransforming = false;
+  nodeState.transformStartState = null;
+
+  log.info(`Node state cleaned up for node ${nodeState.nodeId}`);
 }
 
 /**
@@ -120,7 +158,7 @@ export function initializeCanvasProperties(node, nodeState) {
     : [];
 
   let canvasColorValue =
-    node.widgets_values?.[3] ||
+    node.widgets?.find(w => w.name === 'canvas_color')?.value ||
     (canvasColor === 'rgb(0, 0, 0)'
       ? 'black'
       : canvasColor === 'rgb(255, 255, 255)'
@@ -132,23 +170,40 @@ export function initializeCanvasProperties(node, nodeState) {
   log.debug(`Canvas dimensions initialized for node ${nodeState.nodeId}: boardWidth=${boardWidth}, boardHeight=${boardHeight}`);
 
   // Update properties from widgets
-  if (Array.isArray(node.widgets_values) && node.widgets_values.length >= 6) {
-    boardWidth = parseInt(node.widgets_values[0]) || boardWidth;
-    boardHeight = parseInt(node.widgets_values[1]) || boardHeight;
-    borderWidth = parseInt(node.widgets_values[2]) || borderWidth;
-    canvasColorValue = node.widgets_values[3] || canvasColorValue;
-    autoSize = node.widgets_values[4] || autoSize;
-    if (node.widgets_values[7]) { // Changed from index 5 to 7 based on xiser_canvas.js widget order
-      try {
-        nodeState.initialStates = JSON.parse(node.widgets_values[7]) || nodeState.initialStates;
-      } catch (e) {
-        log.error(`Failed to parse image_states for node ${nodeState.nodeId}`, e);
+  const widgetNames = ['board_width', 'board_height', 'border_width', 'canvas_color', 'auto_size', '', '', 'image_states'];
+  if (Array.isArray(node.widgets)) {
+    for (let i = 0; i < node.widgets.length && i < widgetNames.length; i++) {
+      if (node.widgets[i]?.name === widgetNames[i]) {
+        switch (widgetNames[i]) {
+          case 'board_width':
+            boardWidth = parseInt(node.widgets[i].value) || boardWidth;
+            break;
+          case 'board_height':
+            boardHeight = parseInt(node.widgets[i].value) || boardHeight;
+            break;
+          case 'border_width':
+            borderWidth = parseInt(node.widgets[i].value) || borderWidth;
+            break;
+          case 'canvas_color':
+            canvasColorValue = node.widgets[i].value || canvasColorValue;
+            break;
+          case 'auto_size':
+            autoSize = node.widgets[i].value || autoSize;
+            break;
+          case 'image_states':
+            try {
+              nodeState.initialStates = JSON.parse(node.widgets[i].value) || nodeState.initialStates;
+            } catch (e) {
+              log.error(`Failed to parse image_states for node ${nodeState.nodeId}: ${e.message}`);
+            }
+            break;
+        }
       }
     }
     uiConfig.board_width = boardWidth;
     uiConfig.board_height = boardHeight;
     uiConfig.border_width = borderWidth;
-    uiConfig.canvas_color = canvasColorValue; // Update to use canvasColorValue
+    uiConfig.canvas_color = canvasColorValue;
     uiConfig.border_color = borderColor;
     uiConfig.auto_size = autoSize;
     uiConfig.image_paths = imagePaths;
@@ -181,9 +236,7 @@ export function debounce(func, delay) {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       func.apply(this, args);
-      const nodeId = args[1]?.nodeId || 'unknown';
-      const imagePaths = args[2] || [];
-      log.debug(`Debounced function executed for node ${nodeId} with imagePaths: ${JSON.stringify(imagePaths)}`);
+      log.debug(`Debounced function executed`);
     }, delay);
   };
 }
@@ -201,8 +254,7 @@ export function throttle(func, limit) {
       func.apply(this, args);
       inThrottle = true;
       setTimeout(() => (inThrottle = false), limit);
-      const nodeId = args[0]?.nodeId || 'unknown';
-      log.debug(`Throttled function executed for node ${nodeId}`);
+      log.debug(`Throttled function executed`);
     }
   };
 }

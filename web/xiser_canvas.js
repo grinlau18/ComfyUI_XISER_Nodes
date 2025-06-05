@@ -6,9 +6,9 @@
 import { app } from '/scripts/app.js';
 import { initializeUI } from './canvas_ui.js';
 import { initializeKonva, selectLayer, deselectLayer, applyStates, destroyKonva, setupWheelEvents } from './canvas_konva.js';
-import { loadImages } from './canvas_images.js';
-import { setupLayerEventListeners } from './canvas_history.js';
-import { log, createNodeState, initializeCanvasProperties, debounce, throttle } from './canvas_state.js';
+import { loadImages, clearNodeCache } from './canvas_images.js';
+import { setupLayerEventListeners, clearHistory, cleanupLayerEventListeners } from './canvas_history.js';
+import { log, createNodeState, initializeCanvasProperties, debounce, throttle, cleanupNodeState } from './canvas_state.js';
 import { updateHistory, undo, redo, resetCanvas } from './canvas_history.js';
 
 // Configurable constants for layout adjustments
@@ -17,6 +17,7 @@ const HEIGHT_BUFFER = 20; // Extra height to prevent clipping (px)
 const SIDE_MARGIN = 20; // Total horizontal padding (px, split left/right)
 const CONTROL_HEIGHT_OVERRIDE = 130; // Set to a number (px) to override controlHeight, or null for dynamic
 const HEIGHT_ADJUSTMENT = 130; // Default height adjustment (px) if widget is hidden
+const POLL_INTERVAL = 2000; // Polling interval for image updates (ms)
 
 /**
  * Registers the XISER_Canvas extension with ComfyUI.
@@ -73,7 +74,10 @@ app.registerExtension({
      */
     const initializeNode = async (node) => {
       if (node.comfyClass !== 'XISER_Canvas') return;
-      if (node._isInitialized) return; // Prevent re-initialization
+      if (node._isInitialized) {
+        log.debug(`Node ${node.id} already initialized, skipping`);
+        return;
+      }
       node._isInitialized = true;
 
       // Disable manual resizing
@@ -81,8 +85,8 @@ app.registerExtension({
       log.debug(`Manual resizing disabled for node ${node.id}`);
 
       // Validate node ID
-      if (node.id === -1) {
-        log.error(`Node ${node.id} has invalid ID (-1) after onNodeAdded, initialization skipped`);
+      if (!Number.isInteger(node.id) || node.id <= 0) {
+        log.error(`Invalid node ID ${node.id} for XISER_Canvas node, initialization skipped`);
         return;
       }
       log.info(`Initializing node with ID: ${node.id}`);
@@ -90,15 +94,15 @@ app.registerExtension({
       // Initialize node state
       const nodeId = node.id;
       const nodeState = createNodeState(nodeId, app);
-      nodeState.firstImageDimensions = { width: 0, height: 0 }; // Track first image dimensions
-      nodeState.imageNodes = []; // Initialize imageNodes as empty
-      nodeState.isInteracting = false; // Track drag/transform interaction state
-      nodeState.fileData = null; // Store file_data for layer states
-      nodeState.pollIntervalId = null; // Initialize poll interval ID
-      nodeState.lastAutoSize = null; // Track last auto_size value
-      node._state = nodeState; // Attach state to node for cleanup
+      nodeState.firstImageDimensions = { width: 0, height: 0 };
+      nodeState.imageNodes = [];
+      nodeState.isInteracting = false;
+      nodeState.fileData = null;
+      nodeState.pollIntervalId = null;
+      nodeState.lastAutoSize = null;
+      node._state = nodeState;
 
-      // Initialize canvas properties with defaults
+      // Initialize canvas properties
       let { imagePaths, autoSize, boardWidth, boardHeight, borderWidth, canvasColor, borderColor, canvasColorValue, uiConfig } = initializeCanvasProperties(node, nodeState);
 
       // Sanitize uiConfig
@@ -110,7 +114,7 @@ app.registerExtension({
       uiConfig.display_scale = Math.min(Math.max(parseFloat(uiConfig.display_scale) || 1, 0.1), 2);
       uiConfig.height_adjustment = Math.min(Math.max(parseInt(uiConfig.height_adjustment) || 0, -100), 100);
       node.setProperty('ui_config', uiConfig);
-      nodeState.lastAutoSize = uiConfig.auto_size; // Initialize lastAutoSize
+      nodeState.lastAutoSize = uiConfig.auto_size;
 
       // Sanitize imagePaths
       imagePaths = Array.isArray(imagePaths) ? imagePaths.filter(p => typeof p === 'string' && p.trim().length > 0) : [];
@@ -119,7 +123,7 @@ app.registerExtension({
 
       // Add node-specific styles
       const style = document.createElement('style');
-      style.dataset.nodeId = nodeId; // Add identifier for cleanup
+      style.dataset.nodeId = nodeId;
       style.textContent = `
         .xiser-main-container-${nodeId} {
           display: flex;
@@ -143,38 +147,33 @@ app.registerExtension({
       `;
       document.head.appendChild(style);
 
-      // Create controls container
+      // Create containers
       const controlsContainer = document.createElement('div');
       controlsContainer.className = `xiser-controls-container-${nodeId}`;
       controlsContainer.style.display = 'block';
       controlsContainer.style.marginBottom = `${TOP_MARGIN}px`;
-      log.debug(`Controls container created for node ${node.id}`);
 
-      // Create widget container for canvas
       const widgetContainer = document.createElement('div');
       widgetContainer.className = `xiser-canvas-container-${nodeId}`;
       widgetContainer.style.display = 'block';
       widgetContainer.style.position = 'relative';
-      log.debug(`Widget container created for node ${node.id}`);
 
-      // Create main container to hold controls and canvas
       const mainContainer = document.createElement('div');
       mainContainer.className = `xiser-main-container-${nodeId}`;
       mainContainer.style.display = 'flex';
       mainContainer.style.flexDirection = 'column';
       mainContainer.appendChild(controlsContainer);
       mainContainer.appendChild(widgetContainer);
-      log.debug(`Main container created for node ${node.id}`);
 
-      // Initialize UI with widget container
+      // Initialize UI
       const uiElements = initializeUI(node, nodeState, widgetContainer);
       const { statusText, layerPanel, modal } = uiElements;
 
-      // Initialize Konva stage within widget container
+      // Initialize Konva stage
       const konvaElements = initializeKonva(node, nodeState, widgetContainer, boardWidth, boardHeight, borderWidth, canvasColorValue, borderColor);
       Object.assign(nodeState, konvaElements);
 
-      // Initialize layer states as an array
+      // Initialize layer states
       nodeState.initialStates = Array.isArray(node.properties.image_states) ? node.properties.image_states : [];
 
       // Create debounced loadImages function
@@ -197,6 +196,7 @@ app.registerExtension({
 
       /**
        * Updates the canvas size, display scale, and properties, triggering a redraw.
+       * @private
        */
       function updateSize() {
         try {
@@ -270,7 +270,6 @@ app.registerExtension({
 
           // Preserve existing image states
           if (nodeState.initialStates.length < imagePaths.length) {
-            // Append new states for additional images
             const newStates = Array(imagePaths.length - nodeState.initialStates.length).fill().map(() => ({
               x: borderWidth + boardWidth / 2,
               y: borderWidth + boardHeight / 2,
@@ -280,7 +279,6 @@ app.registerExtension({
             }));
             nodeState.initialStates = [...nodeState.initialStates, ...newStates];
           } else if (nodeState.initialStates.length > imagePaths.length) {
-            // Truncate excess states
             nodeState.initialStates = nodeState.initialStates.slice(0, imagePaths.length);
           }
           applyStates(nodeState);
@@ -307,12 +305,11 @@ app.registerExtension({
           if (nodeState.borderLayer) nodeState.borderLayer.batchDraw();
           if (nodeState.stage) nodeState.stage.draw();
 
-          // Update UI element scales
+          // Update UI elements
           uiElements.updateUIScale(displayScale);
           uiElements.updateLayerPanel(selectLayer, deselectLayer);
           updateHistory(nodeState);
 
-          // Debug visibility
           log.debug(`Main container visibility for node ${node.id}: display=${mainContainer.style.display}, dimensions=${scaledWidth}x${scaledHeight}, stage=${nodeState.stage?.width() || 'undefined'}x${nodeState.stage?.height() || 'undefined'}`);
         } catch (e) {
           log.error(`Error updating size for node ${node.id}:`, e);
@@ -329,10 +326,9 @@ app.registerExtension({
         try {
           let newImagePaths = (node.properties?.ui_config?.image_paths || []).filter(p => typeof p === 'string' && p.trim().length > 0);
 
-          // Update image paths and states
           if (JSON.stringify(newImagePaths) !== JSON.stringify(imagePaths)) {
             imagePaths = newImagePaths;
-            nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+            nodeState.imageNodes = new Array(imagePaths.length).fill(null);
             node.properties.ui_config.image_paths = imagePaths;
             nodeState.lastImagePaths = imagePaths.slice();
             log.debug(`Image paths updated for node ${node.id}: ${JSON.stringify(imagePaths)}`);
@@ -425,8 +421,8 @@ app.registerExtension({
         nodeState.lastAutoSize = autoSize;
         if (imagePaths.length && autoSizeChanged) {
           log.debug(`Auto_size toggled to ${autoSize} for node ${node.id}, forcing loadImages`);
-          nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Reset imageNodes
-          nodeState.lastImagePathsHash = null; // Invalidate hash to force reload
+          nodeState.imageNodes = new Array(imagePaths.length).fill(null);
+          nodeState.lastImagePathsHash = null;
           debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
         } else {
           updateSize();
@@ -444,7 +440,7 @@ app.registerExtension({
 
       const imageStatesWidget = node.addWidget('hidden', 'image_states', JSON.stringify(nodeState.initialStates), () => {}, { serialize: true });
 
-      // Append visible widget DOM elements to controlsContainer
+      // Append visible widget DOM elements
       [boardWidthWidget, boardHeightWidget, borderWidthWidget, canvasColorWidget, autoSizeWidget, displayScaleWidget].forEach((widget) => {
         if (widget.element) {
           controlsContainer.appendChild(widget.element);
@@ -494,7 +490,7 @@ app.registerExtension({
         },
       });
 
-      // Disable widgets based on requirements (none disabled by auto_size)
+      // Disable widgets based on requirements
       boardWidthWidget.disabled = false;
       boardHeightWidget.disabled = false;
       borderWidthWidget.disabled = false;
@@ -513,7 +509,10 @@ app.registerExtension({
         JSON.stringify(nodeState.initialStates),
       ];
 
-      // Polling for image updates
+      /**
+       * Polls for image updates and triggers reload if necessary.
+       * @private
+       */
       function startPolling() {
         if (nodeState.pollIntervalId) {
           clearInterval(nodeState.pollIntervalId);
@@ -523,16 +522,15 @@ app.registerExtension({
           let newImagePaths = (node.properties?.ui_config?.image_paths || []).filter(p => typeof p === 'string' && p.trim().length > 0);
           let states = node.properties?.image_states || [];
 
-          // Log invalid paths for debugging
           const invalidPaths = (node.properties?.ui_config?.image_paths || []).filter(p => !p || typeof p !== 'string' || p.trim().length === 0);
           if (invalidPaths.length) {
             log.warn(`Invalid image paths in polling for node ${node.id}: ${JSON.stringify(invalidPaths)}`);
           }
 
           if (newImagePaths.length && !nodeState.lastImagePaths.length) {
-            log.info(`Forcing initial load for new node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
+            log.info(`Forcing initial load for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
             imagePaths = newImagePaths;
-            nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+            nodeState.imageNodes = new Array(imagePaths.length).fill(null);
             node.properties.ui_config.image_paths = imagePaths;
             node.properties.image_states = Array.isArray(states) ? states : imagePaths.map(() => ({
               x: borderWidth + boardWidth / 2,
@@ -550,7 +548,7 @@ app.registerExtension({
           } else if (JSON.stringify(newImagePaths) !== JSON.stringify(nodeState.lastImagePaths)) {
             log.info(`Image paths changed for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
             imagePaths = newImagePaths;
-            nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+            nodeState.imageNodes = new Array(imagePaths.length).fill(null);
             node.properties.ui_config.image_paths = imagePaths;
             node.properties.image_states = Array.isArray(states) ? states : imagePaths.map(() => ({
               x: borderWidth + boardWidth / 2,
@@ -567,7 +565,7 @@ app.registerExtension({
             updateHistory(nodeState);
           }
           nodeState.lastImagePaths = imagePaths.slice();
-        }, 2000);
+        }, POLL_INTERVAL);
       }
 
       // Execution handlers
@@ -575,7 +573,6 @@ app.registerExtension({
         let states = node.properties?.image_states || [];
         let newImagePaths = (node.properties?.ui_config?.image_paths || []).filter(p => typeof p === 'string' && p.trim().length > 0);
 
-        // Log invalid paths for debugging
         const invalidPaths = (node.properties?.ui_config?.image_paths || []).filter(p => !p || typeof p !== 'string' || p.trim().length === 0);
         if (invalidPaths.length) {
           log.warn(`Invalid image paths in onNodeExecuted for node ${node.id}: ${JSON.stringify(invalidPaths)}`);
@@ -584,7 +581,7 @@ app.registerExtension({
         if (newImagePaths.length) {
           log.info(`onNodeExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
           imagePaths = newImagePaths;
-          nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+          nodeState.imageNodes = new Array(imagePaths.length).fill(null);
           node.properties.ui_config.image_paths = imagePaths;
           node.properties.image_states = Array.isArray(states) ? states : imagePaths.map(() => ({
             x: borderWidth + boardWidth / 2,
@@ -626,13 +623,11 @@ app.registerExtension({
           }
         }
 
-        // Log invalid paths for debugging
         const invalidPaths = (message?.image_paths || []).filter(p => !p || typeof p !== 'string' || p.trim().length === 0);
         if (invalidPaths.length) {
           log.warn(`Invalid image paths in onExecuted for node ${node.id}: ${JSON.stringify(invalidPaths)}`);
         }
 
-        // Process file_data for layer states and names
         if (fileData?.layers?.length) {
           log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(fileData)}`);
           states = fileData.layers.map((layer, i) => {
@@ -645,7 +640,7 @@ app.registerExtension({
               rotation: layer.rotation || 0,
             };
           }).filter(s => s !== null);
-          nodeState.file_data = fileData; // Use consistent naming
+          nodeState.file_data = fileData;
           log.debug(`Stored file_data in nodeState for node ${node.id}: ${JSON.stringify(nodeState.file_data)}`);
         } else {
           nodeState.file_data = null;
@@ -658,7 +653,6 @@ app.registerExtension({
           nodeState.imageNodes = new Array(imagePaths.length).fill(null);
           node.properties.ui_config.image_paths = imagePaths;
 
-          // Apply latest states before rendering
           applyStates(nodeState);
           nodeState.imageLayer.batchDraw();
 
@@ -668,7 +662,6 @@ app.registerExtension({
           node.setProperty('ui_config', node.properties.ui_config);
           nodeState.lastImagePaths = imagePaths.slice();
 
-          log.debug(`onExecuted: Loading images for node ${node.id} with ${imagePaths.length} paths`);
           try {
             await loadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             setupLayerEventListeners(node, nodeState);
@@ -681,7 +674,7 @@ app.registerExtension({
           }
 
           updateSize();
-          uiElements.updateLayerPanel(selectLayer, deselectLayer); // Explicitly update layer panel
+          uiElements.updateLayerPanel(selectLayer, deselectLayer);
           updateHistory(nodeState);
 
           const outputCanvas = nodeState.stage.toCanvas();
@@ -725,7 +718,9 @@ app.registerExtension({
         }
       };
 
-      // Cleanup
+      /**
+       * Cleans up resources when the node is removed.
+       */
       node.onRemoved = () => {
         try {
           log.info(`Cleaning up node ${node.id}`);
@@ -737,27 +732,42 @@ app.registerExtension({
             log.debug(`Cleared poll interval for node ${node.id}`);
           }
 
+          // Clear node state
+          cleanupNodeState(nodeState);
+          log.debug(`Cleared node state for node ${node.id}`);
+
+          // Clear image cache
+          clearNodeCache(nodeId);
+          log.debug(`Cleared image cache for node ${node.id}`);
+
+          // Clear history
+          clearHistory(nodeState);
+          log.debug(`Cleared history for node ${node.id}`);
+
+          // Clean up event listeners
+          cleanupLayerEventListeners(nodeState);
+          log.debug(`Cleaned up event listeners for node ${node.id}`);
+
           // Destroy Konva resources
           destroyKonva(nodeState);
 
           // Remove UI elements
           if (modal && modal.parentNode) {
             modal.remove();
-            log.debug(`Removed modal for node ${node.id}`);
+            log.debug(`Removed modal for node ${nodeState.nodeId}`);
           }
           if (mainContainer && mainContainer.parentNode) {
             mainContainer.remove();
             log.debug(`Removed main container for node ${node.id}`);
           }
 
-          // Remove styles
-          const style = document.querySelector(`style[data-node-id="${nodeId}"]`);
-          if (style) {
+          // Remove all node-specific styles
+          document.querySelectorAll(`style[data-node-id="${nodeId}"], style#xiser-styles-${nodeId}`).forEach((style) => {
             style.remove();
-            log.debug(`Removed styles for node ${node.id}`);
-          }
+            log.debug(`Removed style for node ${node.id}`);
+          });
 
-          // Clear node state
+          // Clear node references
           node._state = null;
           node.widgets = [];
           node.inputs = [];
@@ -773,7 +783,7 @@ app.registerExtension({
       updateSize();
       if (imagePaths.length) {
         log.info(`Initial loadImages call with paths: ${JSON.stringify(imagePaths)}`);
-        nodeState.imageNodes = new Array(imagePaths.length).fill(null); // Initialize with nulls
+        nodeState.imageNodes = new Array(imagePaths.length).fill(null);
         debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
       } else {
         log.info(`No initial image paths, waiting for images`);
