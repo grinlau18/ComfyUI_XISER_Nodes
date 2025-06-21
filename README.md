@@ -51,12 +51,13 @@ XISER_Canvas 画板拓展功能节点：
 
 ![画板工作流展示](img/img_00003.jpeg)
 
-**画板操作视频演示**
+**Classify and manage multiple images, and compose them on the drawing board.**
 
-<video controls>
-  <source src="http://www.lmxsf.cn/videos/xis_canvas.mp4" type="video/mp4">
-  您的浏览器不支持视频播放。
-</video>
+**分类管理多张图片到画板中进行构图**
+
+![画板工作流展示](img/img_00006.jpeg)
+
+
 
 ---
 
@@ -77,6 +78,21 @@ XISER_Canvas 画板拓展功能节点：
 **添加节点后，在节点上方点击鼠标右键，在菜单中选择编辑文字，可以使用html语言来输入文字以及设置文字样式。**
 
 ![画板工作流展示](img/img_00004.jpeg)
+
+---
+
+## 工作流分享及联系方式
+
+**工作流分享**
+https://openart.ai/workflows/profile/grinlau?tab=workflows&sort=latest
+
+**B站空间**
+https://space.bilibili.com/123365258
+
+**联系方式**
+QQ：3861103314
+
+Email: <grinlau18@gmail.com>
 
 ---
 

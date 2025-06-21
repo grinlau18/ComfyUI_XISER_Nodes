@@ -1,6 +1,9 @@
 from typing import List, Tuple
 from .utils import logger
 import os
+import logging
+import nodes
+
 
 # 输入多个提示词并通过开关控制
 class XIS_PromptsWithSwitches:
@@ -63,7 +66,7 @@ class XIS_INT_Slider:
 
     def process_int_slider(self, value):
         return (value,)
-
+    
 
 # 节点映射
 NODE_CLASS_MAPPINGS = {
