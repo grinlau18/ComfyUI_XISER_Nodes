@@ -185,6 +185,133 @@ function debounce(fn, wait) {
     };
 }
 
+/**
+ * Parses HTML-formatted text into structured line data.
+ * @param {string} html - The input HTML string.
+ * @returns {Object} Structured data with lines array.
+ */
+function parseHtmlFormat(html) {
+    const defaultData = {
+        lines: [
+            { text: "小贴纸", font_size: 24, color: "#FFFFFF", font_weight: "bold", text_decoration: "none", text_align: "left", margin_left: 0, margin_top: 0, margin_bottom: 0 },
+            { text: "使用右键菜单编辑文字", font_size: 16, color: "#FFFFFF", font_weight: "normal", text_decoration: "none", text_align: "left", margin_left: 0, margin_top: 0, margin_bottom: 0 }
+        ]
+    };
+    try {
+        if (!html || typeof html !== 'string') {
+            logger.warn("Invalid or empty HTML input, returning default data");
+            return defaultData;
+        }
+        const cleanedHtml = `<div style="margin:0;padding:0;">${html}</div>`;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(cleanedHtml, "text/html");
+        const container = doc.body.firstElementChild || doc.body;
+        const lines = [];
+        const processedNodes = new Set();
+        const blockTags = ["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "SPAN"];
+        const allowedTags = ["P", "DIV", "SPAN", "BR"];
+
+        const processNode = (node, depth = 0) => {
+            if (processedNodes.has(node) || depth > 50) return;
+            processedNodes.add(node);
+
+            if (node.nodeType !== Node.ELEMENT_NODE || !allowedTags.includes(node.tagName)) return;
+
+            if (node.tagName === "BR") {
+                lines.push({
+                    text: "",
+                    font_size: 24,
+                    color: "#FFFFFF",
+                    font_weight: "normal",
+                    text_decoration: "none",
+                    text_align: "left",
+                    margin_left: 0,
+                    margin_top: 0,
+                    margin_bottom: 0,
+                    is_block: true
+                });
+                return;
+            }
+
+            const text = node.textContent.trim();
+            if (text || blockTags.includes(node.tagName)) {
+                const inlineStyles = node.style;
+                const computedStyles = window.getComputedStyle(node);
+                const isBlock = blockTags.includes(node.tagName) || computedStyles.display === "block";
+                const fontSize = parseInt(inlineStyles.fontSize || computedStyles.fontSize) || 24;
+                let marginLeft = parseInt(inlineStyles.marginLeft) || 0;
+                if (!marginLeft && node.getAttribute("style")) {
+                    const styleMatch = node.getAttribute("style").match(/margin-left:\s*(\d+)px/i);
+                    marginLeft = styleMatch ? parseInt(styleMatch[1]) : 0;
+                }
+                let marginTop = parseInt(inlineStyles.marginTop) || 0;
+                if (!marginTop && node.getAttribute("style")) {
+                    const styleMatch = node.getAttribute("style").match(/margin-top:\s*(\d+)px/i);
+                    marginTop = styleMatch ? parseInt(styleMatch[1]) : 0;
+                }
+                let marginBottom = parseInt(inlineStyles.marginBottom) || 0;
+                if (!marginBottom && node.getAttribute("style")) {
+                    const styleMatch = node.getAttribute("style").match(/margin-bottom:\s*(\d+)px/i);
+                    marginBottom = styleMatch ? parseInt(styleMatch[1]) : 0;
+                }
+                lines.push({
+                    text,
+                    font_size: fontSize,
+                    color: inlineStyles.color || computedStyles.color || "#FFFFFF",
+                    font_weight: inlineStyles.fontWeight || computedStyles.fontWeight || "normal",
+                    text_decoration: inlineStyles.textDecoration || computedStyles.textDecorationLine || computedStyles.textDecoration || "none",
+                    text_align: inlineStyles.textAlign || computedStyles.textAlign || "left",
+                    margin_left: marginLeft,
+                    margin_top: marginTop,
+                    margin_bottom: marginBottom,
+                    is_block: isBlock
+                });
+            }
+
+            node.childNodes.forEach(child => processNode(child, depth + 1));
+        };
+
+        container.childNodes.forEach(child => processNode(child));
+        return lines.length ? { lines } : defaultData;
+    } catch (e) {
+        logger.error("Failed to parse HTML format:", e);
+        return defaultData;
+    }
+}
+
+/**
+ * Updates node's textData and background color, caching parsed results.
+ * @param {Object} node - The node object.
+ * @param {string} newColor - The new background color.
+ */
+function updateTextDataBackground(node, newColor) {
+    let textData = node.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
+    if (textData.includes('<div style="background')) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(textData, "text/html");
+        const container = doc.body.firstElementChild || doc.body;
+        container.style.background = newColor;
+        textData = container.outerHTML;
+    }
+    node.properties.textData = textData;
+    node.properties.parsedTextData = parseHtmlFormat(textData);
+    app.canvas.setDirty(true);
+}
+
+/**
+ * Updates node's textData and caches parsed results.
+ * @param {Object} node - The node object.
+ * @param {string} newText - The new text data.
+ */
+function updateTextData(node, newText) {
+    if (node.properties.textData !== newText) {
+        delete node.properties.parsedTextData;
+    }
+    node.properties.textData = newText;
+    node.properties.parsedTextData = parseHtmlFormat(newText);
+    app.canvas.setDirty(true);
+}
+
 app.registerExtension({
     name: "ComfyUI.XISER.Label",
     async setup() {
@@ -200,129 +327,6 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name !== "XIS_Label") return;
 
-        /**
-         * Parses HTML-formatted text into structured line data.
-         * @param {string} html - The input HTML string.
-         * @returns {Object} Structured data with lines array.
-         */
-        function parseHtmlFormat(html) {
-            const defaultData = {
-                lines: [
-                    { text: "小贴纸", font_size: 24, color: "#FFFFFF", font_weight: "bold", text_decoration: "none", text_align: "left", margin_left: 0, margin_top: 0, margin_bottom: 0 },
-                    { text: "使用右键菜单编辑文字", font_size: 16, color: "#FFFFFF", font_weight: "normal", text_decoration: "none", text_align: "left", margin_left: 0, margin_top: 0, margin_bottom: 0 }
-                ]
-            };
-            try {
-                const cleanedHtml = `<div style="margin:0;padding:0;">${html || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'}</div>`;
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(cleanedHtml, "text/html");
-                const container = doc.body.firstElementChild || doc.body;
-                const lines = [];
-                const processedNodes = new Set();
-                const blockTags = ["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "BLOCKQUOTE", "SPAN"];
-                const allowedTags = ["P", "DIV", "SPAN", "BR"];
-
-                const processNode = (node, depth = 0) => {
-                    if (processedNodes.has(node) || depth > 50) return;
-                    processedNodes.add(node);
-
-                    if (node.nodeType !== Node.ELEMENT_NODE || !allowedTags.includes(node.tagName)) return;
-
-                    if (node.tagName === "BR") {
-                        lines.push({
-                            text: "",
-                            font_size: 24,
-                            color: "#FFFFFF",
-                            font_weight: "normal",
-                            text_decoration: "none",
-                            text_align: "left",
-                            margin_left: 0,
-                            margin_top: 0,
-                            margin_bottom: 0,
-                            is_block: true
-                        });
-                        return;
-                    }
-
-                    const text = node.textContent.trim();
-                    if (text || blockTags.includes(node.tagName)) {
-                        const inlineStyles = node.style;
-                        const computedStyles = getComputedStyle(node);
-                        const isBlock = blockTags.includes(node.tagName) || computedStyles.display === "block";
-                        const fontSize = parseInt(inlineStyles.fontSize || computedStyles.fontSize) || 24;
-                        let marginLeft = parseInt(inlineStyles.marginLeft) || 0;
-                        if (!marginLeft && node.getAttribute("style")) {
-                            const styleMatch = node.getAttribute("style").match(/margin-left:\s*(\d+)px/i);
-                            marginLeft = styleMatch ? parseInt(styleMatch[1]) : 0;
-                        }
-                        let marginTop = parseInt(inlineStyles.marginTop) || 0;
-                        if (!marginTop && node.getAttribute("style")) {
-                            const styleMatch = node.getAttribute("style").match(/margin-top:\s*(\d+)px/i);
-                            marginTop = styleMatch ? parseInt(styleMatch[1]) : 0;
-                        }
-                        let marginBottom = parseInt(inlineStyles.marginBottom) || 0;
-                        if (!marginBottom && node.getAttribute("style")) {
-                            const styleMatch = node.getAttribute("style").match(/margin-bottom:\s*(\d+)px/i);
-                            marginBottom = styleMatch ? parseInt(styleMatch[1]) : 0;
-                        }
-                        lines.push({
-                            text,
-                            font_size: fontSize,
-                            color: inlineStyles.color || computedStyles.color || "#FFFFFF",
-                            font_weight: inlineStyles.fontWeight || computedStyles.fontWeight || "normal",
-                            text_decoration: inlineStyles.textDecoration || computedStyles.textDecorationLine || computedStyles.textDecoration || "none",
-                            text_align: inlineStyles.textAlign || computedStyles.textAlign || "left",
-                            margin_left: marginLeft,
-                            margin_top: marginTop,
-                            margin_bottom: marginBottom,
-                            is_block: isBlock
-                        });
-                    }
-
-                    node.childNodes.forEach(child => processNode(child, depth + 1));
-                };
-
-                container.childNodes.forEach(child => processNode(child));
-                return lines.length ? { lines } : defaultData;
-            } catch (e) {
-                logger.error("Failed to parse HTML format:", e);
-                return defaultData;
-            }
-        }
-
-        /**
-         * Updates node's textData and background color, caching parsed results.
-         * @param {Object} node - The node object.
-         * @param {string} newColor - The new background color.
-         */
-        function updateTextDataBackground(node, newColor) {
-            let textData = node.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
-            if (textData.includes('<div style="background')) {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(textData, "text/html");
-                const container = doc.body.firstElementChild || doc.body;
-                container.style.background = newColor;
-                textData = container.outerHTML;
-            }
-            node.properties.textData = textData;
-            node.properties.parsedTextData = parseHtmlFormat(textData);
-            app.canvas.setDirty(true);
-        }
-
-        /**
-         * Updates node's textData and caches parsed results.
-         * @param {Object} node - The node object.
-         * @param {string} newText - The new text data.
-         */
-        function updateTextData(node, newText) {
-            if (node.properties.textData !== newText) {
-                delete node.properties.parsedTextData;
-            }
-            node.properties.textData = newText;
-            node.properties.parsedTextData = parseHtmlFormat(newText);
-            app.canvas.setDirty(true);
-        }
-
         // Cache for fonts to improve performance
         const fontCache = new Map();
 
@@ -336,6 +340,10 @@ app.registerExtension({
                     this.properties.parsedTextData = parseHtmlFormat(this.properties?.textData);
                 }
                 const textData = this.properties.parsedTextData;
+                if (!textData?.lines) {
+                    logger.warn("Invalid parsedTextData, skipping rendering");
+                    return;
+                }
 
                 const isMuteMode = this.mode === 2;
                 const isPassMode = this.mode === 4 || this.flags?.bypassed === true;
@@ -512,7 +520,7 @@ app.registerExtension({
         };
 
         /**
-         * Adds a right-click menu option to edit text.
+         * Adds a right-click menu option to edit text with a modal editor.
          * @param {Object} graphCanvas - The graph canvas instance.
          * @param {Array} options - The menu options array.
          */
@@ -520,159 +528,180 @@ app.registerExtension({
             options.push({
                 content: "编辑文本",
                 callback: async () => {
-                    const modal = document.createElement("div");
-                    modal.style.position = "fixed";
-                    modal.style.top = "50%";
-                    modal.style.left = "50%";
-                    modal.style.transform = "translate(-50%, -50%)";
-                    modal.style.width = "min(90vw, 600px)";
-                    modal.style.height = "min(90vh, 400px)";
-                    modal.style.background = "#1A1A1A";
-                    modal.style.border = "none";
-                    modal.style.borderRadius = "8px";
-                    modal.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
-                    modal.style.zIndex = "10000";
-                    modal.style.display = "flex";
-                    modal.style.flexDirection = "column";
-                    modal.style.fontFamily = "'Segoe UI', Arial, sans-serif";
+                    try {
+                        const modal = document.createElement("div");
+                        modal.style.position = "fixed";
+                        modal.style.top = "50%";
+                        modal.style.left = "50%";
+                        modal.style.transform = "translate(-50%, -50%)";
+                        modal.style.width = "min(90vw, 600px)";
+                        modal.style.height = "min(90vh, 400px)";
+                        modal.style.background = "#1A1A1A";
+                        modal.style.border = "none";
+                        modal.style.borderRadius = "8px";
+                        modal.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+                        modal.style.zIndex = "10000";
+                        modal.style.display = "flex";
+                        modal.style.flexDirection = "column";
+                        modal.style.fontFamily = "'Segoe UI', Arial, sans-serif";
 
-                    const editorDiv = document.createElement("div");
-                    editorDiv.style.flex = "1";
-                    editorDiv.style.padding = "10px";
-                    modal.appendChild(editorDiv);
+                        const editorDiv = document.createElement("div");
+                        editorDiv.style.height = "calc(100% - 60px)"; // Fixed height minus button area
+                        editorDiv.style.overflowY = "auto"; // Vertical scrollbar
+                        editorDiv.style.padding = "10px";
+                        modal.appendChild(editorDiv);
 
-                    const buttonDiv = document.createElement("div");
-                    buttonDiv.style.padding = "10px";
-                    buttonDiv.style.textAlign = "right";
-                    buttonDiv.style.background = "#1A1A1A";
-                    buttonDiv.style.borderTop = "1px solid #333";
+                        const buttonDiv = document.createElement("div");
+                        buttonDiv.style.padding = "10px";
+                        buttonDiv.style.textAlign = "right";
+                        buttonDiv.style.background = "#1A1A1A";
+                        buttonDiv.style.borderTop = "1px solid #333";
 
-                    const saveButton = document.createElement("button");
-                    saveButton.textContent = "保存";
-                    saveButton.style.marginRight = "10px";
-                    saveButton.className = "save-button";
+                        const saveButton = document.createElement("button");
+                        saveButton.textContent = "保存";
+                        saveButton.style.marginRight = "10px";
+                        saveButton.className = "save-button";
 
-                    const cancelButton = document.createElement("button");
-                    cancelButton.textContent = "取消";
-                    cancelButton.className = "cancel-button";
+                        const cancelButton = document.createElement("button");
+                        cancelButton.textContent = "取消";
+                        cancelButton.className = "cancel-button";
 
-                    buttonDiv.appendChild(saveButton);
-                    buttonDiv.appendChild(cancelButton);
-                    modal.appendChild(buttonDiv);
+                        buttonDiv.appendChild(saveButton);
+                        buttonDiv.appendChild(cancelButton);
+                        modal.appendChild(buttonDiv);
 
-                    const style = document.createElement("style");
-                    style.textContent = `
-                        .save-button, .cancel-button {
-                            color: #E0E0E0;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            transition: background 0.2s;
-                            font-family: 'Segoe UI', Arial, sans-serif;
-                        }
-                        .save-button {
-                            background: linear-gradient(145deg, #4B5EAA, #3B4A8C);
-                        }
-                        .save-button:hover {
-                            background: linear-gradient(145deg, #5A71C2, #4B5EAA);
-                        }
-                        .cancel-button {
-                            background: linear-gradient(145deg, #D81B60, #B01550);
-                        }
-                        .cancel-button:hover {
-                            background: linear-gradient(145deg, #E91E63, #D81B60);
-                        }
-                        .CodeMirror {
-                            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace !important;
-                            font-size: 14px !important;
-                            background: #1A1A1A !important;
-                            color: #E0E0E0 !important;
-                            border: 1px solid #333 !important;
-                            height: 100% !important;
-                        }
-                    `;
-                    document.head.appendChild(style);
-
-                    document.body.appendChild(modal);
-
-                    let editor;
-                    const defaultText = this.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
-
-                    if (window.CodeMirror) {
-                        if (!codeMirrorInstance) {
-                            codeMirrorInstance = CodeMirror(editorDiv, {
-                                value: defaultText,
-                                mode: "htmlmixed",
-                                lineNumbers: true,
-                                theme: "dracula",
-                                lineWrapping: true,
-                                extraKeys: { "Ctrl-S": () => saveButton.click() }
-                            });
-                        } else {
-                            codeMirrorInstance.setValue("");
-                            editorDiv.appendChild(codeMirrorInstance.getWrapperElement());
-                            codeMirrorInstance.setValue(defaultText);
-                        }
-                        editor = codeMirrorInstance;
-                    } else {
-                        logger.warn("CodeMirror not loaded, falling back to textarea");
-                        const errorMsg = document.createElement("div");
-                        errorMsg.style.color = "#FF5555";
-                        errorMsg.textContent = "CodeMirror 加载失败，使用普通文本编辑器";
-                        editorDiv.appendChild(errorMsg);
-                        const textarea = document.createElement("textarea");
-                        textarea.style.width = "100%";
-                        textarea.style.height = "100%";
-                        textarea.style.background = "#1A1A1A";
-                        textarea.style.color = "#E0E0E0";
-                        textarea.style.border = "1px solid #333";
-                        textarea.style.padding = "10px";
-                        textarea.style.fontFamily = "'Fira Code', 'Consolas', 'Monaco', monospace";
-                        textarea.style.fontSize = "14px";
-                        textarea.value = defaultText;
-                        editorDiv.appendChild(textarea);
-                        editor = textarea;
-                    }
-
-                    const saveHandler = () => {
-                        try {
-                            const newText = editor.getValue ? editor.getValue() : editor.value;
-                            updateTextData(this, newText);
-                            this.setDirtyCanvas(true, false);
-                            document.body.removeChild(modal);
-                            document.head.removeChild(style);
-                            if (editor !== codeMirrorInstance) editor.remove();
-                            saveButton.onclick = null;
-                            cancelButton.onclick = null;
-                            logger.info("Text saved and node updated");
-                        } catch (e) {
-                            logger.error("Error saving text:", e);
-                        }
-                    };
-
-                    const cancelHandler = () => {
-                        try {
-                            document.body.removeChild(modal);
-                            document.head.removeChild(style);
-                            if (editor !== codeMirrorInstance) editor.remove();
-                            if (codeMirrorInstance) {
-                                codeMirrorInstance.getWrapperElement().remove();
-                                codeMirrorInstance = null;
+                        const style = document.createElement("style");
+                        style.textContent = `
+                            .save-button, .cancel-button {
+                                color: #E0E0E0;
+                                border: none;
+                                padding: 8px 16px;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: background 0.2s;
+                                font-family: 'Segoe UI', Arial, sans-serif;
                             }
-                            saveButton.onclick = null;
-                            cancelButton.onclick = null;
-                            logger.info("Edit cancelled");
-                        } catch (e) {
-                            logger.error("Error cancelling edit:", e);
-                        }
-                    };
+                            .save-button {
+                                background: linear-gradient(145deg, #4B5EAA, #3B4A8C);
+                            }
+                            .save-button:hover {
+                                background: linear-gradient(145deg, #5A71C2, #4B5EAA);
+                            }
+                            .cancel-button {
+                                background: linear-gradient(145deg, #D81B60, #B01550);
+                            }
+                            .cancel-button:hover {
+                                background: linear-gradient(145deg, #E91E63, #D81B60);
+                            }
+                            .CodeMirror {
+                                font-family: 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+                                font-size: 14px !important;
+                                background: #1A1A1A !important;
+                                color: #E0E0E0 !important;
+                                border: 1px solid #333 !important;
+                                height: 100% !important;
+                                width: 100% !important;
+                            }
+                            .CodeMirror-scroll {
+                                overflow-y: auto !important;
+                                overflow-x: hidden !important;
+                            }
+                            textarea {
+                                resize: none;
+                                overflow-y: auto !important;
+                            }
+                        `;
+                        // Prevent duplicate style elements
+                        const existingStyle = document.querySelector("style[data-xis-label]");
+                        if (existingStyle) existingStyle.remove();
+                        style.dataset.xisLabel = "true";
+                        document.head.appendChild(style);
 
-                    saveButton.onclick = saveHandler;
-                    cancelButton.onclick = cancelHandler;
-                    modal.addEventListener("keydown", (e) => {
-                        if (e.key === "Escape") cancelHandler();
-                    });
+                        document.body.appendChild(modal);
+
+                        let editor;
+                        const defaultText = this.properties?.textData || '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p><p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>';
+
+                        if (window.CodeMirror) {
+                            if (!codeMirrorInstance) {
+                                codeMirrorInstance = window.CodeMirror(editorDiv, {
+                                    value: defaultText,
+                                    mode: "htmlmixed",
+                                    lineNumbers: true,
+                                    theme: "dracula",
+                                    lineWrapping: true,
+                                    extraKeys: {
+                                        "Ctrl-S": () => saveButton.click(),
+                                        "Enter": (cm) => cm.replaceSelection("\n") // Single newline on Enter
+                                    }
+                                });
+                            } else {
+                                codeMirrorInstance.setValue("");
+                                editorDiv.appendChild(codeMirrorInstance.getWrapperElement());
+                                codeMirrorInstance.setValue(defaultText);
+                            }
+                            editor = codeMirrorInstance;
+                        } else {
+                            logger.warn("CodeMirror not loaded, falling back to textarea");
+                            const errorMsg = document.createElement("div");
+                            errorMsg.style.color = "#FF5555";
+                            errorMsg.textContent = "CodeMirror 加载失败，使用普通文本编辑器";
+                            editorDiv.appendChild(errorMsg);
+                            const textarea = document.createElement("textarea");
+                            textarea.style.width = "100%";
+                            textarea.style.height = "100%";
+                            textarea.style.background = "#1A1A1A";
+                            textarea.style.color = "#E0E0E0";
+                            textarea.style.border = "1px solid #333";
+                            textarea.style.padding = "10px";
+                            textarea.style.fontFamily = "'Fira Code', 'Consolas', 'Monaco', monospace";
+                            textarea.style.fontSize = "14px";
+                            textarea.value = defaultText;
+                            editorDiv.appendChild(textarea);
+                            editor = textarea;
+                        }
+
+                        const saveHandler = () => {
+                            try {
+                                const newText = editor.getValue ? editor.getValue() : editor.value;
+                                updateTextData(this, newText);
+                                this.setDirtyCanvas(true, false);
+                                document.body.removeChild(modal);
+                                document.head.removeChild(style);
+                                if (editor !== codeMirrorInstance) editor.remove();
+                                saveButton.onclick = null;
+                                cancelButton.onclick = null;
+                                logger.info("Text saved and node updated");
+                            } catch (e) {
+                                logger.error("Error saving text:", e);
+                            }
+                        };
+
+                        const cancelHandler = () => {
+                            try {
+                                document.body.removeChild(modal);
+                                document.head.removeChild(style);
+                                if (editor !== codeMirrorInstance) editor.remove();
+                                if (codeMirrorInstance) {
+                                    codeMirrorInstance.getWrapperElement().remove();
+                                    codeMirrorInstance = null;
+                                }
+                                saveButton.onclick = null;
+                                cancelButton.onclick = null;
+                                logger.info("Edit cancelled");
+                            } catch (e) {
+                                logger.error("Error cancelling edit:", e);
+                            }
+                        };
+
+                        saveButton.onclick = saveHandler;
+                        cancelButton.onclick = cancelHandler;
+                        modal.addEventListener("keydown", (e) => {
+                            if (e.key === "Escape") cancelHandler();
+                        });
+                    } catch (e) {
+                        logger.error("Error creating text editor modal:", e);
+                    }
                 }
             });
         };

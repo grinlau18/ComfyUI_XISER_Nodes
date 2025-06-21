@@ -17,7 +17,7 @@ const log = {
  * Minimum node height in pixels.
  * @constant {number}
  */
-const MIN_NODE_HEIGHT = 200;
+const MIN_NODE_HEIGHT = 300;
 
 /**
  * Debounces a function to limit execution frequency.
@@ -58,9 +58,6 @@ app.registerExtension({
                 log.info(`XIS_ReorderImages node created with ID: ${this.id}`);
                 if (this.id <= 0) {
                     log.warning("Temporary invalid node ID, waiting for valid ID");
-                }
-                if (!this.outputs || !this.outputs.some(output => output.name === "images")) {
-                    this.addOutput("images", "IMAGE");
                 }
             };
         }
@@ -382,11 +379,21 @@ app.registerExtension({
          */
         function updateContainerHeight() {
             const nodeHeight = node.size[1];
+            const nodeWidth = node.size[0];
             const headerHeight = header.offsetHeight || 30;
-            const availableHeight = nodeHeight - headerHeight - 135;
+            // Use saved margin or default to 50, adjusted for 8px bottom padding
+            const marginOffset = node.properties?.margin_offset || 50;
+            // Account for 8px top + bottom padding in .xiser-reorder-container
+            const availableHeight = nodeHeight - headerHeight - marginOffset - 70; // 70 = 8px top + 8px bottom + 4px border
+            // Account for 8px left + right padding
+            const availableWidth = nodeWidth - 20; // 20 = 8px left + 8px right + 4px border
             mainContainer.style.height = `${Math.max(availableHeight, 100)}px`;
+            mainContainer.style.width = `${Math.max(availableWidth, 332)}px`; // Match min-width
             cardContainer.style.height = `${Math.max(availableHeight - headerHeight, 60)}px`;
-            log.info(`Updated container height to ${mainContainer.style.height} for node ${nodeId}`);
+            // Save margin_offset
+            node.properties.margin_offset = marginOffset;
+            node.setProperty("margin_offset", marginOffset);
+            log.info(`Updated container dimensions to ${mainContainer.style.width}x${mainContainer.style.height} for node ${nodeId}, margin_offset: ${marginOffset}`);
         }
 
         /**
@@ -611,31 +618,32 @@ app.registerExtension({
 
         // Initialize node size
         const savedSize = node.properties?.node_size;
+        const savedMargin = node.properties?.margin_offset || 50; // Default margin
         if (savedSize && Array.isArray(savedSize) && savedSize.length === 2) {
             const [width, height] = savedSize;
             node.setSize([Math.max(width, 360), Math.max(height, MIN_NODE_HEIGHT)]);
-            log.info(`Restored node size for node ${nodeId}: ${width}x${height}`);
+            node.properties.margin_offset = savedMargin;
+            updateContainerHeight();
+            log.info(`Restored node size for node ${nodeId}: ${width}x${height}, margin_offset: ${savedMargin}`);
         } else {
             node.setSize([360, 360]);
-            log.info(`Set default node size for node ${nodeId}: 360x360`);
+            node.properties.margin_offset = savedMargin;
+            node.setProperty("margin_offset", savedMargin);
+            updateContainerHeight();
+            log.info(`Set default node size for node ${nodeId}: 360x360, margin_offset: ${savedMargin}`);
         }
 
         node.onResize = function (size) {
             size[0] = Math.max(size[0], 360);
             size[1] = Math.max(size[1], MIN_NODE_HEIGHT);
-            mainContainer.style.width = `${size[0] - 24}px`;
             node.properties.node_size = [size[0], size[1]];
             node.setProperty("node_size", [size[0], size[1]]);
+            // Ensure margin_offset is preserved
+            node.properties.margin_offset = node.properties.margin_offset || 50;
+            node.setProperty("margin_offset", node.properties.margin_offset);
             updateContainerHeight();
-            log.info(`Node ${nodeId} resized to: ${size[0]}x${size[1]}`);
+            log.info(`Node ${nodeId} resized to: ${size[0]}x${size[1]}, margin_offset: ${node.properties.margin_offset}`);
         };
-
-        if (node.getHTMLElement) {
-            const element = node.getHTMLElement();
-            if (element) {
-                element.classList.add("xiser-reorder-node", getNodeClass(nodeId));
-            }
-        }
 
         node.onExecuted = function (message) {
             if (message && message.image_previews && message.image_order) {

@@ -378,7 +378,7 @@ app.registerExtension({
 
       // Initialize node inputs
       node.inputs = [
-        { name: 'pack_images', type: 'XIS_IMAGES', default: null },
+        { name: 'pack_images', type: 'IMAGE', default: null },
         { name: 'file_data', type: 'FILE_DATA', default: null },
       ];
 

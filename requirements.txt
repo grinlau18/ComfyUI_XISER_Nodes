@@ -5,3 +5,5 @@ opencv-python
 scipy
 tqdm
 torchvision
+uuid
+aiohttp>=3.8.0

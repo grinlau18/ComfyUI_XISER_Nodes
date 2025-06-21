@@ -48,7 +48,7 @@ class XISER_Canvas:
         """
         return {
             "required": {
-                "pack_images": ("XIS_IMAGES", {"default": None}),
+                "pack_images": ("IMAGE", {"default": None}),
                 "board_width": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
                 "board_height": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
                 "border_width": ("INT", {"default": 40, "min": 10, "max": 200, "step": 1}),

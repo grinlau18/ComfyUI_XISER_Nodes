@@ -27,13 +27,15 @@ class XIS_ReorderImages:
             output_dir (str): Directory for storing output files.
             last_input_hash (str): Hash of the last processed input.
             image_order (list): Current image order.
+            enabled_layers (list): Current enabled layers.
             state_version (int): Version of the node state for synchronization.
         """
-        self.properties = {"state_version": 0}
+        self.properties = {"state_version": 0, "is_single_mode": False}
         self.output_dir = os.path.join(folder_paths.get_output_directory(), "xiser_reorder_images")
         os.makedirs(self.output_dir, exist_ok=True)
         self.last_input_hash = None
         self.image_order = []
+        self.enabled_layers = []
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"XIS_ReorderImages initialized with output directory: {self.output_dir}")
 
@@ -46,7 +48,7 @@ class XIS_ReorderImages:
         """
         return {
             "required": {
-                "pack_images": ("XIS_IMAGES", {"default": None}),
+                "pack_images": ("IMAGE", {"default": None}),
             },
             "hidden": {
                 "image_order": ("STRING", {"default": "[]", "multiline": False}),
@@ -55,8 +57,36 @@ class XIS_ReorderImages:
             }
         }
 
-    RETURN_TYPES = ("XIS_IMAGES", "IMAGE",)
-    RETURN_NAMES = ("pack_images", "images",)
+    @classmethod
+    def IS_CHANGED(cls, pack_images, image_order="[]", enabled_layers="[]", node_id="", **kwargs):
+        """Compute a hash to determine if node execution is needed.
+
+        Args:
+            pack_images (list): List of torch.Tensor images.
+            image_order (str): JSON string of ordered image indices.
+            enabled_layers (str): JSON string of boolean flags for enabled layers.
+            node_id (str): Unique node identifier.
+
+        Returns:
+            str: Hash of inputs and settings.
+        """
+        hasher = hashlib.sha256()
+        # Hash pack_images
+        if pack_images is not None and isinstance(pack_images, list):
+            for img in pack_images:
+                if isinstance(img, torch.Tensor):
+                    hasher.update(img.cpu().numpy().tobytes())
+        # Hash image_order
+        hasher.update(image_order.encode('utf-8'))
+        # Hash enabled_layers
+        hasher.update(enabled_layers.encode('utf-8'))
+        # Use instance properties if available (via kwargs from ComfyUI)
+        instance = kwargs.get('instance', {})
+        hasher.update(json.dumps(instance.get('properties', {}).get('is_single_mode', False)).encode('utf-8'))
+        return hasher.hexdigest()
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("pack_images",)
     FUNCTION = "reorder_images"
     CATEGORY = "XISER_Nodes/Canvas"
     OUTPUT_NODE = True
@@ -217,7 +247,10 @@ class XIS_ReorderImages:
         input_hash = self._compute_image_hash(pack_images)
         image_count_changed = len(self.properties.get("image_previews", [])) != len(pack_images)
         input_changed = input_hash != self.last_input_hash
+        order_changed = order != self.image_order
+        enabled_changed = enabled != self.enabled_layers
 
+        # Initialize or reset state only if necessary
         if image_count_changed or input_changed:
             if logger.isEnabledFor(logging.INFO):
                 logger.info(f"Node {node_id}: Input changed, resetting state")
@@ -228,8 +261,14 @@ class XIS_ReorderImages:
             )
             order = [i for i in range(len(pack_images)) if enabled[i]]
             self.last_input_hash = input_hash
+            self.image_order = order
+            self.enabled_layers = enabled
+            state_changed = True
         else:
             order = self._validate_image_order(order, len(pack_images), enabled)
+            state_changed = order_changed or enabled_changed
+            self.image_order = order
+            self.enabled_layers = enabled
 
         # Generate previews
         image_previews = []
@@ -250,11 +289,17 @@ class XIS_ReorderImages:
             [pack_images[i] for i in order if enabled[i]]
         )
 
-        # Update properties
-        self.properties["image_previews"] = image_previews
-        self.properties["image_order"] = order
-        self.properties["enabled_layers"] = enabled
-        self.properties["state_version"] = self.properties.get("state_version", 0) + 1
+        # Update properties only if state changed
+        if state_changed:
+            self.properties["image_previews"] = image_previews
+            self.properties["image_order"] = order
+            self.properties["enabled_layers"] = enabled
+            self.properties["state_version"] = self.properties.get("state_version", 0) + 1
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Node {node_id}: State updated, new state_version: {self.properties['state_version']}")
+        else:
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Node {node_id}: No state change, maintaining state_version: {self.properties['state_version']}")
 
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"Node {node_id}: Returning {len(reordered_images)} images")
@@ -265,7 +310,7 @@ class XIS_ReorderImages:
                 "enabled_layers": enabled,                     # List of booleans
                 "state_version": [self.properties["state_version"]]  # Wrapped in list
             },
-            "result": (reordered_images, normalized_images,)
+            "result": (reordered_images,)
         }
 
     def __del__(self):

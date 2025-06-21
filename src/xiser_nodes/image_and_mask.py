@@ -6,6 +6,9 @@ import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
+import hashlib
+import uuid
+import time
 
 """
 Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
@@ -910,8 +913,8 @@ class XIS_CanvasMaskProcessor:
         
         return (output_mask,)
 
-# 将多个图像和蒙版打包成一个 XIS_IMAGES 对象
-class XIS_ImagesToCanvas:
+# 将多个图像和蒙版打包成一个 IMAGE 对象
+class XIS_PackImages:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -919,7 +922,7 @@ class XIS_ImagesToCanvas:
                 "invert_mask": ("BOOLEAN", {"default": False, "label_on": "Invert", "label_off": "Normal"}),
             },
             "optional": {
-                "pack_images": ("XIS_IMAGES", {"default": None}),
+                "pack_images": ("IMAGE", {"default": None}),
                 "image1": ("IMAGE", {"default": None}),
                 "mask1": ("MASK", {"default": None}),
                 "image2": ("IMAGE", {"default": None}),
@@ -933,7 +936,7 @@ class XIS_ImagesToCanvas:
             }
         }
 
-    RETURN_TYPES = ("XIS_IMAGES",)
+    RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("pack_images",)
     FUNCTION = "pack_images"
     CATEGORY = "XISER_Nodes/Canvas"
@@ -1045,6 +1048,122 @@ class XIS_ImagesToCanvas:
         return (normalized_images,)
 
 
+class XIS_MergePackImages:
+    """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
+
+    def __init__(self):
+        """Initialize the node instance."""
+        self.instance_id = uuid.uuid4().hex
+        logger.info(f"Instance {self.instance_id} - XIS_MergePackImages initialized")
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:
+        """Define input types for the node, matching XIS_ImageManager's data type."""
+        return {
+            "optional": {
+                "pack_images_1": ("IMAGE", {"default": None}),
+                "pack_images_2": ("IMAGE", {"default": None}),
+                "pack_images_3": ("IMAGE", {"default": None}),
+                "pack_images_4": ("IMAGE", {"default": None}),
+                "pack_images_5": ("IMAGE", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("pack_images",)
+    FUNCTION = "merge_images"
+    CATEGORY = "XISER_Nodes/Canvas"
+    OUTPUT_NODE = True
+
+    def merge_images(
+        self,
+        pack_images_1: Optional[List[torch.Tensor]] = None,
+        pack_images_2: Optional[List[torch.Tensor]] = None,
+        pack_images_3: Optional[List[torch.Tensor]] = None,
+        pack_images_4: Optional[List[torch.Tensor]] = None,
+        pack_images_5: Optional[List[torch.Tensor]] = None,
+    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
+        """
+        Merge multiple pack_images inputs into a single pack_images output.
+
+        Args:
+            pack_images_1 to pack_images_5: Optional list of torch.Tensor, each of shape [H, W, 4] (RGBA).
+
+        Returns:
+            A tuple containing:
+            - List of merged torch.Tensor images (IMAGE).
+            - torch.Tensor of merged images (IMAGE) if all images have the same size, else empty tensor.
+        """
+        logger.debug(f"Instance {self.instance_id} - Merging pack_images inputs")
+
+        # 收集所有非空输入
+        input_packs = [
+            (i + 1, pack) for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5])
+            if pack is not None and isinstance(pack, list) and pack
+        ]
+
+        if not input_packs:
+            logger.info(f"Instance {self.instance_id} - No valid pack_images inputs provided, returning empty outputs")
+            return ([], torch.empty(0, 0, 0, 4))
+
+        # 验证输入格式并收集图像
+        merged_images = []
+        image_sizes = []
+        for port_idx, pack in input_packs:
+            if not all(isinstance(img, torch.Tensor) for img in pack):
+                logger.error(f"Instance {self.instance_id} - Invalid image type in pack_images_{port_idx}: expected list of torch.Tensor")
+                raise ValueError(f"pack_images_{port_idx} must contain torch.Tensor images")
+            for j, img in enumerate(pack):
+                if len(img.shape) != 3 or img.shape[-1] != 4:
+                    logger.error(f"Instance {self.instance_id} - Invalid shape for image {j} in pack_images_{port_idx}: expected [H, W, 4], got {img.shape}")
+                    raise ValueError(f"Image {j} in pack_images_{port_idx} must be [H, W, 4] (RGBA)")
+                merged_images.append(img)
+                image_sizes.append(img.shape[:2])  # Record [H, W]
+                logger.debug(f"Instance {self.instance_id} - Added image {j} from pack_images_{port_idx} with size {img.shape[:2]}")
+
+        if not merged_images:
+            logger.info(f"Instance {self.instance_id} - No images after validation, returning empty outputs")
+            return ([], torch.empty(0, 0, 0, 4))
+
+        return (merged_images,)
+
+    @staticmethod
+    def IS_CHANGED(
+        pack_images_1: Optional[List[torch.Tensor]] = None,
+        pack_images_2: Optional[List[torch.Tensor]] = None,
+        pack_images_3: Optional[List[torch.Tensor]] = None,
+        pack_images_4: Optional[List[torch.Tensor]] = None,
+        pack_images_5: Optional[List[torch.Tensor]] = None,
+    ) -> str:
+        """Compute a hash to detect changes in inputs."""
+        logger.debug(f"IS_CHANGED called for XIS_MergePackImages")
+        try:
+            hasher = hashlib.sha256()
+            for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5], 1):
+                if pack is None or not pack:
+                    hasher.update(f"pack_images_{i}_empty".encode('utf-8'))
+                    continue
+                if not isinstance(pack, list):
+                    logger.warning(f"Invalid pack_images_{i} type: {type(pack)}")
+                    hasher.update(f"pack_images_{i}_invalid_{id(pack)}".encode('utf-8'))
+                    continue
+                hasher.update(f"pack_images_{i}_len_{len(pack)}".encode('utf-8'))
+                for j, img in enumerate(pack):
+                    if isinstance(img, torch.Tensor):
+                        hasher.update(str(img.shape).encode('utf-8'))
+                        sample_data = img.cpu().numpy().flatten()[:100].tobytes()
+                        hasher.update(sample_data)
+                    else:
+                        logger.warning(f"Invalid image type at index {j} in pack_images_{i}: {type(img)}")
+                        hasher.update(f"img_{j}_invalid_{id(img)}".encode('utf-8'))
+            hash_value = hasher.hexdigest()
+            logger.debug(f"IS_CHANGED returning hash: {hash_value}")
+            return hash_value
+        except Exception as e:
+            logger.error(f"IS_CHANGED failed: {e}")
+            return str(time.time())
+
+
 NODE_CLASS_MAPPINGS = {
     "XIS_LoadImage": XIS_LoadImage,
     "XIS_ImageStitcher": XIS_ImageStitcher,
@@ -1057,5 +1176,6 @@ NODE_CLASS_MAPPINGS = {
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
     "XIS_CanvasMaskProcessor": XIS_CanvasMaskProcessor,
-    "XIS_ImagesToCanvas": XIS_ImagesToCanvas,
+    "XIS_PackImages": XIS_PackImages,
+    "XIS_MergePackImages": XIS_MergePackImages,
 }
