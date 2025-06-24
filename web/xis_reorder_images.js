@@ -458,7 +458,7 @@ app.registerExtension({
                 const card = document.createElement("div");
                 card.className = "xiser-reorder-image-card";
                 card.dataset.index = preview.index.toString();
-                if (!preview.enabled || imagePreviews.length <= 1) {
+                if (!preview.enabled) {
                     card.classList.add("disabled");
                 }
 
@@ -483,12 +483,24 @@ app.registerExtension({
                 toggle.className = "xiser-reorder-layer-toggle";
                 toggle.checked = preview.enabled;
                 toggle.disabled = imagePreviews.length <= 1;
+                if (imagePreviews.length <= 1 && !preview.enabled) {
+                    // Ensure single image is always enabled
+                    enabledLayers[preview.index] = true;
+                    toggle.checked = true;
+                    node.properties.enabled_layers = enabledLayers;
+                    node.properties.state_version = (node.properties.state_version || 0) + 1;
+                }
                 toggle.addEventListener("change", () => {
                     if (isSingleMode) {
                         enabledLayers = Array(imagePreviews.length).fill(false);
                         enabledLayers[preview.index] = toggle.checked;
                     } else {
                         enabledLayers[preview.index] = toggle.checked;
+                    }
+                    if (imagePreviews.length <= 1) {
+                        // Prevent disabling the only image
+                        enabledLayers[preview.index] = true;
+                        toggle.checked = true;
                     }
                     node.properties.enabled_layers = enabledLayers;
                     node.properties.state_version = (node.properties.state_version || 0) + 1;

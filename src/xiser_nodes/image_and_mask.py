@@ -941,15 +941,10 @@ class XIS_PackImages:
     FUNCTION = "pack_images"
     CATEGORY = "XISER_Nodes/Canvas"
 
-    def pack_images(self, image1, invert_mask, pack_images=None, 
+    def pack_images(self, invert_mask, image1=None, pack_images=None, 
                     mask1=None, image2=None, mask2=None, image3=None, mask3=None, 
                     image4=None, mask4=None, image5=None, mask5=None):
         
-        # 确保 image1 不为 None
-        if image1 is None:
-            logger.error("image1 cannot be None")
-            raise ValueError("image1 must be provided")
-
         # 收集当前节点的图像和蒙版输入
         input_images = [image1, image2, image3, image4, image5]
         input_masks = [mask1, mask2, mask3, mask4, mask5]
@@ -957,6 +952,11 @@ class XIS_PackImages:
         # 过滤掉 None 的图像输入
         images = [img for img in input_images if img is not None]
         
+        # 检查是否有有效的图像输入
+        if not images and (pack_images is None or not pack_images):
+            logger.error("No valid images provided (all image inputs and pack_images are None)")
+            raise ValueError("At least one valid image must be provided")
+
         # 初始化输出图像列表
         normalized_images = []
 
@@ -1021,7 +1021,7 @@ class XIS_PackImages:
                         if alpha.max() > 1.0 or alpha.min() < 0.0:
                             alpha = (alpha - alpha.min()) / (alpha.max() - alpha.min() + 1e-8)  # 归一化到 [0,1]
                         
-                        # 如果 invert_mask 为 True，进行蒙版反向
+                        # 如果 invert_mask 为 True，进行蒙版反转
                         if invert_mask:
                             alpha = 1.0 - alpha
 
@@ -1040,13 +1040,8 @@ class XIS_PackImages:
                 
                 normalized_images.append(single_img)
 
-        if not normalized_images:
-            logger.error("No valid images provided after processing")
-            raise ValueError("No valid images provided")
-
         logger.info(f"Packed {len(normalized_images)} images for canvas")
         return (normalized_images,)
-
 
 class XIS_MergePackImages:
     """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
