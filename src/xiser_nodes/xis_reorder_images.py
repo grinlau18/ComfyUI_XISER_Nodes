@@ -8,6 +8,8 @@ import base64
 from io import BytesIO
 import json
 import hashlib
+import time
+import shutil
 
 # Log level control
 LOG_LEVEL = "error"  # Options: "info", "warning", "error"
@@ -16,60 +18,38 @@ LOG_LEVEL = "error"  # Options: "info", "warning", "error"
 logger = logging.getLogger("XISER_ReorderImages")
 logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.ERROR))
 
+# Cleanup threshold for old files (7 days)
+CLEANUP_THRESHOLD_SECONDS = 7 * 24 * 60 * 60
+
 class XIS_ReorderImages:
-    """A custom node for reordering images with support for single mode and layer toggling."""
+    """A custom node for reordering images with frontend-managed state."""
 
     def __init__(self):
-        """Initialize the node with properties and output directory.
-
-        Attributes:
-            properties (dict): Node properties for state persistence.
-            output_dir (str): Directory for storing output files.
-            last_input_hash (str): Hash of the last processed input.
-            image_order (list): Current image order.
-            enabled_layers (list): Current enabled layers.
-            state_version (int): Version of the node state for synchronization.
-        """
-        self.properties = {"state_version": 0, "is_single_mode": False}
+        """Initialize the node with properties and output directory."""
+        self.properties = {}  # Initialize properties dictionary
         self.output_dir = os.path.join(folder_paths.get_output_directory(), "xiser_reorder_images")
         os.makedirs(self.output_dir, exist_ok=True)
         self.last_input_hash = None
-        self.image_order = []
-        self.enabled_layers = []
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"XIS_ReorderImages initialized with output directory: {self.output_dir}")
+        self._cleanup_old_files()
 
     @classmethod
     def INPUT_TYPES(cls):
-        """Define input types for the node.
-
-        Returns:
-            dict: Input specification with required and hidden fields.
-        """
+        """Define input types for the node."""
         return {
             "required": {
                 "pack_images": ("IMAGE", {"default": None}),
             },
             "hidden": {
                 "image_order": ("STRING", {"default": "[]", "multiline": False}),
-                "enabled_layers": ("STRING", {"default": "[]", "multiline": False}),
                 "node_id": ("STRING", {"default": "", "multiline": False}),
             }
         }
 
     @classmethod
-    def IS_CHANGED(cls, pack_images, image_order="[]", enabled_layers="[]", node_id="", **kwargs):
-        """Compute a hash to determine if node execution is needed.
-
-        Args:
-            pack_images (list): List of torch.Tensor images.
-            image_order (str): JSON string of ordered image indices.
-            enabled_layers (str): JSON string of boolean flags for enabled layers.
-            node_id (str): Unique node identifier.
-
-        Returns:
-            str: Hash of inputs and settings.
-        """
+    def IS_CHANGED(cls, pack_images, image_order="[]", node_id="", **kwargs):
+        """Compute a hash to determine if node execution is needed."""
         hasher = hashlib.sha256()
         # Hash pack_images
         if pack_images is not None and isinstance(pack_images, list):
@@ -78,11 +58,13 @@ class XIS_ReorderImages:
                     hasher.update(img.cpu().numpy().tobytes())
         # Hash image_order
         hasher.update(image_order.encode('utf-8'))
-        # Hash enabled_layers
-        hasher.update(enabled_layers.encode('utf-8'))
-        # Use instance properties if available (via kwargs from ComfyUI)
+        # Hash properties from instance (if available)
         instance = kwargs.get('instance', {})
-        hasher.update(json.dumps(instance.get('properties', {}).get('is_single_mode', False)).encode('utf-8'))
+        properties = instance.get('properties', {})
+        hasher.update(json.dumps({
+            'enabled_layers': properties.get('enabled_layers', []),
+            'is_single_mode': properties.get('is_single_mode', False)
+        }, sort_keys=True).encode('utf-8'))
         return hasher.hexdigest()
 
     RETURN_TYPES = ("IMAGE",)
@@ -92,16 +74,7 @@ class XIS_ReorderImages:
     OUTPUT_NODE = True
 
     def _generate_base64_thumbnail(self, pil_img, max_size=64, format="PNG"):
-        """Generate a scaled thumbnail as Base64 data for frontend preview.
-
-        Args:
-            pil_img (PIL.Image): Input image.
-            max_size (int): Maximum thumbnail size (width or height).
-            format (str): Image format (default: PNG).
-
-        Returns:
-            str: Base64-encoded thumbnail.
-        """
+        """Generate a scaled thumbnail as Base64 data for frontend preview."""
         img_width, img_height = pil_img.size
         scale = min(max_size / img_width, max_size / img_height, 1.0)
         new_size = (int(img_width * scale), int(img_height * scale))
@@ -111,204 +84,112 @@ class XIS_ReorderImages:
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _compute_image_hash(self, images):
-        """Compute a hash for the image list based on content.
-
-        Args:
-            images (list): List of torch.Tensor images.
-
-        Returns:
-            str: SHA256 hash of the image list.
-        """
+        """Compute a hash for the image list based on content."""
         hasher = hashlib.sha256()
         for img in images:
             hasher.update(img.cpu().numpy().tobytes())
         return hasher.hexdigest()
 
-    def _validate_image_order(self, order, num_images, enabled_layers):
-        """Validate image_order, including only enabled layers.
-
-        Args:
-            order (list): Proposed image order.
-            num_images (int): Number of images.
-            enabled_layers (list): Boolean flags for enabled layers.
-
-        Returns:
-            list: Validated order of enabled image indices.
-        """
-        if not isinstance(order, list) or not order:
+    def _validate_image_order(self, order, num_images):
+        """Validate image_order, ensuring all indices are valid."""
+        if not isinstance(order, list):
             if logger.isEnabledFor(logging.WARNING):
-                logger.warning(f"Invalid image_order: {order}, using enabled layers")
-            return [i for i in range(num_images) if enabled_layers[i]]
-        valid_order = [
-            idx for idx in order
-            if isinstance(idx, int) and 0 <= idx < num_images and enabled_layers[idx]
-        ]
+                logger.warning(f"Invalid image_order type: {type(order)}, resetting")
+            return [i for i in range(num_images)]
+        valid_order = [idx for idx in order if isinstance(idx, int) and 0 <= idx < num_images]
         if not valid_order:
             if logger.isEnabledFor(logging.WARNING):
-                logger.warning(f"No valid enabled indices in image_order: {order}, using enabled layers")
-            return [i for i in range(num_images) if enabled_layers[i]]
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Validated order: {valid_order}, enabled: {enabled_layers}")
+                logger.warning(f"No valid indices in image_order: {order}, resetting")
+            return [i for i in range(num_images)]
         return valid_order
 
-    def _normalize_images_for_preview(self, image_list):
-        """Normalize images to maintain size and RGBA format.
-
-        Args:
-            image_list (list): List of torch.Tensor images.
-
-        Returns:
-            list: Normalized torch.Tensor images, or None if empty.
-        """
-        if not image_list:
-            return None
-        return [img.cpu().clamp(0, 1) for img in image_list]
-
     def _get_node_output_dir(self, node_id):
-        """Get node-specific output directory.
-
-        Args:
-            node_id (str): Node identifier.
-
-        Returns:
-            str: Path to node-specific output directory.
-        """
+        """Get node-specific output directory."""
         node_dir = os.path.join(self.output_dir, f"node_{node_id}")
         os.makedirs(node_dir, exist_ok=True)
         return node_dir
 
-    def reorder_images(self, pack_images, image_order="[]", enabled_layers="[]", node_id=""):
-        """Process and reorder images based on image_order and enabled_layers.
+    def _cleanup_old_files(self):
+        """Clean up old files in output directory."""
+        current_time = time.time()
+        try:
+            for node_dir in os.listdir(self.output_dir):
+                node_path = os.path.join(self.output_dir, node_dir)
+                if os.path.isdir(node_path):
+                    for file in os.listdir(node_path):
+                        file_path = os.path.join(node_path, file)
+                        if os.path.isfile(file_path):
+                            file_mtime = os.path.getmtime(file_path)
+                            if current_time - file_mtime > CLEANUP_THRESHOLD_SECONDS:
+                                os.remove(file_path)
+                                if logger.isEnabledFor(logging.INFO):
+                                    logger.info(f"Removed old file: {file_path}")
+                    if not os.listdir(node_path):
+                        shutil.rmtree(node_path)
+                        if logger.isEnabledFor(logging.INFO):
+                            logger.info(f"Removed empty directory: {node_path}")
+        except Exception as e:
+            if logger.isEnabledFor(logging.ERROR):
+                logger.error(f"Failed to clean up output directory: {e}")
 
-        Args:
-            pack_images (list): List of torch.Tensor images.
-            image_order (str): JSON string of ordered image indices.
-            enabled_layers (str): JSON string of boolean flags for enabled layers.
-            node_id (str): Unique node identifier.
-
-        Returns:
-            dict: UI data and result tuple with reordered images.
-
-        Raises:
-            ValueError: If input validation fails.
-        """
+    def reorder_images(self, pack_images, image_order="[]", node_id=""):
+        """Process images, generate previews, and reorder based on frontend order."""
         if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Node {node_id}: Processing {len(pack_images)} images, order: {image_order}, enabled: {enabled_layers}")
+            logger.info(f"Node {node_id}: Processing {len(pack_images)} images, order: {image_order}")
 
         # Validate input
         if pack_images is None or not isinstance(pack_images, list):
             if logger.isEnabledFor(logging.ERROR):
                 logger.error(f"Node {node_id}: Invalid pack_images: expected list, got {type(pack_images)}")
             raise ValueError("pack_images must be provided as a list")
-
         if not pack_images:
             if logger.isEnabledFor(logging.ERROR):
                 logger.error(f"Node {node_id}: No images provided")
             raise ValueError("At least one image must be provided")
-
         if len(pack_images) > 50 and logger.isEnabledFor(logging.WARNING):
             logger.warning(f"Node {node_id}: Large number of images: {len(pack_images)}")
-
         for img in pack_images:
             if not isinstance(img, torch.Tensor) or img.shape[-1] != 4:
                 if logger.isEnabledFor(logging.ERROR):
                     logger.error(f"Node {node_id}: Invalid image format: expected RGBA torch.Tensor, got {img.shape}")
                 raise ValueError("All images must be RGBA torch.Tensor")
 
-        # Parse enabled layers
+        # Parse frontend order
         try:
-            enabled = (
-                json.loads(enabled_layers)
-                if enabled_layers and enabled_layers != "[]"
-                else [True] * len(pack_images)
-            )
-            if len(enabled) != len(pack_images):
-                if logger.isEnabledFor(logging.WARNING):
-                    logger.warning(f"Node {node_id}: Invalid enabled_layers length: {len(enabled)}")
-                enabled = [True] * len(pack_images)
-        except Exception as e:
-            if logger.isEnabledFor(logging.ERROR):
-                logger.error(f"Node {node_id}: Failed to parse enabled_layers: {e}")
-            enabled = [True] * len(pack_images)
-
-        # Parse image order
-        try:
-            order = (
-                json.loads(image_order)
-                if image_order and image_order != "[]"
-                else [i for i in range(len(pack_images)) if enabled[i]]
-            )
+            order = json.loads(image_order) if image_order and image_order != "[]" else [i for i in range(len(pack_images))]
+            order = self._validate_image_order(order, len(pack_images))
         except Exception as e:
             if logger.isEnabledFor(logging.ERROR):
                 logger.error(f"Node {node_id}: Failed to parse image_order: {e}")
-            order = [i for i in range(len(pack_images)) if enabled[i]]
-
-        # Check for input changes
-        input_hash = self._compute_image_hash(pack_images)
-        image_count_changed = len(self.properties.get("image_previews", [])) != len(pack_images)
-        input_changed = input_hash != self.last_input_hash
-        order_changed = order != self.image_order
-        enabled_changed = enabled != self.enabled_layers
-
-        # Initialize or reset state only if necessary
-        if image_count_changed or input_changed:
-            if logger.isEnabledFor(logging.INFO):
-                logger.info(f"Node {node_id}: Input changed, resetting state")
-            enabled = (
-                [True] + [False] * (len(pack_images) - 1)
-                if self.properties.get("is_single_mode", False)
-                else [True] * len(pack_images)
-            )
-            order = [i for i in range(len(pack_images)) if enabled[i]]
-            self.last_input_hash = input_hash
-            self.image_order = order
-            self.enabled_layers = enabled
-            state_changed = True
-        else:
-            order = self._validate_image_order(order, len(pack_images), enabled)
-            state_changed = order_changed or enabled_changed
-            self.image_order = order
-            self.enabled_layers = enabled
+            order = [i for i in range(len(pack_images))]
 
         # Generate previews
         image_previews = []
-        for i, img_tensor in enumerate(pack_images):
-            img = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
-            pil_img = Image.fromarray(img, mode="RGBA")
-            preview_b64 = self._generate_base64_thumbnail(pil_img)
-            image_previews.append({
-                "index": i,
-                "preview": preview_b64,
-                "width": img.shape[1],
-                "height": img.shape[0]
-            })
-
-        # Reorder and filter images
-        reordered_images = [pack_images[i] for i in order if enabled[i]]
-        normalized_images = self._normalize_images_for_preview(
-            [pack_images[i] for i in order if enabled[i]]
-        )
-
-        # Update properties only if state changed
-        if state_changed:
+        input_hash = self._compute_image_hash(pack_images)
+        if input_hash != self.last_input_hash or not self.properties.get("image_previews"):
+            self.last_input_hash = input_hash
+            for i, img_tensor in enumerate(pack_images):
+                img = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+                pil_img = Image.fromarray(img, mode="RGBA")
+                preview_b64 = self._generate_base64_thumbnail(pil_img)
+                image_previews.append({
+                    "id": i,  # Box number
+                    "preview": preview_b64,
+                    "width": img.shape[1],
+                    "height": img.shape[0]
+                })
             self.properties["image_previews"] = image_previews
-            self.properties["image_order"] = order
-            self.properties["enabled_layers"] = enabled
-            self.properties["state_version"] = self.properties.get("state_version", 0) + 1
-            if logger.isEnabledFor(logging.INFO):
-                logger.info(f"Node {node_id}: State updated, new state_version: {self.properties['state_version']}")
         else:
-            if logger.isEnabledFor(logging.INFO):
-                logger.info(f"Node {node_id}: No state change, maintaining state_version: {self.properties['state_version']}")
+            image_previews = self.properties.get("image_previews", [])
+
+        # Reordered images
+        reordered_images = [pack_images[i] for i in order if i < len(pack_images)]
 
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"Node {node_id}: Returning {len(reordered_images)} images")
         return {
             "ui": {
-                "image_previews": image_previews,              # List of dicts
-                "image_order": order,                          # List of integers
-                "enabled_layers": enabled,                     # List of booleans
-                "state_version": [self.properties["state_version"]]  # Wrapped in list
+                "image_previews": image_previews,
             },
             "result": (reordered_images,)
         }
@@ -317,8 +198,7 @@ class XIS_ReorderImages:
         """Clean up node-specific resources."""
         if logger.isEnabledFor(logging.INFO):
             logger.info("Cleaning up XIS_ReorderImages resources")
-        # Note: Directory cleanup is avoided to prevent accidental data loss
-        # If needed, implement node-specific cleanup here
+        self._cleanup_old_files()
 
 NODE_CLASS_MAPPINGS = {
     "XIS_ReorderImages": XIS_ReorderImages

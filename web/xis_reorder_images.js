@@ -3,53 +3,26 @@ import { app } from "/scripts/app.js";
 // Log level control
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
-/**
- * Logging utility for controlled output based on log level.
- * @constant {Object}
- */
 const log = {
     info: (...args) => { if (LOG_LEVEL === "info") console.log(...args); },
     warning: (...args) => { if (LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.warn(...args); },
     error: (...args) => { if (LOG_LEVEL === "error" || LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.error(...args); }
 };
 
-/**
- * Minimum node height in pixels.
- * @constant {number}
- */
 const MIN_NODE_HEIGHT = 300;
 
-/**
- * Debounces a function to limit execution frequency.
- * @param {Function} fn - Function to debounce.
- * @param {number} delay - Delay in milliseconds.
- * @returns {Function} Debounced function.
- */
-function debounce(fn, delay) {
-    let timeout;
-    return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn(...args), delay);
-    };
-}
+// Global resource registry for reference counting
+const resourceRegistry = {
+    sortable: { count: 0, script: null },
+    font: { count: 0, element: null }
+};
 
-/**
- * Generates a unique class name for node-specific styling.
- * @param {number} nodeId - The node ID.
- * @returns {string} Unique class name.
- */
 function getNodeClass(nodeId) {
     return `xiser-reorder-node-${nodeId}`;
 }
 
 app.registerExtension({
     name: "XISER.ReorderImages",
-    /**
-     * Registers node definition and configures initial setup.
-     * @param {Object} nodeType - Node type object.
-     * @param {Object} nodeData - Node data configuration.
-     * @param {Object} app - ComfyUI app instance.
-     */
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
         if (nodeData.name === "XIS_ReorderImages") {
             log.info("Registering XIS_ReorderImages node definition");
@@ -60,36 +33,61 @@ app.registerExtension({
                     log.warning("Temporary invalid node ID, waiting for valid ID");
                 }
             };
+            // Add onConfigure to sync state on workflow load
+            nodeType.prototype.onConfigure = function () {
+                log.info(`Node ${this.id} configured, syncing state`);
+                if (this.widgets) {
+                    const orderWidget = this.widgets.find(w => w.name === "image_order");
+                    if (orderWidget && this.properties) {
+                        const imageOrder = this.properties.image_order || [];
+                        const enabledLayers = this.properties.enabled_layers || [];
+                        if (imageOrder.length && enabledLayers.length) {
+                            orderWidget.value = JSON.stringify(imageOrder.filter((_, i) => enabledLayers[i]));
+                            this.widgets_values = [orderWidget.value];
+                            this.setDirtyCanvas(true, true);
+                        }
+                    }
+                }
+            };
         }
     },
-    /**
-     * Sets up the extension by loading dependencies and styles.
-     */
     async setup() {
         log.info("XISER_ReorderImages extension loaded");
 
         // Load Sortable.js
-        await new Promise((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "/extensions/ComfyUI_XISER_Nodes/lib/Sortable.min.js";
-            script.onload = () => {
-                log.info("Sortable.js loaded successfully");
-                resolve();
-            };
-            script.onerror = () => {
-                log.error("Failed to load Sortable.js");
-                reject();
-            };
-            document.head.appendChild(script);
-        });
+        if (!resourceRegistry.sortable.script) {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement("script");
+                script.src = "/extensions/ComfyUI_XISER_Nodes/lib/Sortable.min.js";
+                script.onload = () => {
+                    log.info("Sortable.js loaded successfully");
+                    resourceRegistry.sortable.script = script;
+                    resourceRegistry.sortable.count++;
+                    resolve();
+                };
+                script.onerror = () => {
+                    log.error("Failed to load Sortable.js");
+                    reject();
+                };
+                document.head.appendChild(script);
+            });
+        } else {
+            resourceRegistry.sortable.count++;
+        }
 
         // Load Inter font
-        const fontLink = document.createElement("link");
-        fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap";
-        fontLink.rel = "stylesheet";
-        document.head.appendChild(fontLink);
+        if (!resourceRegistry.font.element) {
+            const fontLink = document.createElement("link");
+            fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap";
+            fontLink.rel = "stylesheet";
+            document.head.appendChild(fontLink);
+            resourceRegistry.font.element = fontLink;
+            resourceRegistry.font.count++;
+        } else {
+            resourceRegistry.font.count++;
+        }
 
-        // Add styles with node-specific scoping
+        // Add styles
         const style = document.createElement("style");
         style.textContent = `
             .xiser-reorder-container {
@@ -210,29 +208,24 @@ app.registerExtension({
                 transform: translateX(20px);
             }
             .xiser-reorder-container .xiser-reorder-layer-toggle:disabled,
-            .xiser-reorder-container .xiser-reorder-single-mode-toggle:disabled {
+            .xiser-reorder-single-mode-toggle:disabled {
                 opacity: 0.5;
                 cursor: not-allowed;
+            }
+            .xiser-reorder-error-message {
+                color: #F55;
+                font-size: 12px;
+                margin-top: 4px;
             }
         `;
         document.head.appendChild(style);
 
-        // Clean up any orphaned containers
+        // Clean up orphaned containers
         document.querySelectorAll('.xiser-reorder-container:not([data-nodeId])').forEach(c => c.remove());
     },
-    /**
-     * Initializes node UI and behavior after creation.
-     * @param {Object} node - Node instance.
-     */
     async nodeCreated(node) {
         if (node.comfyClass !== "XIS_ReorderImages") return;
 
-        /**
-         * Ensures a valid node ID.
-         * @param {Object} node - Node instance.
-         * @returns {Promise<number>} Node ID.
-         * @throws {Error} If valid ID cannot be obtained.
-         */
         async function ensureNodeId(node) {
             let attempts = 0;
             const maxAttempts = 400;
@@ -268,30 +261,43 @@ app.registerExtension({
 
         // Initialize properties
         let imagePreviews = node.properties?.image_previews || [];
-        let imageOrder = node.properties?.image_order || (imagePreviews.length > 0 ? [...Array(imagePreviews.length).keys()] : []);
+        let imageOrder = node.properties?.image_order || (imagePreviews.length > 0 ? imagePreviews.map(p => p.id) : []);
         let isReversed = node.properties?.is_reversed || false;
         let enabledLayers = node.properties?.enabled_layers || (imagePreviews.length > 0 ? Array(imagePreviews.length).fill(true) : []);
         let isSingleMode = node.properties?.is_single_mode || false;
-        node.widgets_values = [JSON.stringify(imageOrder.filter((_, i) => enabledLayers[i]))];
-        const stateVersion = node.properties?.state_version || 0;
+        node.widgets_values = [JSON.stringify(imageOrder.filter((id, i) => enabledLayers[i]))];
 
-        /**
-         * Validates image order array.
-         * @param {number[]} order - Image order array.
-         * @param {Object[]} previews - Image previews array.
-         * @param {boolean[]} enabled - Enabled layers array.
-         * @returns {number[]} Validated order.
-         */
-        function validateImageOrder(order, previews, enabled) {
+        function validateState(order, enabled, previews) {
+            const numPreviews = previews.length;
+            if (!Array.isArray(order) || order.length !== numPreviews) {
+                log.warning(`Invalid imageOrder length: ${order.length}, expected ${numPreviews}`);
+                return false;
+            }
+            if (!Array.isArray(enabled) || enabled.length !== numPreviews) {
+                log.warning(`Invalid enabledLayers length: ${enabled.length}, expected ${numPreviews}`);
+                return false;
+            }
+            if (!order.every(id => Number.isInteger(id) && previews.some(p => p.id === id))) {
+                log.warning(`Invalid IDs in imageOrder: ${JSON.stringify(order)}`);
+                return false;
+            }
+            if (!enabled.every(e => typeof e === 'boolean')) {
+                log.warning(`Invalid enabledLayers values: ${JSON.stringify(enabled)}`);
+                return false;
+            }
+            return true;
+        }
+
+        function validateImageOrder(order, previews) {
             const numPreviews = previews.length;
             if (!Array.isArray(order) || order.length !== numPreviews) {
                 log.warning(`Invalid imageOrder length: ${JSON.stringify(order)}, resetting`);
-                return [...Array(numPreviews).keys()];
+                return previews.map(p => p.id);
             }
-            const validOrder = order.filter(idx => Number.isInteger(idx) && idx >= 0 && idx < numPreviews);
-            if (validOrder.length !== numPreviews || new Set(validOrder).size !== numPreviews) {
+            const validOrder = order.filter(id => Number.isInteger(id) && previews.some(p => p.id === id));
+            if (validOrder.length !== numPreviews) {
                 log.warning(`Invalid imageOrder: ${JSON.stringify(order)}, resetting`);
-                return [...Array(numPreviews).keys()];
+                return previews.map(p => p.id);
             }
             return validOrder;
         }
@@ -308,6 +314,12 @@ app.registerExtension({
         statusText.className = "xiser-reorder-status-text";
         statusText.innerText = imagePreviews.length > 0 ? `Loaded ${imagePreviews.length} images` : "Waiting for images...";
         header.appendChild(statusText);
+
+        const errorMessage = document.createElement("div");
+        errorMessage.className = "xiser-reorder-error-message";
+        errorMessage.style.display = "none";
+        header.appendChild(errorMessage);
+
         mainContainer.appendChild(header);
 
         // Create card container
@@ -315,37 +327,55 @@ app.registerExtension({
         cardContainer.className = "xiser-reorder-card-container";
         mainContainer.appendChild(cardContainer);
 
+        // Function to update widget and mark node dirty
+        function updateWidgetAndDirty(order, enabled) {
+            const enabledOrder = order.filter((_, i) => enabled[i]);
+            node.widgets_values[0] = JSON.stringify(enabledOrder);
+            if (node.widgets[0]) {
+                node.widgets[0].value = JSON.stringify(enabledOrder);
+                if (node.onWidgetChanged) {
+                    node.onWidgetChanged(node.widgets[0].name, node.widgets[0].value);
+                }
+            }
+            node.setDirtyCanvas(true, true);
+            app.graph.setDirtyCanvas(true, true);
+            log.info(`Updated widget with order: ${enabledOrder}`);
+        }
+
         // Add widgets
         const orderWidget = node.addWidget("hidden", "image_order", JSON.stringify(imageOrder.filter((_, i) => enabledLayers[i])), (value) => {
             try {
                 const parsedOrder = JSON.parse(value) || imageOrder.filter((_, i) => enabledLayers[i]);
-                imageOrder = validateImageOrder(parsedOrder, imagePreviews, enabledLayers);
+                const newOrder = validateImageOrder(parsedOrder, imagePreviews);
+                if (!validateState(newOrder, enabledLayers, imagePreviews)) {
+                    throw new Error("Invalid state after order update");
+                }
+                imageOrder = newOrder;
                 node.properties.image_order = imageOrder;
-                node.properties.state_version = (node.properties.state_version || 0) + 1;
                 node.setProperty("image_order", imageOrder);
-                node.widgets_values = [JSON.stringify(imageOrder.filter((_, i) => enabledLayers[i]))];
-                debouncedUpdateCardList();
-                app.graph.setDirtyCanvas(true, true);
+                updateWidgetAndDirty(imageOrder, enabledLayers);
+                updateCardList(); // Immediate update
+                errorMessage.style.display = "none";
             } catch (e) {
                 log.error(`Failed to parse image_order: ${e}`);
                 statusText.innerText = "Failed to parse image order";
-                statusText.style.color = "#F55";
+                errorMessage.innerText = `Error: ${e.message}`;
+                errorMessage.style.display = "block";
             }
         }, { serialize: true });
 
-        const reverseWidget = node.addWidget("toggle", "reverse_list", isReversed, (value) => {
+        const reverseWidget = node.addWidget("toggle", "Reverse Display", isReversed, (value) => {
             isReversed = value;
             node.properties.is_reversed = isReversed;
-            node.properties.state_version = (node.properties.state_version || 0) + 1;
             node.setProperty("is_reversed", isReversed);
-            debouncedUpdateCardList();
-            app.graph.setDirtyCanvas(true, true);
-        }, { label: "Reverse Display", serialize: true });
+            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateCardList();
+            errorMessage.style.display = "none";
+        }, { serialize: true });
 
-        const singleModeWidget = node.addWidget("toggle", "single_mode", isSingleMode, (value) => {
+        const singleModeWidget = node.addWidget("toggle", "Single Mode", isSingleMode, (value) => {
             isSingleMode = value;
             node.properties.is_single_mode = isSingleMode;
-            node.properties.state_version = (node.properties.state_version || 0) + 1;
             node.setProperty("is_single_mode", isSingleMode);
             if (isSingleMode) {
                 const enabledIndex = enabledLayers.findIndex(x => x);
@@ -356,49 +386,41 @@ app.registerExtension({
                     enabledLayers[0] = true;
                 }
                 node.properties.enabled_layers = enabledLayers;
+                node.setProperty("enabled_layers", enabledLayers);
             }
-            debouncedUpdateCardList();
-            app.graph.setDirtyCanvas(true, true);
+            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateCardList();
             log.info(`Single mode toggled: ${isSingleMode}`);
-        }, { label: "Single Selection Mode", serialize: true });
+            errorMessage.style.display = "none";
+        }, { serialize: true });
 
-        const resetButtonWidget = node.addWidget("button", "reset_order", "Reset Order", () => {
-            imageOrder = [...Array(imagePreviews.length).keys()];
+        const resetButtonWidget = node.addWidget("button", "Reset Order", "Reset Order", () => {
+            imageOrder = imagePreviews.map(p => p.id);
+            enabledLayers = Array(imagePreviews.length).fill(true);
             node.properties.image_order = imageOrder;
-            node.properties.state_version = (node.properties.state_version || 0) + 1;
-            const enabledOrder = imageOrder.filter((idx, i) => enabledLayers[idx]);
-            orderWidget.value = JSON.stringify(enabledOrder);
-            node.widgets_values = [JSON.stringify(enabledOrder)];
-            debouncedUpdateCardList();
-            app.graph.setDirtyCanvas(true, true);
+            node.properties.enabled_layers = enabledLayers;
+            node.setProperty("image_order", imageOrder);
+            node.setProperty("enabled_layers", enabledLayers);
+            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateCardList();
             log.info(`Reset image order to: ${imageOrder}`);
-        }, { label: "Reset Order", serialize: false });
+            errorMessage.style.display = "none";
+        }, { serialize: false });
 
-        /**
-         * Updates container height based on node size.
-         */
         function updateContainerHeight() {
             const nodeHeight = node.size[1];
             const nodeWidth = node.size[0];
             const headerHeight = header.offsetHeight || 30;
-            // Use saved margin or default to 50, adjusted for 8px bottom padding
             const marginOffset = node.properties?.margin_offset || 50;
-            // Account for 8px top + bottom padding in .xiser-reorder-container
-            const availableHeight = nodeHeight - headerHeight - marginOffset - 70; // 70 = 8px top + 8px bottom + 4px border
-            // Account for 8px left + right padding
-            const availableWidth = nodeWidth - 20; // 20 = 8px left + 8px right + 4px border
+            const availableHeight = nodeHeight - headerHeight - marginOffset - 70;
+            const availableWidth = nodeWidth - 20;
             mainContainer.style.height = `${Math.max(availableHeight, 100)}px`;
-            mainContainer.style.width = `${Math.max(availableWidth, 332)}px`; // Match min-width
+            mainContainer.style.width = `${Math.max(availableWidth, 332)}px`;
             cardContainer.style.height = `${Math.max(availableHeight - headerHeight, 60)}px`;
-            // Save margin_offset
             node.properties.margin_offset = marginOffset;
             node.setProperty("margin_offset", marginOffset);
-            log.info(`Updated container dimensions to ${mainContainer.style.width}x${mainContainer.style.height} for node ${nodeId}, margin_offset: ${marginOffset}`);
         }
 
-        /**
-         * Updates card list UI and sortable behavior.
-         */
         let sortableInstance = null;
         function updateCardList() {
             cardContainer.innerHTML = "";
@@ -414,51 +436,49 @@ app.registerExtension({
             }
 
             if (enabledLayers.length !== imagePreviews.length) {
-                enabledLayers = Array(imagePreviews.length).fill(true);
+                enabledLayers = Array(imagePreviews.length).fill(isSingleMode ? false : true);
+                if (isSingleMode && imagePreviews.length > 0) {
+                    enabledLayers[0] = true;
+                }
                 node.properties.enabled_layers = enabledLayers;
+                node.setProperty("enabled_layers", enabledLayers);
             }
 
-            imageOrder = validateImageOrder(imageOrder, imagePreviews, enabledLayers);
-            node.properties.image_order = imageOrder;
-            node.properties.state_version = (node.properties.state_version || 0) + 1;
-
-            const enabledOrder = imageOrder.filter((idx, i) => enabledLayers[idx]);
-            orderWidget.value = JSON.stringify(enabledOrder);
-            node.widgets_values = [JSON.stringify(enabledOrder)];
-
-            const orderedPreviews = imageOrder.map(idx => {
-                const preview = imagePreviews.find(p => p.index === idx);
-                if (!preview) {
-                    log.error(`No preview for index ${idx}`);
-                    return null;
+            imageOrder = validateImageOrder(imageOrder, imagePreviews);
+            if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+                log.error("Invalid state, resetting");
+                imageOrder = imagePreviews.map(p => p.id);
+                enabledLayers = Array(imagePreviews.length).fill(isSingleMode ? false : true);
+                if (isSingleMode && imagePreviews.length > 0) {
+                    enabledLayers[0] = true;
                 }
-                return { ...preview, enabled: enabledLayers[idx] };
-            }).filter(p => p !== null);
-
-            if (orderedPreviews.length !== imagePreviews.length) {
-                log.error("Incomplete orderedPreviews, resetting");
-                imageOrder = [...Array(imagePreviews.length).keys()];
-                enabledLayers = Array(imagePreviews.length).fill(true);
+                errorMessage.innerText = "Invalid state, reset to default";
+                errorMessage.style.display = "block";
                 node.properties.image_order = imageOrder;
                 node.properties.enabled_layers = enabledLayers;
-                orderWidget.value = JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]));
-                node.widgets_values = [JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]))];
-                imagePreviews = imagePreviews.map((p, i) => ({ ...p, index: i }));
+                node.setProperty("image_order", imageOrder);
+                node.setProperty("enabled_layers", enabledLayers);
             }
 
+            node.properties.image_order = imageOrder;
+            node.properties.enabled_layers = enabledLayers;
+            updateWidgetAndDirty(imageOrder, enabledLayers);
+
+            const orderedPreviews = imageOrder.map(id => imagePreviews.find(p => p.id === id)).filter(p => p);
             const displayPreviews = isReversed ? [...orderedPreviews].reverse() : orderedPreviews;
             const enabledCount = enabledLayers.filter(x => x).length;
             let enabledIndex = 0;
 
             displayPreviews.forEach((preview, i) => {
-                if (!preview || !Number.isInteger(preview.index)) {
+                if (!preview || !Number.isInteger(preview.id)) {
                     log.error("Skipping invalid preview:", preview);
                     return;
                 }
                 const card = document.createElement("div");
                 card.className = "xiser-reorder-image-card";
-                card.dataset.index = preview.index.toString();
-                if (!preview.enabled) {
+                card.dataset.id = preview.id.toString();
+                const index = imagePreviews.findIndex(p => p.id === preview.id);
+                if (!enabledLayers[index]) {
                     card.classList.add("disabled");
                 }
 
@@ -469,8 +489,8 @@ app.registerExtension({
 
                 const info = document.createElement("div");
                 info.className = "xiser-reorder-image-info";
-                if (preview.enabled) {
-                    const layerNumber = isReversed ? enabledCount - enabledIndex : enabledIndex + 1;
+                if (enabledLayers[index]) {
+                    const layerNumber = isReversed ? enabledCount - enabledIndex - 1 : enabledIndex + 1;
                     info.innerText = `Layer ${layerNumber} | Size: ${preview.width}x${preview.height}`;
                     enabledIndex++;
                 } else {
@@ -481,32 +501,39 @@ app.registerExtension({
                 const toggle = document.createElement("input");
                 toggle.type = "checkbox";
                 toggle.className = "xiser-reorder-layer-toggle";
-                toggle.checked = preview.enabled;
+                toggle.checked = enabledLayers[index];
                 toggle.disabled = imagePreviews.length <= 1;
-                if (imagePreviews.length <= 1 && !preview.enabled) {
-                    // Ensure single image is always enabled
-                    enabledLayers[preview.index] = true;
+                if (imagePreviews.length <= 1) {
+                    enabledLayers[index] = true;
                     toggle.checked = true;
-                    node.properties.enabled_layers = enabledLayers;
-                    node.properties.state_version = (node.properties.state_version || 0) + 1;
                 }
                 toggle.addEventListener("change", () => {
                     if (isSingleMode) {
                         enabledLayers = Array(imagePreviews.length).fill(false);
-                        enabledLayers[preview.index] = toggle.checked;
+                        enabledLayers[index] = toggle.checked;
                     } else {
-                        enabledLayers[preview.index] = toggle.checked;
+                        enabledLayers[index] = toggle.checked;
                     }
                     if (imagePreviews.length <= 1) {
-                        // Prevent disabling the only image
-                        enabledLayers[preview.index] = true;
+                        enabledLayers[index] = true;
                         toggle.checked = true;
                     }
+                    if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+                        log.error("Invalid state after toggle, resetting");
+                        imageOrder = imagePreviews.map(p => p.id);
+                        enabledLayers = Array(imagePreviews.length).fill(true);
+                        errorMessage.innerText = "Invalid layer state, reset to default";
+                        errorMessage.style.display = "block";
+                        node.properties.image_order = imageOrder;
+                        node.properties.enabled_layers = enabledLayers;
+                        node.setProperty("image_order", imageOrder);
+                        node.setProperty("enabled_layers", enabledLayers);
+                    }
                     node.properties.enabled_layers = enabledLayers;
-                    node.properties.state_version = (node.properties.state_version || 0) + 1;
-                    debouncedUpdateCardList();
-                    app.graph.setDirtyCanvas(true, true);
-                    log.info(`Layer ${preview.index} enabled: ${toggle.checked}`);
+                    node.setProperty("enabled_layers", enabledLayers);
+                    updateWidgetAndDirty(imageOrder, enabledLayers);
+                    updateCardList();
+                    log.info(`Layer ${preview.id} enabled: ${toggle.checked}`);
                 });
                 card.appendChild(toggle);
 
@@ -521,33 +548,31 @@ app.registerExtension({
                     draggable: `.xiser-reorder-image-card:not(.disabled)`,
                     ghostClass: "sortable-ghost",
                     chosenClass: "sortable-chosen",
-                    group: `xiser-reorder-${nodeId}`, // Unique group per node
+                    group: `xiser-reorder-${nodeId}`,
                     onEnd: (evt) => {
-                        const oldIndex = evt.oldIndex;
-                        const newIndex = evt.newIndex;
-                        log.info(`Sortable event for node ${nodeId}:`, { oldIndex, newIndex });
-
-                        const newDomOrder = Array.from(cardContainer.children).map(card => parseInt(card.dataset.index));
-                        const displayOrder = isReversed ? newDomOrder.reverse() : newDomOrder;
-                        const enabledIndices = displayOrder.filter(idx => enabledLayers[idx]);
-                        const disabledIndices = imageOrder.filter(idx => !enabledLayers[idx]);
-                        imageOrder = [...enabledIndices, ...disabledIndices];
-                        imageOrder = validateImageOrder(imageOrder, imagePreviews, enabledLayers);
+                        const newDomOrder = Array.from(cardContainer.children).map(card => parseInt(card.dataset.id));
+                        imageOrder = isReversed ? newDomOrder.reverse() : newDomOrder;
+                        imageOrder = validateImageOrder(imageOrder, imagePreviews);
+                        if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+                            log.error("Invalid state after drag, resetting order");
+                            imageOrder = imagePreviews.map(p => p.id);
+                            errorMessage.innerText = "Invalid order state, reset to default";
+                            errorMessage.style.display = "block";
+                            node.properties.image_order = imageOrder;
+                            node.setProperty("image_order", imageOrder);
+                        }
                         node.properties.image_order = imageOrder;
-                        node.properties.state_version = (node.properties.state_version || 0) + 1;
-                        const enabledOrder = imageOrder.filter((idx, i) => enabledLayers[idx]);
-                        orderWidget.value = JSON.stringify(enabledOrder);
-                        node.widgets_values = [JSON.stringify(enabledOrder)];
                         node.setProperty("image_order", imageOrder);
-
-                        app.graph.setDirtyCanvas(true, true);
+                        updateWidgetAndDirty(imageOrder, enabledLayers);
+                        updateCardList();
                         log.info(`Image order updated: ${imageOrder}`);
-                        debouncedUpdateCardList();
                     }
                 });
             } else if (!window.Sortable) {
                 statusText.innerText = "Error: Sortable.js not loaded";
                 statusText.style.color = "#F55";
+                errorMessage.innerText = "Sortable.js not loaded";
+                errorMessage.style.display = "block";
             } else {
                 statusText.innerText = imagePreviews.length === 0 ? "No images to sort" : "Single image, no sorting needed";
                 statusText.style.color = "#F55";
@@ -556,59 +581,57 @@ app.registerExtension({
             if (imagePreviews.length <= 50) {
                 statusText.innerText = imagePreviews.length > 0 ? `Loaded ${imagePreviews.length} images (${enabledLayers.filter(x => x).length} enabled)` : "Waiting for images...";
                 statusText.style.color = imagePreviews.length > 0 ? "#2ECC71" : "#F5F6F5";
+                errorMessage.style.display = "none";
             }
         }
-
-        const debouncedUpdateCardList = debounce(updateCardList, 300);
 
         node.addDOMWidget("reorder", "Image Reorder", mainContainer, {
             serialize: true,
             getValue() {
                 return {
-                    image_previews: imagePreviews.map(p => ({ index: p.index, width: p.width, height: p.height })),
+                    image_previews: imagePreviews.map(p => ({ id: p.id, width: p.width, height: p.height })),
                     image_order: imageOrder,
                     is_reversed: isReversed,
                     enabled_layers: enabledLayers,
                     is_single_mode: isSingleMode,
-                    node_size: [node.size[0], node.size[1]],
-                    state_version: [node.properties.state_version || 0] // Wrapped in array
+                    node_size: [node.size[0], node.size[1]]
                 };
             },
             setValue(value) {
                 try {
-                    // Extract state_version from array
-                    const receivedVersion = Array.isArray(value.state_version) ? value.state_version[0] || 0 : value.state_version || 0;
-                    if (receivedVersion && receivedVersion < stateVersion) {
-                        log.warning(`Outdated state version: ${receivedVersion}, current: ${stateVersion}`);
-                        return;
-                    }
                     imagePreviews = value.image_previews || imagePreviews;
-                    const newOrder = value.image_order && Array.isArray(value.image_order) 
-                        ? value.image_order.filter(idx => Number.isInteger(idx) && idx >= 0 && idx < imagePreviews.length) 
-                        : (imagePreviews.length > 0 ? [...Array(imagePreviews.length).keys()] : []);
-                    imageOrder = validateImageOrder(newOrder, imagePreviews, enabledLayers);
+                    const newOrder = value.image_order && Array.isArray(value.image_order)
+                        ? value.image_order.filter(id => Number.isInteger(id) && imagePreviews.some(p => p.id === id))
+                        : imagePreviews.map(p => p.id);
+                    imageOrder = validateImageOrder(newOrder, imagePreviews);
                     isReversed = value.is_reversed ?? isReversed;
-                    enabledLayers = value.enabled_layers && Array.isArray(value.enabled_layers) && value.enabled_layers.length === imagePreviews.length 
-                        ? value.enabled_layers 
-                        : Array(imagePreviews.length).fill(true);
+                    enabledLayers = value.enabled_layers && Array.isArray(value.enabled_layers) && value.enabled_layers.length === imagePreviews.length
+                        ? value.enabled_layers
+                        : Array(imagePreviews.length).fill(isSingleMode ? false : true);
+                    if (isSingleMode && imagePreviews.length > 0 && !enabledLayers.includes(true)) {
+                        enabledLayers[0] = true;
+                    }
                     isSingleMode = value.is_single_mode ?? isSingleMode;
-                    if (isSingleMode) {
-                        const enabledIndex = enabledLayers.findIndex(x => x);
-                        enabledLayers = Array(imagePreviews.length).fill(false);
-                        if (enabledIndex !== -1) {
-                            enabledLayers[enabledIndex] = true;
-                        } else if (imagePreviews.length > 0) {
+                    if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+                        log.error("Invalid state in setValue, resetting");
+                        imageOrder = imagePreviews.map(p => p.id);
+                        enabledLayers = Array(imagePreviews.length).fill(isSingleMode ? false : true);
+                        if (isSingleMode && imagePreviews.length > 0) {
                             enabledLayers[0] = true;
                         }
+                        errorMessage.innerText = "Invalid state, reset to default";
+                        errorMessage.style.display = "block";
+                        node.properties.image_order = imageOrder;
+                        node.properties.enabled_layers = enabledLayers;
+                        node.setProperty("image_order", imageOrder);
+                        node.setProperty("enabled_layers", enabledLayers);
                     }
                     node.properties.image_previews = imagePreviews;
                     node.properties.image_order = imageOrder;
                     node.properties.is_reversed = isReversed;
                     node.properties.enabled_layers = enabledLayers;
                     node.properties.is_single_mode = isSingleMode;
-                    node.properties.state_version = receivedVersion + 1;
-                    orderWidget.value = JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]));
-                    node.widgets_values = [JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]))];
+                    updateWidgetAndDirty(imageOrder, enabledLayers);
                     reverseWidget.value = isReversed;
                     singleModeWidget.value = isSingleMode;
 
@@ -617,24 +640,27 @@ app.registerExtension({
                         node.setSize([Math.max(width, 360), Math.max(height, MIN_NODE_HEIGHT)]);
                     }
 
-                    debouncedUpdateCardList();
-                    app.graph.setDirtyCanvas(true, true);
-                    log.info(`Restored state for node ${nodeId}:`, { imageOrder, is_reversed: isReversed, enabledLayers, isSingleMode });
+                    updateCardList();
+                    log.info(`Restored state for node ${nodeId}:`, { imageOrder, isReversed, enabledLayers, isSingleMode });
+                    errorMessage.style.display = "none";
                 } catch (e) {
                     log.error(`Error in setValue for node ${nodeId}: ${e}`);
                     statusText.innerText = "Failed to set image order";
                     statusText.style.color = "#F55";
+                    errorMessage.innerText = `Error: ${e.message}`;
+                    errorMessage.style.display = "block";
                 }
             }
         });
 
         // Initialize node size
         const savedSize = node.properties?.node_size;
-        const savedMargin = node.properties?.margin_offset || 50; // Default margin
+        const savedMargin = node.properties?.margin_offset || 50;
         if (savedSize && Array.isArray(savedSize) && savedSize.length === 2) {
             const [width, height] = savedSize;
             node.setSize([Math.max(width, 360), Math.max(height, MIN_NODE_HEIGHT)]);
             node.properties.margin_offset = savedMargin;
+            node.setProperty("margin_offset", savedMargin);
             updateContainerHeight();
             log.info(`Restored node size for node ${nodeId}: ${width}x${height}, margin_offset: ${savedMargin}`);
         } else {
@@ -650,7 +676,6 @@ app.registerExtension({
             size[1] = Math.max(size[1], MIN_NODE_HEIGHT);
             node.properties.node_size = [size[0], size[1]];
             node.setProperty("node_size", [size[0], size[1]]);
-            // Ensure margin_offset is preserved
             node.properties.margin_offset = node.properties.margin_offset || 50;
             node.setProperty("margin_offset", node.properties.margin_offset);
             updateContainerHeight();
@@ -658,76 +683,121 @@ app.registerExtension({
         };
 
         node.onExecuted = function (message) {
-            if (message && message.image_previews && message.image_order) {
-                const newPreviews = message.image_previews.map((p, i) => ({ ...p, index: i }));
+            if (message && message.image_previews) {
                 const prevImageCount = imagePreviews.length;
+                const newPreviews = message.image_previews;
                 const imageCountChanged = prevImageCount !== newPreviews.length;
 
                 if (imageCountChanged) {
                     log.info(`Image count changed from ${prevImageCount} to ${newPreviews.length}`);
                     imagePreviews = newPreviews;
-                    imageOrder = [...Array(newPreviews.length).keys()];
+                    imageOrder = newPreviews.map(p => p.id);
                     enabledLayers = isSingleMode
-                        ? [true, ...Array(newPreviews.length - 1).fill(false)]
+                        ? Array(newPreviews.length).fill(false)
                         : Array(newPreviews.length).fill(true);
+                    if (isSingleMode && newPreviews.length > 0) {
+                        enabledLayers[0] = true;
+                    }
                 } else {
-                    imagePreviews = newPreviews;
-                    imageOrder = validateImageOrder(imageOrder, imagePreviews, enabledLayers);
-                    enabledLayers = enabledLayers.length === imagePreviews.length
-                        ? enabledLayers
-                        : (isSingleMode
-                            ? [true, ...Array(newPreviews.length - 1).fill(false)]
-                            : Array(newPreviews.length).fill(true));
-                    if (isSingleMode) {
-                        const enabledIndex = enabledLayers.findIndex(x => x);
-                        enabledLayers = Array(imagePreviews.length).fill(false);
-                        if (enabledIndex !== -1) {
-                            enabledLayers[enabledIndex] = true;
-                        } else if (imagePreviews.length > 0) {
+                    const oldIds = imagePreviews.map(p => p.id);
+                    const newIds = newPreviews.map(p => p.id);
+                    if (!oldIds.every((id, i) => id === newIds[i])) {
+                        log.info("Image IDs changed, updating previews");
+                        imagePreviews = newPreviews;
+                        imageOrder = validateImageOrder(imageOrder, imagePreviews);
+                    } else {
+                        imagePreviews = newPreviews;
+                    }
+                    if (enabledLayers.length !== imagePreviews.length) {
+                        enabledLayers = isSingleMode
+                            ? Array(imagePreviews.length).fill(false)
+                            : Array(imagePreviews.length).fill(true);
+                        if (isSingleMode && imagePreviews.length > 0) {
                             enabledLayers[0] = true;
                         }
                     }
+                }
+
+                if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+                    log.error("Invalid state from server, resetting");
+                    imageOrder = imagePreviews.map(p => p.id);
+                    enabledLayers = Array(imagePreviews.length).fill(isSingleMode ? false : true);
+                    if (isSingleMode && imagePreviews.length > 0) {
+                        enabledLayers[0] = true;
+                    }
+                    errorMessage.innerText = "Invalid server state, reset to default";
+                    errorMessage.style.display = "block";
+                    node.properties.image_order = imageOrder;
+                    node.properties.enabled_layers = enabledLayers;
+                    node.setProperty("image_order", imageOrder);
+                    node.setProperty("enabled_layers", enabledLayers);
                 }
 
                 node.properties.image_previews = imagePreviews;
                 node.properties.image_order = imageOrder;
                 node.properties.enabled_layers = enabledLayers;
                 node.properties.is_single_mode = isSingleMode;
-                node.properties.state_version = Array.isArray(message.state_version) ? (message.state_version[0] || 0) + 1 : (message.state_version || 0) + 1;
-                orderWidget.value = JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]));
-                node.widgets_values = [JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]))];
-                debouncedUpdateCardList();
+                updateWidgetAndDirty(imageOrder, enabledLayers);
+                updateCardList();
                 log.info(`Node ${nodeId} executed, imageOrder: ${imageOrder}`);
+                errorMessage.style.display = "none";
             } else {
                 statusText.innerText = "No valid image data";
                 statusText.style.color = "#F55";
-                log.error(`No valid image previews or order for node ${nodeId}`);
+                errorMessage.innerText = "No valid image previews";
+                errorMessage.style.display = "block";
+                log.error(`No valid image previews for node ${nodeId}`);
             }
         };
 
-        node.onRemoved = () => {
+        node.onRemoved = function () {
             if (sortableInstance) {
                 sortableInstance.destroy();
+                sortableInstance = null;
             }
             mainContainer.remove();
             document.querySelectorAll(`.xiser-reorder-container[data-nodeId="${nodeId}"]`).forEach(c => c.remove());
+            resourceRegistry.sortable.count--;
+            if (resourceRegistry.sortable.count <= 0 && resourceRegistry.sortable.script) {
+                resourceRegistry.sortable.script.remove();
+                resourceRegistry.sortable.script = null;
+                log.info("Unloaded Sortable.js");
+            }
+            resourceRegistry.font.count--;
+            if (resourceRegistry.font.count <= 0 && resourceRegistry.font.element) {
+                resourceRegistry.font.element.remove();
+                resourceRegistry.font.element = null;
+                log.info("Unloaded Inter font");
+            }
             log.info(`Node ${nodeId} removed, resources cleaned`);
         };
 
-        imageOrder = validateImageOrder(imageOrder, imagePreviews, enabledLayers);
+        imageOrder = validateImageOrder(imageOrder, imagePreviews);
         enabledLayers = enabledLayers.length === imagePreviews.length
             ? enabledLayers
             : (isSingleMode
-                ? [true, ...Array(imagePreviews.length - 1).fill(false)]
+                ? Array(imagePreviews.length).fill(false)
                 : Array(imagePreviews.length).fill(true));
         if (isSingleMode && imagePreviews.length > 0 && !enabledLayers.includes(true)) {
             enabledLayers[0] = true;
         }
+        if (!validateState(imageOrder, enabledLayers, imagePreviews)) {
+            log.error("Invalid initial state, resetting");
+            imageOrder = imagePreviews.map(p => p.id);
+            enabledLayers = Array(imagePreviews.length).fill(isSingleMode ? false : true);
+            if (isSingleMode && imagePreviews.length > 0) {
+                enabledLayers[0] = true;
+            }
+            errorMessage.innerText = "Invalid initial state, reset to default";
+            errorMessage.style.display = "block";
+        }
+        node.properties.image_order = imageOrder;
         node.properties.enabled_layers = enabledLayers;
         node.properties.is_single_mode = isSingleMode;
-        node.properties.state_version = (node.properties.state_version || 0) + 1;
-        orderWidget.value = JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]));
-        node.widgets_values = [JSON.stringify(imageOrder.filter((idx, i) => enabledLayers[idx]))];
+        node.setProperty("image_order", imageOrder);
+        node.setProperty("enabled_layers", enabledLayers);
+        node.setProperty("is_single_mode", isSingleMode);
+        updateWidgetAndDirty(imageOrder, enabledLayers);
         updateCardList();
     }
 });
