@@ -920,6 +920,7 @@ class XIS_PackImages:
         return {
             "required": {
                 "invert_mask": ("BOOLEAN", {"default": False, "label_on": "Invert", "label_off": "Normal"}),
+                "before_pack_images": ("BOOLEAN", {"default": False, "label_on": "on", "label_off": "off"}),
             },
             "optional": {
                 "pack_images": ("IMAGE", {"default": None}),
@@ -941,7 +942,7 @@ class XIS_PackImages:
     FUNCTION = "pack_images"
     CATEGORY = "XISER_Nodes/Canvas"
 
-    def pack_images(self, invert_mask, image1=None, pack_images=None, 
+    def pack_images(self, invert_mask, before_pack_images, image1=None, pack_images=None, 
                     mask1=None, image2=None, mask2=None, image3=None, mask3=None, 
                     image4=None, mask4=None, image5=None, mask5=None):
         
@@ -960,13 +961,15 @@ class XIS_PackImages:
         # 初始化输出图像列表
         normalized_images = []
 
-        # 如果有输入的 pack_images，添加到输出列表
-        if pack_images is not None:
-            if not isinstance(pack_images, (list, tuple)):
-                logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
-                raise ValueError("pack_images must be a list or tuple")
-            normalized_images.extend(pack_images)
-
+        # 根据 before_pack_images 的值决定添加顺序
+        if not before_pack_images:
+            # 默认行为：pack_images 在前，image1 到 image5 在后
+            if pack_images is not None:
+                if not isinstance(pack_images, (list, tuple)):
+                    logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
+                    raise ValueError("pack_images must be a list or tuple")
+                normalized_images.extend(pack_images)
+        
         # 规范化当前节点的图像和蒙版
         for idx, img in enumerate(images):
             if not isinstance(img, torch.Tensor):
@@ -1040,8 +1043,16 @@ class XIS_PackImages:
                 
                 normalized_images.append(single_img)
 
+        # 如果 before_pack_images 为 True，将 pack_images 添加到末尾
+        if before_pack_images and pack_images is not None:
+            if not isinstance(pack_images, (list, tuple)):
+                logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
+                raise ValueError("pack_images must be a list or tuple")
+            normalized_images.extend(pack_images)
+
         logger.info(f"Packed {len(normalized_images)} images for canvas")
         return (normalized_images,)
+
 
 class XIS_MergePackImages:
     """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
