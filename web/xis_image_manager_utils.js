@@ -1,6 +1,6 @@
 /**
  * @fileoverview Utility functions for XISER nodes, including logging, debouncing, DOM helpers, and UI styles.
- * @module xis_utils
+ * @module xis_image_manager_utils
  */
 
 /**
