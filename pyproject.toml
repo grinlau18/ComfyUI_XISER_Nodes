@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "The project includes a set of efficient canvas tool nodes, which can place images in layers on the canvas for editing, and output the merged images and layer masks. It supports direct import of PSD files for picture elements and composition. The project also includes some nodes for improving efficiency in image and mask processing, prompt editing, logic processing, user interface control, dynamic sampling, etc."
-version = "1.1.6"
+version = "1.1.7"
 license = {file = "LICENSE"}
 
 [project.urls]
