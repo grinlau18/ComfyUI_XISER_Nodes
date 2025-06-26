@@ -422,6 +422,10 @@ export function setupWheelEvents(node, nodeState) {
   const ROTATION_STEP = 1; // 1 degree per wheel tick
   const SCALE_STEP = 0.01; // 1% scaling per wheel tick
 
+  // Remove existing wheel event listeners to prevent duplicates
+  nodeState.stage.off('wheel');
+  log.debug(`Removed existing wheel event listeners for node ${node.id}`);
+
   // Update state function
   const updateState = (target, index, updateHistoryFlag = true) => {
     if (!target || !nodeState.imageNodes.includes(target)) return;
@@ -496,4 +500,6 @@ export function setupWheelEvents(node, nodeState) {
     debouncedUpdateHistory(); // Schedule history update
     nodeState.isInteracting = false;
   });
+
+  log.info(`Wheel event listeners set up for node ${node.id}`);
 }
