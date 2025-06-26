@@ -604,10 +604,34 @@ app.registerExtension({
       };
 
       node.onExecuted = async function (message) {
+        const log = nodeState.log || console;
         let states = message?.image_states || [];
         let newImagePaths = [];
         let fileData = message?.file_data || null;
 
+        /**
+         * Compares two arrays for equality by checking each element.
+         * @param {Array} arr1 - First array to compare.
+         * @param {Array} arr2 - Second array to compare.
+         * @returns {boolean} - True if arrays are equal, false otherwise.
+         */
+        const arraysEqual = (arr1, arr2) => {
+          if (!arr1 || !arr2) return arr1 === arr2;
+          return arr1.length === arr2.length && arr1.every((val, i) => val === arr2[i]);
+        };
+
+        /**
+         * Compares two objects for deep equality using JSON.stringify.
+         * @param {Object} obj1 - First object to compare.
+         * @param {Object} obj2 - Second object to compare.
+         * @returns {boolean} - True if objects are equal, false otherwise.
+         */
+        const objectsEqual = (obj1, obj2) => {
+          if (!obj1 || !obj2) return obj1 === obj2;
+          return JSON.stringify(obj1) === JSON.stringify(obj2);
+        };
+
+        // Extract image paths from message
         if (message?.image_paths) {
           if (typeof message.image_paths === 'string') {
             newImagePaths = message.image_paths.split(',').filter(p => typeof p === 'string' && p.trim().length > 0);
@@ -628,6 +652,18 @@ app.registerExtension({
           log.warn(`Invalid image paths in onExecuted for node ${node.id}: ${JSON.stringify(invalidPaths)}`);
         }
 
+        // Skip execution if all inputs haven't changed
+        if (
+          newImagePaths.length &&
+          nodeState.lastImagePaths &&
+          arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
+          objectsEqual(states, nodeState.initialStates) &&
+          objectsEqual(fileData, nodeState.file_data)
+        ) {
+          log.debug(`No changes in inputs (image_paths, image_states, file_data) for node ${node.id}, skipping execution`);
+          return;
+        }
+
         if (fileData?.layers?.length) {
           log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(fileData)}`);
           states = fileData.layers.map((layer, i) => {
@@ -640,8 +676,13 @@ app.registerExtension({
               rotation: layer.rotation || 0,
             };
           }).filter(s => s !== null);
-          nodeState.file_data = fileData;
-          log.debug(`Stored file_data in nodeState for node ${node.id}: ${JSON.stringify(nodeState.file_data)}`);
+          if (!objectsEqual(nodeState.file_data, fileData)) {
+            nodeState.file_data = fileData;
+            log.debug(`Stored file_data in nodeState for node ${node.id}: ${JSON.stringify(nodeState.file_data)}`);
+          } else {
+            nodeState.file_data = null;
+            log.debug(`No valid file_data.layers for node ${node.id}`);
+          }
         } else {
           nodeState.file_data = null;
           log.debug(`No valid file_data.layers for node ${node.id}`);
@@ -651,15 +692,25 @@ app.registerExtension({
           log.info(`onExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
           imagePaths = newImagePaths;
           nodeState.imageNodes = new Array(imagePaths.length).fill(null);
-          node.properties.ui_config.image_paths = imagePaths;
+
+          // Update ui_config only if changed
+          if (!arraysEqual(node.properties.ui_config.image_paths, imagePaths)) {
+            node.properties.ui_config.image_paths = imagePaths;
+            node.setProperty('ui_config', node.properties.ui_config);
+            log.debug(`Updated ui_config.image_paths for node ${node.id}`);
+          }
 
           applyStates(nodeState);
           nodeState.imageLayer.batchDraw();
 
-          node.properties.image_states = Array.isArray(states) ? states : nodeState.initialStates;
-          nodeState.initialStates = node.properties.image_states;
-          node.setProperty('image_states', nodeState.initialStates);
-          node.setProperty('ui_config', node.properties.ui_config);
+          // Update image_states only if changed
+          if (!objectsEqual(node.properties.image_states, states)) {
+            node.properties.image_states = Array.isArray(states) ? states : nodeState.initialStates;
+            nodeState.initialStates = node.properties.image_states;
+            node.setProperty('image_states', nodeState.initialStates);
+            log.debug(`Updated image_states for node ${node.id}`);
+          }
+
           nodeState.lastImagePaths = imagePaths.slice();
 
           try {
@@ -701,8 +752,8 @@ app.registerExtension({
             };
           });
 
-          node.outputs = node.outputs || [{ name: 'output', type: 'CANVAS', value: null }];
-          node.outputs[0].value = {
+          // Update outputs only if necessary
+          const newOutput = {
             canvas: {
               width: boardWidth,
               height: boardHeight,
@@ -710,7 +761,11 @@ app.registerExtension({
             layers,
             image: outputCanvas.toDataURL(),
           };
-          log.debug(`Output set for node ${node.id} with dimensions: ${boardWidth}x${boardHeight}, layers: ${layers.length}`);
+          if (!node.outputs?.[0]?.value || !objectsEqual(node.outputs[0].value, newOutput)) {
+            node.outputs = node.outputs || [{ name: 'output', type: 'CANVAS', value: null }];
+            node.outputs[0].value = newOutput;
+            log.debug(`Output set for node ${node.id} with dimensions: ${boardWidth}x${boardHeight}, layers: ${layers.length}`);
+          }
         } else {
           statusText.innerText = '无有效图像数据，请检查上游节点';
           statusText.style.color = '#f00';

@@ -6,14 +6,23 @@ Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://
 
 ## Installation
 
-To get started, follow these steps:
+**Install via ComfyUI's Manager**
+
+1. Open the ComfyUI Manager.
+2. Search for `ComfyUI_XISER_Nodes` and install it.
+
+**Manual installation, follow these steps:**
 
 1. Clone this repository into the `custom_nodes` directory of your ComfyUI installation:
    ```bash
    git clone https://github.com/grinlau18/ComfyUI_XISER_Nodes.git
    ```
-2. Restart ComfyUI to load the new nodes.
-3. Look for nodes under the `XISER_Nodes` category in the ComfyUI interface.
+2. In the `ComfyUI_XISER_Nodes` directory, run the following command:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Restart ComfyUI to load the new nodes.
+4. Look for nodes under the `XISER_Nodes` category in the ComfyUI interface.
 
 **Dependencies**: Requires `torch`, `PIL`, `numpy`, `opencv-python`, and ComfyUI core libraries (typically installed with ComfyUI).
 

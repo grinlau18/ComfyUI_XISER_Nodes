@@ -83,17 +83,24 @@ class XIS_KSamplerSettingsNode:
             "required": {
                 "steps": ("INT", {
                     "default": 20,
-                    "min": 1,
-                    "max": 10000,
+                    "min": 0,
+                    "max": 100,
                     "step": 1,
-                    "display": "number"
+                    "display": "slider"
                 }),
                 "cfg": ("FLOAT", {
                     "default": 7.5,
                     "min": 0.0,
-                    "max": 100.0,
+                    "max": 15.0,
                     "step": 0.1,
-                    "display": "number"
+                    "display": "slider"
+                }),
+                "denoise": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01,
+                    "display": "slider"
                 }),
                 "sampler_name": (sampler_options, {
                     "default": "euler"
@@ -117,9 +124,9 @@ class XIS_KSamplerSettingsNode:
                 })
             },
             "optional": {
-                "model": ("MODEL",),  # 改为可选输入
-                "vae": ("VAE",),      # 改为可选输入
-                "clip": ("CLIP",),    # 改为可选输入
+                "model": ("MODEL",),
+                "vae": ("VAE",),
+                "clip": ("CLIP",),
             }
         }
 
@@ -129,7 +136,7 @@ class XIS_KSamplerSettingsNode:
     FUNCTION = "get_settings"
     CATEGORY = "XISER_Nodes/Other"
 
-    def get_settings(self, steps, cfg, sampler_name, scheduler, start_step, end_step, model=None, vae=None, clip=None):
+    def get_settings(self, steps, cfg, denoise, sampler_name, scheduler, start_step, end_step, model=None, vae=None, clip=None):
         if end_step <= start_step:
             end_step = start_step + 1
             
@@ -139,6 +146,7 @@ class XIS_KSamplerSettingsNode:
             "clip": clip,
             "steps": steps,
             "cfg": cfg,
+            "denoise": denoise,
             "sampler_name": sampler_name,
             "scheduler": scheduler,
             "start_step": start_step,
@@ -147,7 +155,7 @@ class XIS_KSamplerSettingsNode:
         
         return (settings_pack,)
 
-# K采样器设置解包节点
+
 class XIS_KSamplerSettingsUnpackNode:
     @classmethod
     def INPUT_TYPES(cls):
@@ -157,18 +165,19 @@ class XIS_KSamplerSettingsUnpackNode:
             }
         }
 
-    RETURN_TYPES = ("MODEL", "VAE", "CLIP", "INT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS, "INT", "INT")
-    RETURN_NAMES = ("model", "vae", "clip", "steps", "cfg", "sampler_name", "scheduler", "start_step", "end_step")
+    RETURN_TYPES = ("MODEL", "VAE", "CLIP", "INT", "FLOAT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS, "INT", "INT")
+    RETURN_NAMES = ("model", "vae", "clip", "steps", "cfg", "denoise", "sampler_name", "scheduler", "start_step", "end_step")
     
     FUNCTION = "unpack_settings"
     CATEGORY = "XISER_Nodes/Other"
 
     def unpack_settings(self, settings_pack):
-        model = settings_pack.get("model")  # 无默认值，保持为 None 如果未提供
-        vae = settings_pack.get("vae")      # 无默认值，保持为 None 如果未提供
-        clip = settings_pack.get("clip")    # 无默认值，保持为 None 如果未提供
+        model = settings_pack.get("model")
+        vae = settings_pack.get("vae")
+        clip = settings_pack.get("clip")
         steps = settings_pack.get("steps", 20)
         cfg = settings_pack.get("cfg", 7.5)
+        denoise = settings_pack.get("denoise", 1.0)
         sampler_name = settings_pack.get("sampler_name", "euler")
         scheduler = settings_pack.get("scheduler", "normal")
         start_step = settings_pack.get("start_step", 0)
@@ -177,9 +186,9 @@ class XIS_KSamplerSettingsUnpackNode:
         if end_step <= start_step:
             end_step = start_step + 1
             
-        return (model, vae, clip, steps, cfg, sampler_name, scheduler, start_step, end_step)
+        return (model, vae, clip, steps, cfg, denoise, sampler_name, scheduler, start_step, end_step)
 
-# K采样器设置节点
+# IPA参数设置节点
 class XIS_IPAStyleSettings:
     @classmethod
     def INPUT_TYPES(s):

@@ -1,8 +1,18 @@
+/**
+ * @file XISER Reorder Images Extension for ComfyUI
+ * @description Manages image reordering with drag-and-drop and toggle functionality
+ * @requires Sortable.js
+ */
+
 import { app } from "/scripts/app.js";
 
 // Log level control
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
+/**
+ * Logging utility
+ * @type {Object}
+ */
 const log = {
     info: (...args) => { if (LOG_LEVEL === "info") console.log(...args); },
     warning: (...args) => { if (LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.warn(...args); },
@@ -13,12 +23,30 @@ const MIN_NODE_HEIGHT = 300;
 
 // Global resource registry for reference counting
 const resourceRegistry = {
-    sortable: { count: 0, script: null },
-    font: { count: 0, element: null }
+    sortable: { count: 0, script: null }
 };
 
+/**
+ * Generates unique node class name
+ * @param {number} nodeId - Node identifier
+ * @returns {string} CSS class name
+ */
 function getNodeClass(nodeId) {
     return `xiser-reorder-node-${nodeId}`;
+}
+
+/**
+ * Debounce utility function
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function} Debounced function
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
 }
 
 app.registerExtension({
@@ -33,7 +61,6 @@ app.registerExtension({
                     log.warning("Temporary invalid node ID, waiting for valid ID");
                 }
             };
-            // Add onConfigure to sync state on workflow load
             nodeType.prototype.onConfigure = function () {
                 log.info(`Node ${this.id} configured, syncing state`);
                 if (this.widgets) {
@@ -75,19 +102,7 @@ app.registerExtension({
             resourceRegistry.sortable.count++;
         }
 
-        // Load Inter font
-        if (!resourceRegistry.font.element) {
-            const fontLink = document.createElement("link");
-            fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap";
-            fontLink.rel = "stylesheet";
-            document.head.appendChild(fontLink);
-            resourceRegistry.font.element = fontLink;
-            resourceRegistry.font.count++;
-        } else {
-            resourceRegistry.font.count++;
-        }
-
-        // Add styles
+        // Add styles (using system font)
         const style = document.createElement("style");
         style.textContent = `
             .xiser-reorder-container {
@@ -98,7 +113,7 @@ app.registerExtension({
                 border-radius: 8px;
                 padding: 8px;
                 overflow: hidden;
-                font-family: 'Inter', sans-serif;
+                font-family: system-ui, -apple-system, sans-serif;
                 color: #F5F6F5;
                 height: 100%;
                 display: flex;
@@ -226,6 +241,11 @@ app.registerExtension({
     async nodeCreated(node) {
         if (node.comfyClass !== "XIS_ReorderImages") return;
 
+        /**
+         * Ensures valid node ID
+         * @param {Object} node - ComfyUI node
+         * @returns {Promise<number>} Node ID
+         */
         async function ensureNodeId(node) {
             let attempts = 0;
             const maxAttempts = 400;
@@ -265,8 +285,15 @@ app.registerExtension({
         let isReversed = node.properties?.is_reversed || false;
         let enabledLayers = node.properties?.enabled_layers || (imagePreviews.length > 0 ? Array(imagePreviews.length).fill(true) : []);
         let isSingleMode = node.properties?.is_single_mode || false;
-        node.widgets_values = [JSON.stringify(imageOrder.filter((id, i) => enabledLayers[i]))];
+        node.widgets_values = [JSON.stringify(imageOrder.filter((_, i) => enabledLayers[i]))];
 
+        /**
+         * Validates node state
+         * @param {number[]} order - Image order array
+         * @param {boolean[]} enabled - Enabled layers array
+         * @param {Object[]} previews - Image previews array
+         * @returns {boolean} Validity status
+         */
         function validateState(order, enabled, previews) {
             const numPreviews = previews.length;
             if (!Array.isArray(order) || order.length !== numPreviews) {
@@ -288,6 +315,12 @@ app.registerExtension({
             return true;
         }
 
+        /**
+         * Validates and corrects image order
+         * @param {number[]} order - Image order array
+         * @param {Object[]} previews - Image previews array
+         * @returns {number[]} Validated order
+         */
         function validateImageOrder(order, previews) {
             const numPreviews = previews.length;
             if (!Array.isArray(order) || order.length !== numPreviews) {
@@ -327,7 +360,11 @@ app.registerExtension({
         cardContainer.className = "xiser-reorder-card-container";
         mainContainer.appendChild(cardContainer);
 
-        // Function to update widget and mark node dirty
+        /**
+         * Updates widget and marks canvas dirty
+         * @param {number[]} order - Image order
+         * @param {boolean[]} enabled - Enabled layers
+         */
         function updateWidgetAndDirty(order, enabled) {
             const enabledOrder = order.filter((_, i) => enabled[i]);
             node.widgets_values[0] = JSON.stringify(enabledOrder);
@@ -354,7 +391,7 @@ app.registerExtension({
                 node.properties.image_order = imageOrder;
                 node.setProperty("image_order", imageOrder);
                 updateWidgetAndDirty(imageOrder, enabledLayers);
-                updateCardList(); // Immediate update
+                debouncedUpdateCardList();
                 errorMessage.style.display = "none";
             } catch (e) {
                 log.error(`Failed to parse image_order: ${e}`);
@@ -369,7 +406,7 @@ app.registerExtension({
             node.properties.is_reversed = isReversed;
             node.setProperty("is_reversed", isReversed);
             updateWidgetAndDirty(imageOrder, enabledLayers);
-            updateCardList();
+            debouncedUpdateCardList();
             errorMessage.style.display = "none";
         }, { serialize: true });
 
@@ -389,7 +426,7 @@ app.registerExtension({
                 node.setProperty("enabled_layers", enabledLayers);
             }
             updateWidgetAndDirty(imageOrder, enabledLayers);
-            updateCardList();
+            debouncedUpdateCardList();
             log.info(`Single mode toggled: ${isSingleMode}`);
             errorMessage.style.display = "none";
         }, { serialize: true });
@@ -402,11 +439,14 @@ app.registerExtension({
             node.setProperty("image_order", imageOrder);
             node.setProperty("enabled_layers", enabledLayers);
             updateWidgetAndDirty(imageOrder, enabledLayers);
-            updateCardList();
+            debouncedUpdateCardList();
             log.info(`Reset image order to: ${imageOrder}`);
             errorMessage.style.display = "none";
         }, { serialize: false });
 
+        /**
+         * Updates container height based on node size
+         */
         function updateContainerHeight() {
             const nodeHeight = node.size[1];
             const nodeWidth = node.size[0];
@@ -422,7 +462,8 @@ app.registerExtension({
         }
 
         let sortableInstance = null;
-        function updateCardList() {
+        // Debounced updateCardList to reduce frequent DOM updates
+        const debouncedUpdateCardList = debounce(() => {
             cardContainer.innerHTML = "";
             if (sortableInstance) {
                 sortableInstance.destroy();
@@ -484,7 +525,7 @@ app.registerExtension({
 
                 const img = document.createElement("img");
                 img.className = "xiser-reorder-image-preview";
-                img.src = `data:image/png;base64,${preview.preview}`;
+                img.src = `data:image/webp;base64,${preview.preview}`; // Use WebP for smaller size
                 card.appendChild(img);
 
                 const info = document.createElement("div");
@@ -532,7 +573,7 @@ app.registerExtension({
                     node.properties.enabled_layers = enabledLayers;
                     node.setProperty("enabled_layers", enabledLayers);
                     updateWidgetAndDirty(imageOrder, enabledLayers);
-                    updateCardList();
+                    debouncedUpdateCardList();
                     log.info(`Layer ${preview.id} enabled: ${toggle.checked}`);
                 });
                 card.appendChild(toggle);
@@ -564,7 +605,7 @@ app.registerExtension({
                         node.properties.image_order = imageOrder;
                         node.setProperty("image_order", imageOrder);
                         updateWidgetAndDirty(imageOrder, enabledLayers);
-                        updateCardList();
+                        debouncedUpdateCardList();
                         log.info(`Image order updated: ${imageOrder}`);
                     }
                 });
@@ -583,13 +624,13 @@ app.registerExtension({
                 statusText.style.color = imagePreviews.length > 0 ? "#2ECC71" : "#F5F6F5";
                 errorMessage.style.display = "none";
             }
-        }
+        }, 100); // Debounce with 100ms delay
 
         node.addDOMWidget("reorder", "Image Reorder", mainContainer, {
             serialize: true,
             getValue() {
                 return {
-                    image_previews: imagePreviews.map(p => ({ id: p.id, width: p.width, height: p.height })),
+                    image_previews: imagePreviews.map(p => ({ id: p.id, width: p.width, height: p.height })), // Exclude preview to reduce size
                     image_order: imageOrder,
                     is_reversed: isReversed,
                     enabled_layers: enabledLayers,
@@ -640,7 +681,7 @@ app.registerExtension({
                         node.setSize([Math.max(width, 360), Math.max(height, MIN_NODE_HEIGHT)]);
                     }
 
-                    updateCardList();
+                    debouncedUpdateCardList();
                     log.info(`Restored state for node ${nodeId}:`, { imageOrder, isReversed, enabledLayers, isSingleMode });
                     errorMessage.style.display = "none";
                 } catch (e) {
@@ -738,7 +779,7 @@ app.registerExtension({
                 node.properties.enabled_layers = enabledLayers;
                 node.properties.is_single_mode = isSingleMode;
                 updateWidgetAndDirty(imageOrder, enabledLayers);
-                updateCardList();
+                debouncedUpdateCardList();
                 log.info(`Node ${nodeId} executed, imageOrder: ${imageOrder}`);
                 errorMessage.style.display = "none";
             } else {
@@ -762,12 +803,6 @@ app.registerExtension({
                 resourceRegistry.sortable.script.remove();
                 resourceRegistry.sortable.script = null;
                 log.info("Unloaded Sortable.js");
-            }
-            resourceRegistry.font.count--;
-            if (resourceRegistry.font.count <= 0 && resourceRegistry.font.element) {
-                resourceRegistry.font.element.remove();
-                resourceRegistry.font.element = null;
-                log.info("Unloaded Inter font");
             }
             log.info(`Node ${nodeId} removed, resources cleaned`);
         };
@@ -798,6 +833,6 @@ app.registerExtension({
         node.setProperty("enabled_layers", enabledLayers);
         node.setProperty("is_single_mode", isSingleMode);
         updateWidgetAndDirty(imageOrder, enabledLayers);
-        updateCardList();
+        debouncedUpdateCardList();
     }
 });
