@@ -1,8 +1,8 @@
 {
   "id": "26f499d4-e18c-4c03-81e4-561dfc628fcc",
   "revision": 0,
-  "last_node_id": 108,
-  "last_link_id": 134,
+  "last_node_id": 120,
+  "last_link_id": 147,
   "nodes": [
     {
       "id": 74,
@@ -21,10 +21,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
         "Node name for S&R": "XIS_Label",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00473f",
         "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">选择图层蒙版，自动排除遮挡部分</p>"
       },
@@ -43,7 +43,7 @@
         400
       ],
       "flags": {},
-      "order": 10,
+      "order": 12,
       "mode": 0,
       "inputs": [
         {
@@ -82,10 +82,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
         "Node name for S&R": "XIS_Label",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00473f",
         "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">导入分层PSD文件</p>"
       },
@@ -109,10 +109,10 @@
       "inputs": [],
       "outputs": [],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
         "Node name for S&R": "XIS_Label",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00473f",
         "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">获取分层图层图像及蒙版</p>"
       },
@@ -131,7 +131,7 @@
         490
       ],
       "flags": {},
-      "order": 9,
+      "order": 11,
       "mode": 0,
       "inputs": [
         {
@@ -165,7 +165,7 @@
         490
       ],
       "flags": {},
-      "order": 7,
+      "order": 8,
       "mode": 0,
       "inputs": [
         {
@@ -186,52 +186,6 @@
       "color": "#00695c"
     },
     {
-      "id": 104,
-      "type": "XIS_PSDLayerExtractor",
-      "pos": [
-        -510,
-        220
-      ],
-      "size": [
-        360,
-        150
-      ],
-      "flags": {},
-      "order": 3,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "label": "pack_images",
-          "name": "pack_images",
-          "type": "XIS_IMAGES",
-          "links": [
-            120
-          ]
-        },
-        {
-          "label": "file_data",
-          "name": "file_data",
-          "type": "FILE_DATA",
-          "links": [
-            121
-          ]
-        }
-      ],
-      "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
-        "ver": "38b841678a128f5d3d78935c99b6358cc5f9d578",
-        "xiser_title_color": "#00695c"
-      },
-      "widgets_values": [
-        "input/psd_files/bear.psd",
-        false,
-        "input/psd_files/bear.psd",
-        null
-      ],
-      "color": "#00695c"
-    },
-    {
       "id": 105,
       "type": "XIS_Label",
       "pos": [
@@ -243,18 +197,19 @@
         247.60000610351562
       ],
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "inputs": [],
       "outputs": [],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
         "Node name for S&R": "XIS_Label",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00473f",
         "textData": "<p style=\"font-size:16px;color:#FFFFFF;\">PSDLayerExtrator节点说明</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">打开crop_by_canvas可以使用psd文件画布尺寸来对图层图像进行裁剪，关闭则输出完整的图层图像。</p>\n<br>\n<p style=\"font-size:16px;color:#FFFFFF;\">XISER_Canvas节点说明</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">\npack_images负责接收图像信号，file_data负责接收图层信息（画布尺寸，图像位置、比例和角度）。同时连接PSDLayerExtrator节点的两个对应端口，可以还原psd文件原始画面。\n</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">\nXISER_Canvas配合PSDLayerExtrator节点，可以实现根据输入的psd文件自动调整画布并对齐图像。方法：首先保证psd文件的第一个图层图像与原画布尺寸一致，连接pack_images和file_data端口，然后打开auto_size开关，画布会自动调整为第一张图片大小并同时对齐图像。\n</p>"
       },
+      "widgets_values": [],
       "color": "#00473f"
     },
     {
@@ -269,15 +224,15 @@
         34
       ],
       "flags": {},
-      "order": 5,
+      "order": 4,
       "mode": 0,
       "inputs": [],
       "outputs": [],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
         "Node name for S&R": "XIS_Label",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00473f",
         "textData": "<p style=\"font-size:20px;color:#FFFFFF;\">画板预览 & 编辑</p>"
       },
@@ -296,7 +251,7 @@
         400
       ],
       "flags": {},
-      "order": 8,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {
@@ -317,10 +272,10 @@
         }
       ],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "7bbdf4398ee31238151596c70421bdc6d747c0e2",
         "Node name for S&R": "XIS_CanvasMaskProcessor",
-        "cnr_id": "ComfyUI_XISER_Nodes",
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "widgetValues": {
           "Layer_Mask_1": false,
           "Layer_Mask_2": false,
@@ -358,6 +313,53 @@
       "bgcolor": "#2a2a2a"
     },
     {
+      "id": 104,
+      "type": "XIS_PSDLayerExtractor",
+      "pos": [
+        -510,
+        220
+      ],
+      "size": [
+        360,
+        160
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "label": "pack_images",
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            120
+          ]
+        },
+        {
+          "label": "file_data",
+          "name": "file_data",
+          "type": "FILE_DATA",
+          "links": [
+            121
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "38b841678a128f5d3d78935c99b6358cc5f9d578",
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "xiser_title_color": "#00695c"
+      },
+      "widgets_values": [
+        "input/psd_files/123.psd",
+        false,
+        "input/psd_files/123.psd",
+        null
+      ],
+      "color": "#00695c"
+    },
+    {
       "id": 103,
       "type": "XISER_Canvas",
       "pos": [
@@ -369,15 +371,17 @@
         947
       ],
       "flags": {},
-      "order": 6,
+      "order": 7,
       "mode": 0,
       "inputs": [
         {
+          "label": "pack_images",
           "name": "pack_images",
-          "type": "XIS_IMAGES",
+          "type": "IMAGE",
           "link": 120
         },
         {
+          "label": "file_data",
           "name": "file_data",
           "type": "FILE_DATA",
           "link": 121
@@ -389,7 +393,8 @@
           "name": "canvas_image",
           "type": "IMAGE",
           "links": [
-            119
+            119,
+            146
           ]
         },
         {
@@ -409,7 +414,7 @@
         }
       ],
       "properties": {
-        "aux_id": "ComfyUI_XISER_Nodes/",
+        "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "38b841678a128f5d3d78935c99b6358cc5f9d578",
         "Node name for S&R": "XISER_Canvas",
         "ui_config": {
@@ -466,6 +471,7 @@
             "rotation": 0
           }
         ],
+        "aux_id": "ComfyUI_XISER_Nodes/",
         "xiser_title_color": "#00695c"
       },
       "widgets_values": [
@@ -542,6 +548,74 @@
         }
       ],
       "color": "#00695c"
+    },
+    {
+      "id": 119,
+      "type": "SplitImageWithAlpha",
+      "pos": [
+        1450,
+        220
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "label": "image",
+          "name": "image",
+          "type": "IMAGE",
+          "link": 146
+        }
+      ],
+      "outputs": [
+        {
+          "label": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "label": "MASK",
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.41",
+        "Node name for S&R": "SplitImageWithAlpha"
+      }
+    },
+    {
+      "id": 120,
+      "type": "XIS_Label",
+      "pos": [
+        1620,
+        200
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "cc06a3f9af96e87677d5137449c657cf6862d237",
+        "Node name for S&R": "XIS_Label",
+        "aux_id": "ComfyUI_XISER_Nodes/",
+        "xiser_title_color": "#00473f",
+        "textData": "<p style=\"font-size:16px;color:#FFFFFF;\">输出说明</p>\n\n<p style=\"font-size:12px;color:#aaaaaa;margin-top:4px;\">画板输出图像格式为RGBA，某些下游节点可能要求RGB格式图像，可通过分离透明通道的方式转化为RGB图像\n</p>"
+      },
+      "color": "#00473f"
     }
   ],
   "links": [
@@ -592,6 +666,14 @@
       103,
       1,
       "FILE_DATA"
+    ],
+    [
+      146,
+      103,
+      0,
+      119,
+      0,
+      "IMAGE"
     ]
   ],
   "groups": [
@@ -600,7 +682,7 @@
       "title": "Group",
       "bounding": [
         -530,
-        56.400001525878906,
+        60,
         1870,
         1203.5999755859375
       ],
