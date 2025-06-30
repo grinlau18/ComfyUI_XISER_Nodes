@@ -10,7 +10,6 @@ from .xis_reorder_images import NODE_CLASS_MAPPINGS as REORDER_IMAGES_MAPPINGS
 from .psd_layer_extract import NODE_CLASS_MAPPINGS as PSD_LAYER_EXTRACT_MAPPINGS
 from .xis_image_manager import NODE_CLASS_MAPPINGS as IMAGE_MANAGER_MAPPINGS
 
-
 # 合并所有节点的映射
 NODE_CLASS_MAPPINGS = {
     **IMAGE_MASK_MAPPINGS,
