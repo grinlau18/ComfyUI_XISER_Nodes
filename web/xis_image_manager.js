@@ -1,5 +1,5 @@
 /**
- * @fileoverview XIS_ImageManager node for ComfyUI, handling image upload, state management, and node lifecycle.
+ * @fileoverview XIS_ImageManager node for ComfyUI, handling frontend-driven state management and node lifecycle.
  * @module xis_image_manager
  */
 
@@ -11,6 +11,7 @@ import { createImageManagerUI } from "./xis_image_manager_ui.js";
  * Uploads images to the server and returns their metadata.
  * @param {File[]} files - Array of image files to upload.
  * @param {string} nodeId - Node identifier.
+ * @param {Object} node - Node instance.
  * @returns {Promise<Object[]>} Array of image metadata objects.
  * @async
  */
@@ -38,57 +39,6 @@ async function uploadImages(files, nodeId, node = null) {
       originalFilename: originalFilenames[i] || img.filename
     }));
     log.info(`Uploaded ${images.length} images for node ${nodeId}`);
-
-    // Persist new state to backend if node is provided
-    if (node) {
-      const currentPreviews = node.properties.image_previews || [];
-      const currentOrder = node.properties.image_order || [];
-      const currentEnabled = node.properties.enabled_layers || [];
-      const existingFilenames = new Set(currentPreviews.map(p => p.filename));
-      const newPreviews = images
-        .filter(img => !existingFilenames.has(img.filename))
-        .map((img, i) => ({
-          index: currentPreviews.length + i,
-          preview: img.preview,
-          width: img.width,
-          height: img.height,
-          filename: img.filename,
-          originalFilename: img.originalFilename
-        }));
-      const updatedPreviews = [...currentPreviews, ...newPreviews];
-      const updatedOrder = [...currentOrder, ...newPreviews.map(p => p.index)];
-      const updatedEnabled = [...currentEnabled, ...Array(newPreviews.length).fill(true)];
-      const isSingleMode = node.properties.is_single_mode || false;
-      if (isSingleMode && updatedPreviews.length) {
-        const trueIndex = updatedEnabled.indexOf(true);
-        if (trueIndex < 0) {
-          updatedEnabled.fill(false);
-          updatedEnabled[updatedOrder[0]] = true;
-        }
-      }
-      const newState = {
-        image_previews: updatedPreviews,
-        image_order: updatedOrder,
-        enabled_layers: updatedEnabled,
-        is_reversed: node.properties.is_reversed || false,
-        is_single_mode: isSingleMode,
-        state_version: node.properties.state_version || 0,
-        node_size: node.properties.node_size || [360, 360],
-        deleted_input_images: node.properties.deleted_input_images || []
-      };
-      try {
-        // Call backend to persist state
-        await fetch("/set_ui_data/xis_image_manager", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ node_id: nodeId, data: newState })
-        });
-        log.info(`Persisted new state for node ${nodeId} after upload`);
-      } catch (e) {
-        log.error(`Failed to persist state after upload for node ${nodeId}: ${e}`);
-      }
-    }
-
     return images;
   } catch (e) {
     log.error(`Image upload failed for node ${nodeId}: ${e}`);
@@ -125,25 +75,25 @@ async function deleteImage(filename, nodeId) {
  * @param {Object[]} imagePreviews - Array of image preview objects.
  * @param {number[]} imageOrder - Array of image indices.
  * @param {boolean[]} enabledLayers - Array of enabled states.
- * @param {boolean} isSingleMode - Whether single mode is active.
- * @param {boolean} isReversed - Whether the order is reversed.
  * @returns {string} Hash of the effective output state.
  */
-function computeOutputHash(imagePreviews, imageOrder, enabledLayers, isSingleMode, isReversed) {
-  const effectiveEnabled = isSingleMode && imagePreviews.length ? enabledLayers.slice() : enabledLayers.slice();
+function computeOutputHash(imagePreviews, imageOrder, enabledLayers) {
   const outputImages = imageOrder
-    .filter((_, i) => effectiveEnabled[i])
+    .filter((_, i) => enabledLayers[i])
     .map(idx => imagePreviews.find(p => p.index === idx)?.filename || "");
-  const hash = JSON.stringify({
-    images: isReversed ? outputImages.reverse() : outputImages,
-    order: imageOrder,
-    enabled: effectiveEnabled
+  return JSON.stringify({
+    images: outputImages,
+    previews: imagePreviews.map(p => ({
+      index: p.index,
+      filename: p.filename,
+      width: p.width,
+      height: p.height
+    }))
   });
-  return hash;
 }
 
 /**
- * Centralized state update function to synchronize properties, widgets, and UI.
+ * Updates node widgets with frontend state and ensures serialization only when necessary.
  * @param {Object} node - The node instance.
  * @param {Object} state - State object.
  * @param {Object[]} state.imagePreviews - Array of image preview objects.
@@ -151,103 +101,69 @@ function computeOutputHash(imagePreviews, imageOrder, enabledLayers, isSingleMod
  * @param {boolean[]} state.enabledLayers - Array of enabled states.
  * @param {boolean} state.isReversed - Whether the order is reversed.
  * @param {boolean} state.isSingleMode - Whether single mode is active.
- * @param {number} state.stateVersion - State version number.
  * @param {number[]} state.nodeSize - Node dimensions [width, height].
+ * @param {number} state.stateVersion - Frontend state version (internal use only).
  * @param {HTMLElement} statusText - Status text element for UI feedback.
  * @param {Function} debouncedUpdateCardList - Debounced function to update the card list.
  */
 function updateState(node, state, statusText, debouncedUpdateCardList) {
-  const { imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize } = state;
+  const { imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, nodeSize } = state;
 
-  // Compute current output hash
-  const currentOutputHash = computeOutputHash(
-    node.properties.image_previews || [],
-    node.properties.image_order || [],
-    node.properties.enabled_layers || [],
-    node.properties.is_single_mode || false,
-    node.properties.is_reversed || false
-  );
-
-  // Validate and normalize state
-  let newPreviews = Array.isArray(imagePreviews) ? imagePreviews : [];
-  let newOrder = validateImageOrder(imageOrder, newPreviews);
-  let newEnabled = enabledLayers.length === newPreviews.length ? enabledLayers : Array(newPreviews.length).fill(true);
-  if (isSingleMode && newPreviews.length) {
-    const trueCount = newEnabled.filter(x => x).length;
-    if (trueCount !== 1) {
-      log.warning(`Node ${node.id}: Single mode enabled but ${trueCount} layers active, enabling first enabled layer`);
-      const firstTrueIndex = newEnabled.indexOf(true);
-      newEnabled = Array(newPreviews.length).fill(false);
-      newEnabled[firstTrueIndex >= 0 ? firstTrueIndex : newOrder[0]] = true;
-    }
-  }
-  const newNodeSize = Array.isArray(nodeSize) && nodeSize.length === 2
-    ? [Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]
-    : [360, 360];
-
-  // Compute new output hash
-  const newOutputHash = computeOutputHash(newPreviews, newOrder, newEnabled, isSingleMode, isReversed);
-
-  // Skip update if no significant change
-  if (
-    currentOutputHash === newOutputHash &&
-    JSON.stringify(node.properties.image_previews) === JSON.stringify(newPreviews) &&
-    JSON.stringify(node.properties.node_size) === JSON.stringify(newNodeSize)
-  ) {
-    log.debug(`Skipping state update for node ${node.id}: no significant changes`);
-    debouncedUpdateCardList();
-    return;
-  }
-
-  // Update properties
-  node.properties.image_previews = newPreviews;
-  node.properties.image_order = newOrder;
-  node.properties.enabled_layers = newEnabled;
-  node.properties.is_reversed = isReversed;
-  node.properties.is_single_mode = isSingleMode;
-  node.properties.state_version = stateVersion + 1;
-  node.properties.node_size = newNodeSize;
+  let stateChanged = false;
 
   // Update widgets only if values have changed
-  const newOrderValue = JSON.stringify({ node_id: node.id, order: newOrder });
+  const newOrderValue = JSON.stringify({ node_id: node.id, order: imageOrder });
   if (node.widgets[0].value !== newOrderValue) {
     node.widgets[0].value = newOrderValue;
+    if (node.widgets[0].onChange) node.widgets[0].onChange(newOrderValue);
+    stateChanged = true;
   }
-  const newEnabledValue = JSON.stringify({ node_id: node.id, enabled: newEnabled });
+  const newEnabledValue = JSON.stringify({ node_id: node.id, enabled: enabledLayers });
   if (node.widgets[1].value !== newEnabledValue) {
     node.widgets[1].value = newEnabledValue;
+    if (node.widgets[1].onChange) node.widgets[1].onChange(newEnabledValue);
+    stateChanged = true;
   }
   if (node.widgets[2].value !== node.id) {
     node.widgets[2].value = node.id;
+    if (node.widgets[2].onChange) node.widgets[2].onChange(node.id);
+    stateChanged = true;
   }
-  if (node.widgets[3].value !== isSingleMode) {
-    node.widgets[3].value = isSingleMode;
+  const newSizeValue = JSON.stringify(nodeSize);
+  if (node.widgets[3].value !== newSizeValue) {
+    node.widgets[3].value = newSizeValue;
+    if (node.widgets[3].onChange) node.widgets[3].onChange(newSizeValue);
+    stateChanged = true;
   }
-  if (node.widgets[4].value !== isReversed) {
-    node.widgets[4].value = isReversed;
+  const newReverseValue = JSON.stringify({ node_id: node.id, reversed: isReversed });
+  if (node.widgets[4].value !== newReverseValue) {
+    node.widgets[4].value = newReverseValue;
+    if (node.widgets[4].onChange) node.widgets[4].onChange(newReverseValue);
+    stateChanged = true;
   }
-  const newSizeValue = JSON.stringify(newNodeSize);
-  if (node.widgets[5].value !== newSizeValue) {
-    node.widgets[5].value = newSizeValue;
+  const newSingleModeValue = JSON.stringify({ node_id: node.id, single_mode: isSingleMode });
+  if (node.widgets[5].value !== newSingleModeValue) {
+    node.widgets[5].value = newSingleModeValue;
+    if (node.widgets[5].onChange) node.widgets[5].onChange(newSingleModeValue);
+    stateChanged = true;
   }
 
   // Update UI
-  statusText.innerHTML = newPreviews.length ? `${newPreviews.length} images` : "No images";
-  statusText.style.color = newPreviews.length ? "#2ECC71" : "#F5F6F5";
+  statusText.innerHTML = imagePreviews.length ? `${imagePreviews.length} images` : "No images";
+  statusText.style.color = imagePreviews.length ? "#2ECC71" : "#F5F6F5";
 
+  // Trigger card list update and canvas serialization only if state changed
   debouncedUpdateCardList();
-  app.graph.setDirtyCanvas(true, true);
-  log.info(`State updated for node ${node.id}: ${newPreviews.length} images, order=${newOrder}, enabled=${newEnabled}, singleMode=${isSingleMode}, reversed=${isReversed}, nodeSize=${newNodeSize}, version=${node.properties.state_version}`);
+  if (stateChanged) {
+    app.graph.setDirtyCanvas(true, true);
+    log.info(`State updated for node ${node.id}: ${imagePreviews.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, nodeSize=${nodeSize}`);
+  } else {
+    log.debug(`State unchanged for node ${node.id}, skipping serialization`);
+  }
 }
 
 app.registerExtension({
   name: "XIS.ImageManager",
-  /**
-   * Registers the node definition.
-   * @param {Object} nodeType - The node type.
-   * @param {Object} nodeData - The node data.
-   * @async
-   */
   async beforeRegisterNodeDef(nodeType, nodeData) {
     if (nodeData.name !== "XIS") return;
     log.info("Registering XIS_ImageManager node definition");
@@ -260,17 +176,12 @@ app.registerExtension({
         enabled_layers: [],
         is_reversed: false,
         is_single_mode: false,
-        state_version: 0,
-        node_size: [360, 360]
+        node_size: [360, MIN_NODE_HEIGHT]
       };
       this.setSize([360, MIN_NODE_HEIGHT]);
     };
   },
 
-  /**
-   * Sets up the extension by loading dependencies.
-   * @async
-   */
   async setup() {
     log.info("XIS_ImageManager extension loaded");
     try {
@@ -287,22 +198,12 @@ app.registerExtension({
         };
         document.head.appendChild(script);
       });
-      const fontLink = document.createElement("link");
-      fontLink.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap";
-      fontLink.rel = "stylesheet";
-      document.head.appendChild(fontLink);
       injectStyles();
-      document.querySelectorAll(".xiser-image-manager-container:not([data-nodeId])").forEach(el => el.remove());
     } catch (error) {
       log.error(`Setup failed: ${error}`);
     }
   },
 
-  /**
-   * Initializes a created node.
-   * @param {Object} node - The node instance.
-   * @async
-   */
   async nodeCreated(node) {
     if (node.comfyClass !== "XIS_ImageManager") return;
     const pendingNodes = new WeakMap();
@@ -323,11 +224,6 @@ app.registerExtension({
       })(app.graph.afterGraphConfigured || null);
     }
 
-    /**
-     * Checks if a node's DOM element is positioned.
-     * @param {Object} node - The node instance.
-     * @returns {boolean} True if positioned, false otherwise.
-     */
     function isNodePositioned(node) {
       const element = node.getElement ? node.getElement() : null;
       if (!element) return false;
@@ -335,14 +231,7 @@ app.registerExtension({
       return rect.width > 0 && rect.height > 0 && (rect.left !== 0 || rect.top !== 0);
     }
 
-    /**
-     * Initializes node with retry logic and ensures UI is visible after positioning.
-     * @param {Object} node - The node instance.
-     * @param {Function} callback - Callback to invoke with node ID.
-     * @param {number} [retries=10] - Number of retries.
-     * @param {number} [delay=100] - Delay between retries in milliseconds.
-     */
-    function initializeNode(node, callback, retries = 10, delay = 100) {
+    function initializeNode(node, callback, retries = 20, delay = 200) {
       if (!node) {
         log.error(`Node is null or undefined. Aborting initialization.`);
         return;
@@ -386,14 +275,23 @@ app.registerExtension({
     initializeNode(node, async (nodeId) => {
       log.info(`XIS_ImageManager node initialized: ${nodeId}`);
 
-      // Initialize state
+      // Initialize state from node.properties
       let imagePreviews = node.properties.image_previews || [];
-      let imageOrder = node.properties.image_order || [];
+      let imageOrder = node.properties.image_order || [...Array(imagePreviews.length).keys()];
+      let enabledLayers = node.properties.enabled_layers || Array(imagePreviews.length).fill(true);
       let isReversed = node.properties.is_reversed || false;
-      let enabledLayers = node.properties.enabled_layers || [];
       let isSingleMode = node.properties.is_single_mode || false;
-      let stateVersion = node.properties.state_version || 0;
-      let nodeSize = node.properties.node_size || [360, 360];
+      let stateVersion = 0; // Internal frontend state tracking
+      let nodeSize = node.properties.node_size || [360, MIN_NODE_HEIGHT];
+
+      // Ensure single mode consistency at initialization
+      if (isSingleMode && imagePreviews.length) {
+        const trueIndex = enabledLayers.indexOf(true);
+        enabledLayers = Array(imagePreviews.length).fill(false);
+        enabledLayers[trueIndex >= 0 ? trueIndex : imageOrder[0]] = true;
+      }
+
+      log.debug(`Node ${nodeId}: Initial state - imagePreviews: ${JSON.stringify(imagePreviews)}, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, nodeSize=${nodeSize}`);
 
       node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
 
@@ -423,19 +321,19 @@ app.registerExtension({
       function showUI() {
         if (isNodePositioned(node)) {
           mainContainer.style.visibility = "visible";
-          log.debug(`Node ${nodeId} UI made visible after positioning`);
+          log.debug(`Node ${nodeId}: UI made visible after positioning`);
           return;
         }
         let attempts = 20;
         function tryShowUI() {
           if (isNodePositioned(node)) {
             mainContainer.style.visibility = "visible";
-            log.debug(`Node ${nodeId} UI made visible after ${20 - attempts} attempts`);
+            log.debug(`Node ${nodeId}: UI made visible after ${20 - attempts} attempts`);
             return;
           }
           if (--attempts <= 0) {
             mainContainer.style.visibility = "visible";
-            log.warning(`Node ${nodeId} UI shown after max attempts, position may not be finalized`);
+            log.warning(`Node ${nodeId}: UI shown after max attempts, position may not be finalized`);
             return;
           }
           requestAnimationFrame(tryShowUI);
@@ -464,13 +362,9 @@ app.registerExtension({
           if (data.node_id !== nodeId) log.warning(`Mismatched node_id: ${data.node_id}, expected ${nodeId}`);
           enabledLayers = data.enabled?.length === imagePreviews.length ? data.enabled : Array(imagePreviews.length).fill(true);
           if (isSingleMode && imagePreviews.length) {
-            const trueCount = enabledLayers.filter(x => x).length;
-            if (trueCount !== 1) {
-              log.warning(`Node ${nodeId}: Single mode enabled but ${trueCount} layers active, enabling first enabled layer`);
-              const firstTrueIndex = enabledLayers.indexOf(true);
-              enabledLayers = Array(imagePreviews.length).fill(false);
-              enabledLayers[firstTrueIndex >= 0 ? firstTrueIndex : imageOrder[0]] = true;
-            }
+            const trueIndex = enabledLayers.indexOf(true);
+            enabledLayers = Array(imagePreviews.length).fill(false);
+            enabledLayers[trueIndex >= 0 ? trueIndex : imageOrder[0]] = true;
           }
           setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
         } catch (error) {
@@ -483,31 +377,7 @@ app.registerExtension({
       const nodeIdWidget = node.addWidget("hidden", "node_id", nodeId, value => {
         if (value !== nodeId) log.warning(`Node ID mismatch: ${value}, expected ${nodeId}`);
         node.widgets[2].value = nodeId;
-      }, { serialize: true });
-
-      const singleModeWidget = node.addWidget("hidden", "single_mode", isSingleMode, value => {
-        const newSingleMode = !!value;
-        if (newSingleMode === isSingleMode) return;
-        let newEnabledLayers = enabledLayers.slice();
-        if (newSingleMode && imagePreviews.length) {
-          const trueIndex = newEnabledLayers.indexOf(true);
-          newEnabledLayers = Array(imagePreviews.length).fill(false);
-          newEnabledLayers[trueIndex >= 0 ? trueIndex : imageOrder[0]] = true;
-        }
-        if (JSON.stringify(newEnabledLayers) === JSON.stringify(enabledLayers)) {
-          log.debug(`Skipping single mode widget update for node ${nodeId}: no change in enabled layers`);
-          return;
-        }
-        isSingleMode = newSingleMode;
-        enabledLayers = newEnabledLayers;
-        setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
-        log.info(`Single mode widget updated for node ${nodeId}: ${isSingleMode}`);
-      }, { serialize: true });
-
-      const reverseWidget = node.addWidget("hidden", "is_reversed", isReversed, value => {
-        isReversed = !!value;
-        setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
-        log.info(`Reverse widget updated for node ${nodeId}: ${isReversed}`);
+        if (node.widgets[2].onChange) node.widgets[2].onChange(nodeId);
       }, { serialize: true });
 
       const nodeSizeWidget = node.addWidget("hidden", "node_size", JSON.stringify(nodeSize), value => {
@@ -520,6 +390,37 @@ app.registerExtension({
           }
         } catch (error) {
           log.error(`Failed to parse node_size: ${error}`);
+        }
+      }, { serialize: true });
+
+      const reverseWidget = node.addWidget("hidden", "is_reversed", JSON.stringify({ node_id: nodeId, reversed: isReversed }), value => {
+        try {
+          const data = JSON.parse(value);
+          if (data.node_id !== nodeId) log.warning(`Mismatched node_id: ${data.node_id}, expected ${nodeId}`);
+          isReversed = !!data.reversed;
+          setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
+        } catch (error) {
+          statusText.innerText = "Reverse error";
+          statusText.style.color = "#F55";
+          log.error(`Failed to parse is_reversed: ${error}`);
+        }
+      }, { serialize: true });
+
+      const singleModeWidget = node.addWidget("hidden", "is_single_mode", JSON.stringify({ node_id: nodeId, single_mode: isSingleMode }), value => {
+        try {
+          const data = JSON.parse(value);
+          if (data.node_id !== nodeId) log.warning(`Mismatched node_id: ${data.node_id}, expected ${nodeId}`);
+          isSingleMode = !!data.single_mode;
+          if (isSingleMode && imagePreviews.length) {
+            const trueIndex = enabledLayers.indexOf(true);
+            enabledLayers = Array(imagePreviews.length).fill(false);
+            enabledLayers[trueIndex >= 0 ? trueIndex : imageOrder[0]] = true;
+          }
+          setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
+        } catch (error) {
+          statusText.innerText = "Single mode error";
+          statusText.style.color = "#F55";
+          log.error(`Failed to parse is_single_mode: ${error}`);
         }
       }, { serialize: true });
 
@@ -538,16 +439,15 @@ app.registerExtension({
             })),
             image_order: imageOrder,
             enabled_layers: enabledLayers,
-            is_single_mode: isSingleMode,
             is_reversed: isReversed,
+            is_single_mode: isSingleMode,
             node_id: nodeId,
-            node_size: nodeSize,
-            state_version: [stateVersion]
+            node_size: nodeSize
+            // state_version removed to avoid affecting cache
           };
         },
         setValue(value) {
           try {
-            const receivedVersion = parseInt(Array.isArray(value.state_version) ? value.state_version[0] : value.state_version || 0);
             if (value.node_id && value.node_id !== nodeId) {
               log.warning(`Mismatched node_id: ${value.node_id}, expected ${nodeId}`);
             }
@@ -558,43 +458,36 @@ app.registerExtension({
             })) || [];
             const newOrder = validateImageOrder(value.image_order || [...Array(newPreviews.length).keys()], newPreviews);
             let newEnabled = value.enabled_layers?.length === newPreviews.length ? value.enabled_layers : Array(newPreviews.length).fill(true);
-            const newSingleMode = !!value.is_single_mode;
-            const newReversed = !!value.is_reversed;
+            const newIsReversed = value.is_reversed ?? isReversed;
+            const newIsSingleMode = value.is_single_mode ?? isSingleMode;
             const newNodeSize = Array.isArray(value.node_size) && value.node_size.length === 2
               ? [Math.max(value.node_size[0], 360), Math.max(value.node_size[1], MIN_NODE_HEIGHT)]
-              : [360, 360];
-            if (newSingleMode && newPreviews.length) {
-              const trueCount = newEnabled.filter(x => x).length;
-              if (trueCount !== 1) {
-                log.warning(`Node ${nodeId}: Single mode enabled but ${trueCount} layers active, enabling first enabled layer`);
-                const firstTrueIndex = newEnabled.indexOf(true);
-                newEnabled = Array(newPreviews.length).fill(false);
-                newEnabled[firstTrueIndex >= 0 ? firstTrueIndex : newOrder[0]] = true;
-              }
-            }
+              : nodeSize;
 
-            const currentHash = computeOutputHash(imagePreviews, imageOrder, enabledLayers, isSingleMode, isReversed);
-            const newHash = computeOutputHash(newPreviews, newOrder, newEnabled, newSingleMode, newReversed);
-            if (
-              currentHash === newHash &&
-              JSON.stringify(imagePreviews) === JSON.stringify(newPreviews) &&
-              JSON.stringify(nodeSize) === JSON.stringify(newNodeSize) &&
-              receivedVersion <= stateVersion
-            ) {
-              log.debug(`Skipping setValue for node ${nodeId}: no state change`);
-              return;
+            // Enforce single mode
+            if (newIsSingleMode && newPreviews.length) {
+              const trueIndex = newEnabled.indexOf(true);
+              newEnabled = Array(newPreviews.length).fill(false);
+              newEnabled[trueIndex >= 0 ? trueIndex : newOrder[0]] = true;
             }
 
             imagePreviews = newPreviews;
             imageOrder = newOrder;
             enabledLayers = newEnabled;
-            isSingleMode = newSingleMode;
-            isReversed = newReversed;
+            isReversed = newIsReversed;
+            isSingleMode = newIsSingleMode;
             nodeSize = newNodeSize;
-            stateVersion = receivedVersion;
+            node.properties = {
+              image_previews: imagePreviews,
+              image_order: imageOrder,
+              enabled_layers: enabledLayers,
+              is_reversed: isReversed,
+              is_single_mode: isSingleMode,
+              node_size: nodeSize
+            };
             node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
             setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
-            log.info(`Restored state for node ${nodeId}: ${imageOrder.length} images, single_mode=${isSingleMode}, reversed=${isReversed}, node_size=${nodeSize}`);
+            log.info(`Restored state for node ${nodeId}: ${imageOrder.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, node_size=${nodeSize}`);
           } catch (error) {
             statusText.innerText = "State error";
             statusText.style.color = "#F55";
@@ -613,23 +506,8 @@ app.registerExtension({
           return;
         }
         nodeSize = newNodeSize;
-        node.properties.node_size = nodeSize;
-        // Only update if node.properties is consistent
-        const currentPreviews = node.properties.image_previews || imagePreviews;
-        const currentOrder = node.properties.image_order || imageOrder;
-        const currentEnabled = node.properties.enabled_layers || enabledLayers;
-        const currentSingleMode = node.properties.is_single_mode || isSingleMode;
-        const currentReversed = node.properties.is_reversed || isReversed;
-        const currentStateVersion = node.properties.state_version || stateVersion;
-        setState({
-          imagePreviews: currentPreviews,
-          imageOrder: currentOrder,
-          enabledLayers: currentEnabled,
-          isReversed: currentReversed,
-          isSingleMode: currentSingleMode,
-          stateVersion: currentStateVersion,
-          nodeSize: newNodeSize
-        });
+        node.properties.node_size = newNodeSize;
+        setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
         log.debug(`Node ${nodeId} resized: width=${size[0]}, height=${size[1]}`);
       };
 
@@ -647,61 +525,118 @@ app.registerExtension({
 
       // Handle execution
       node.onExecuted = function (message) {
-        if (!message?.image_previews || !message?.image_order || !message?.enabled_layers) {
-          statusText.innerText = "Execution error";
+        if (!message?.image_previews) {
+          statusText.innerText = "Execution error: No image previews";
           statusText.style.color = "#F55";
-          log.error(`Invalid execution data for node ${node.id}: ${JSON.stringify(message)}`);
+          log.error(`Node ${node.id}: Invalid execution data: ${JSON.stringify(message)}`);
           return;
         }
-        const receivedVersion = parseInt(Array.isArray(message.state_version) ? message.state_version[0] : (message.state_version || 0));
-        log.debug(`Received execution data for node ${node.id}: version=${receivedVersion}, current=${stateVersion}, input images=${message.image_previews?.length || 0}, single_mode=${message.is_single_mode}, reversed=${message.is_reversed}`);
+        log.debug(`Node ${node.id}: onExecuted received image_previews: ${JSON.stringify(message.image_previews)}`);
 
-        const newSingleMode = Array.isArray(message.is_single_mode) ? !!message.is_single_mode[0] : !!message.is_single_mode;
-        const newReversed = Array.isArray(message.is_reversed) ? !!message.is_reversed[0] : !!message.is_reversed;
-        const newNodeSize = Array.isArray(message.node_size) && message.node_size.length === 2
-          ? [Math.max(message.node_size[0], 360), Math.max(message.node_size[1], MIN_NODE_HEIGHT)]
-          : nodeSize;
+        // Prepare new previews
         const newPreviews = message.image_previews.map((p, i) => ({
           ...p,
           index: i,
           originalFilename: p.originalFilename || p.filename
         }));
-        const newOrder = validateImageOrder(message.image_order, newPreviews);
-        let newEnabled = message.enabled_layers.length === newPreviews.length ? message.enabled_layers : Array(newPreviews.length).fill(true);
-        if (newSingleMode && newPreviews.length) {
-          const trueCount = newEnabled.filter(x => x).length;
-          if (trueCount !== 1) {
-            log.warning(`Node ${node.id}: Single mode enabled but ${trueCount} layers active, enabling first enabled layer`);
-            const firstTrueIndex = newEnabled.indexOf(true);
-            newEnabled = Array(newPreviews.length).fill(false);
-            newEnabled[firstTrueIndex >= 0 ? firstTrueIndex : newOrder[0]] = true;
+
+        // Restore existing state from widgets
+        let currentOrder = imageOrder;
+        let currentEnabled = enabledLayers;
+        let currentIsReversed = isReversed;
+        let currentIsSingleMode = isSingleMode;
+        try {
+          const orderData = JSON.parse(node.widgets[0].value);
+          if (orderData.node_id === nodeId) {
+            currentOrder = orderData.order || imageOrder;
+          }
+          const enabledData = JSON.parse(node.widgets[1].value);
+          if (enabledData.node_id === nodeId) {
+            currentEnabled = enabledData.enabled || enabledLayers;
+          }
+          const reverseData = JSON.parse(node.widgets[4].value);
+          if (reverseData.node_id === nodeId) {
+            currentIsReversed = !!reverseData.reversed;
+          }
+          const singleModeData = JSON.parse(node.widgets[5].value);
+          if (singleModeData.node_id === nodeId) {
+            currentIsSingleMode = !!singleModeData.single_mode;
+          }
+        } catch (error) {
+          log.error(`Failed to parse widget state for node ${node.id}: ${error}`);
+        }
+
+        // Match existing images by filename to preserve order and enabled state
+        const newOrder = [];
+        const newEnabled = Array(newPreviews.length).fill(true); // Default to true for new nodes
+        const matchedIndices = new Set();
+
+        // Match existing images
+        for (const oldIdx of currentOrder) {
+          const oldPreview = imagePreviews.find(p => p.index === oldIdx);
+          if (!oldPreview) continue;
+          const newPreviewIndex = newPreviews.findIndex(p => p.filename === oldPreview.filename);
+          if (newPreviewIndex >= 0 && !matchedIndices.has(newPreviewIndex)) {
+            newOrder.push(newPreviewIndex);
+            newEnabled[newPreviewIndex] = currentEnabled[oldIdx] ?? true;
+            matchedIndices.add(newPreviewIndex);
           }
         }
 
-        const currentHash = computeOutputHash(imagePreviews, imageOrder, enabledLayers, isSingleMode, isReversed);
-        const newHash = computeOutputHash(newPreviews, newOrder, newEnabled, newSingleMode, newReversed);
-        if (
-          currentHash === newHash &&
-          JSON.stringify(imagePreviews) === JSON.stringify(newPreviews) &&
-          JSON.stringify(nodeSize) === JSON.stringify(newNodeSize) &&
-          receivedVersion <= stateVersion
-        ) {
-          log.debug(`Skipping execution update for node ${node.id}: no state change`);
-          return;
+        // Add new images
+        newPreviews.forEach((p, i) => {
+          if (!matchedIndices.has(i)) {
+            newOrder.push(i);
+            newEnabled[i] = true; // New images enabled by default
+          }
+        });
+
+        // Enforce single mode
+        if (currentIsSingleMode && newPreviews.length) {
+          const trueIndex = newEnabled.indexOf(true);
+          if (trueIndex === -1) {
+            newEnabled.fill(false);
+            newEnabled[newOrder[0]] = true;
+          } else if (newEnabled.filter(x => x).length > 1) {
+            newEnabled.fill(false);
+            newEnabled[trueIndex] = true;
+          }
         }
 
-        imagePreviews = newPreviews;
-        imageOrder = newOrder;
-        enabledLayers = newEnabled;
-        isSingleMode = newSingleMode;
-        isReversed = newReversed;
-        nodeSize = newNodeSize;
-        stateVersion = receivedVersion;
-        node.widgets.find(w => w.name === "single_mode").value = isSingleMode;
-        node.widgets.find(w => w.name === "is_reversed").value = isReversed;
-        node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
-        setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
-        log.info(`Node ${node.id} executed: ${imagePreviews.length} images, order=${imageOrder}, enabled=${enabledLayers}, singleMode=${isSingleMode}, reversed=${isReversed}, nodeSize=${nodeSize}, version=${stateVersion}`);
+        const newNodeSize = Array.isArray(message.node_size) && message.node_size.length === 2
+          ? [Math.max(message.node_size[0], 360), Math.max(message.node_size[1], MIN_NODE_HEIGHT)]
+          : nodeSize;
+
+        // Update state only if necessary
+        const stateChanged =
+          JSON.stringify(imagePreviews) !== JSON.stringify(newPreviews) ||
+          JSON.stringify(imageOrder) !== JSON.stringify(newOrder) ||
+          JSON.stringify(enabledLayers) !== JSON.stringify(newEnabled) ||
+          isReversed !== currentIsReversed ||
+          isSingleMode !== currentIsSingleMode ||
+          JSON.stringify(nodeSize) !== JSON.stringify(newNodeSize);
+
+        if (stateChanged) {
+          imagePreviews = newPreviews;
+          imageOrder = validateImageOrder(newOrder, imagePreviews);
+          enabledLayers = newEnabled;
+          isReversed = currentIsReversed;
+          isSingleMode = currentIsSingleMode;
+          nodeSize = newNodeSize;
+          node.properties = {
+            image_previews: imagePreviews,
+            image_order: imageOrder,
+            enabled_layers: enabledLayers,
+            is_reversed: isReversed,
+            is_single_mode: isSingleMode,
+            node_size: nodeSize
+          };
+          node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
+          setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion: stateVersion + 1, nodeSize });
+          log.info(`Node ${node.id}: Executed with ${imagePreviews.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, nodeSize=${nodeSize}, version=${stateVersion}`);
+        } else {
+          log.debug(`Node ${node.id}: No state change, skipping update`);
+        }
       };
 
       // Handle node removal
@@ -710,6 +645,14 @@ app.registerExtension({
       };
 
       // Initial state update
+      node.properties = {
+        image_previews: imagePreviews,
+        image_order: imageOrder,
+        enabled_layers: enabledLayers,
+        is_reversed: isReversed,
+        is_single_mode: isSingleMode,
+        node_size: nodeSize
+      };
       setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
     });
   }
