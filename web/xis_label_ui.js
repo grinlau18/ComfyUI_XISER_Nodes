@@ -108,7 +108,7 @@ function loadCss(href, fallbackHref) {
 }
 
 /**
- * Asynchronously loads CodeMirror resources in sequence, with fonts being optional.
+ * Asynchronously loads CodeMirror resources in sequence.
  * @returns {Promise<void>} Resolves when all critical resources are loaded.
  */
 async function loadCodeMirrorResources() {
@@ -134,13 +134,6 @@ async function loadCodeMirrorResources() {
             fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/dracula.min.css"
         }
     ];
-    const optionalResources = [
-        {
-            type: "css",
-            src: "https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap",
-            fallback: null
-        }
-    ];
 
     // Load critical resources sequentially to ensure dependencies
     for (const res of criticalResources) {
@@ -157,15 +150,6 @@ async function loadCodeMirrorResources() {
             throw e;
         }
     }
-
-    // Load optional resources in parallel
-    await Promise.all(
-        optionalResources.map(res =>
-            res.type === "script"
-                ? loadScript(res.src, res.fallback).catch(e => logger.warn(`Failed to load optional script: ${res.src}`, e))
-                : loadCss(res.src, res.fallback).catch(e => logger.warn(`Failed to load optional CSS: ${res.src}`, e))
-        )
-    );
 }
 
 // Singleton CodeMirror editor instance
@@ -301,7 +285,7 @@ function updateTextDataBackground(node, newColor) {
 /**
  * Updates node's textData and caches parsed results.
  * @param {Object} node - The node object.
- * @param {string} newText - The new text data.
+ * @param {string} new因 - The new text data.
  */
 function updateTextData(node, newText) {
     if (node.properties.textData !== newText) {
@@ -366,7 +350,7 @@ app.registerExtension({
                     const fontKey = `${fontWeight}_${line.font_size}`;
                     let font = fontCache.get(fontKey);
                     if (!font) {
-                        font = `${fontWeight} ${line.font_size}px 'Fira Code', monospace`;
+                        font = `${fontWeight} ${line.font_size}px 'Consolas', 'Monaco', monospace`;
                         fontCache.set(fontKey, font);
                         if (fontCache.size > 100) {
                             fontCache.delete(fontCache.keys().next().value);
@@ -594,7 +578,7 @@ app.registerExtension({
                                 background: linear-gradient(145deg, #E91E63, #D81B60);
                             }
                             .CodeMirror {
-                                font-family: 'Fira Code', 'Consolas', 'Monaco', monospace !important;
+                                font-family: 'Consolas', 'Monaco', monospace !important;
                                 font-size: 14px !important;
                                 background: #1A1A1A !important;
                                 color: #E0E0E0 !important;
@@ -654,7 +638,7 @@ app.registerExtension({
                             textarea.style.color = "#E0E0E0";
                             textarea.style.border = "1px solid #333";
                             textarea.style.padding = "10px";
-                            textarea.style.fontFamily = "'Fira Code', 'Consolas', 'Monaco', monospace";
+                            textarea.style.fontFamily = "'Consolas', 'Monaco', monospace";
                             textarea.style.fontSize = "14px";
                             textarea.value = defaultText;
                             editorDiv.appendChild(textarea);
