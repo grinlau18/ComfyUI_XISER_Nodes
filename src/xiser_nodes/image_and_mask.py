@@ -471,12 +471,31 @@ class XIS_ResizeImageOrMask:
                             image: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None,
                             reference_image: Optional[torch.Tensor] = None, manual_width: Optional[int] = None,
                             manual_height: Optional[int] = None, fill_hex: str = "#000000") -> Tuple:
+        """
+        调整图像或蒙版的尺寸，并返回调整后的图像、蒙版以及实际的宽度和高度。
+
+        Args:
+            resize_mode (str): 调整模式（强制调整、按比例缩放、限制在画布内、填充画布）
+            scale_condition (str): 缩放条件（仅缩小、仅放大、总是缩放）
+            interpolation (str): 插值方法
+            min_unit (int): 最小单位尺寸，用于对齐
+            image (Optional[torch.Tensor]): 输入图像，形状为 [B, H, W, C]
+            mask (Optional[torch.Tensor]): 输入蒙版，形状为 [H, W] 或 [B, H, W]
+            reference_image (Optional[torch.Tensor]): 参考图像，用于确定目标尺寸
+            manual_width (Optional[int]): 手动指定的目标宽度
+            manual_height (Optional[int]): 手动指定的目标高度
+            fill_hex (str): 填充颜色，十六进制格式
+
+        Returns:
+            Tuple: (调整后的图像, 调整后的蒙版, 输出宽度, 输出高度)
+        """
         if image is None and mask is None:
             raise ValueError("At least one of 'image' or 'mask' must be provided")
         
         # 确保 min_unit 不小于 1
-        min_unit = max(1, min_unit)  # 添加保护措施
+        min_unit = max(1, min_unit)
         
+        # 获取目标尺寸
         if reference_image is not None:
             if reference_image.dim() != 4:
                 raise ValueError(f"reference_image must be 4D [B, H, W, C], got {reference_image.shape}")
@@ -486,12 +505,22 @@ class XIS_ResizeImageOrMask:
         else:
             raise ValueError("Must provide either reference_image or both manual_width and manual_height")
         
-        # 确保目标尺寸有效并按 min_unit 对齐
+        # 确保目标尺寸按 min_unit 对齐
         target_width = max(1, (target_width + min_unit - 1) // min_unit * min_unit)
         target_height = max(1, (target_height + min_unit - 1) // min_unit * min_unit)
         fill_rgb = hex_to_rgb(fill_hex)
 
         def compute_size(orig_w: int, orig_h: int) -> Tuple[int, int, int, int]:
+            """
+            计算调整后的尺寸和偏移量。
+
+            Args:
+                orig_w (int): 原始宽度
+                orig_h (int): 原始高度
+
+            Returns:
+                Tuple[int, int, int, int]: (调整宽度, 调整高度, x偏移, y偏移)
+            """
             aspect = orig_w / orig_h
             if resize_mode == "force_resize":
                 return target_width, target_height, 0, 0
@@ -517,6 +546,18 @@ class XIS_ResizeImageOrMask:
                 return w, h, (w - target_width) // 2, (h - target_height) // 2
 
         def should_resize(orig_w: int, orig_h: int, target_w: int, target_h: int) -> bool:
+            """
+            判断是否需要调整尺寸。
+
+            Args:
+                orig_w (int): 原始宽度
+                orig_h (int): 原始高度
+                target_w (int): 目标宽度
+                target_h (int): 目标高度
+
+            Returns:
+                bool: 是否需要调整尺寸
+            """
             if scale_condition == "always":
                 return True
             elif scale_condition == "downscale_only":
@@ -526,6 +567,8 @@ class XIS_ResizeImageOrMask:
             return False
 
         resized_img = None
+        final_width, final_height = target_width, target_height  # 默认值
+
         if image is not None:
             if image.dim() != 4:
                 raise ValueError(f"Image must be 4D [B, H, W, C], got {image.shape}")
@@ -549,6 +592,9 @@ class XIS_ResizeImageOrMask:
                 resized_img.clamp_(0, 1)
             else:
                 resized_img = image
+            
+            # 更新 final_width 和 final_height 为实际输出图像的尺寸
+            final_width, final_height = resized_img.shape[2], resized_img.shape[1]
 
         resized_mask = None
         if mask is not None:
@@ -577,8 +623,12 @@ class XIS_ResizeImageOrMask:
             
             if mask.dim() == 2:
                 resized_mask = resized_mask.squeeze(0)
+            
+            # 如果没有图像输出，使用蒙版的尺寸
+            if resized_img is None:
+                final_width, final_height = resized_mask.shape[-1], resized_mask.shape[-2]
 
-        return (resized_img, resized_mask, target_width, target_height)
+        return (resized_img, resized_mask, final_width, final_height)
 
 # 重新对输入的图像和蒙版进行排序
 class XIS_ReorderImageMaskGroups:
