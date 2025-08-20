@@ -40,7 +40,7 @@ class XIS_MultiPointGradient:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
     FUNCTION = "execute"
-    CATEGORY = "XIS/Gradient"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
 
     def hex_to_rgb(self, hex_color: str) -> List[int]:
         """
