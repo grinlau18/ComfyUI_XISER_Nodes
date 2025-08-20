@@ -86,7 +86,7 @@ class XIS_ReorderImages:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("pack_images",)
     FUNCTION = "reorder_images"
-    CATEGORY = "XISER_Nodes/Canvas"
+    CATEGORY = "XISER_Nodes/ImageAndMask"
     OUTPUT_NODE = True
 
     def _generate_base64_thumbnail(self, pil_img, max_size=64, format="WEBP"):
