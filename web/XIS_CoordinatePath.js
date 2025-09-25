@@ -118,7 +118,7 @@ export function setupCanvas(node) {
     box-sizing: border-box;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.4);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
@@ -138,7 +138,7 @@ export function setupCanvas(node) {
     justify-content: center;
     overflow: hidden;
     position: relative;
-    background: #1a1a1a;
+    background: rgba(90, 90, 90, 0.15);
     border-radius: 4px;
   `;
 
@@ -164,7 +164,7 @@ export function setupCanvas(node) {
     font-size: 12px;
     text-align: center;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(90, 90, 90, 0.15);
     border-radius: 4px;
     margin-top: 8px;
   `;
@@ -296,7 +296,7 @@ export function updateDisplay(node, message) {
   ];
 
   // 绘制网格背景
-  ctx.strokeStyle = "#333";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
   ctx.lineWidth = 1;
   for (let i = 0; i <= width; i += 50) {
     ctx.beginPath();

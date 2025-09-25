@@ -49,18 +49,28 @@ function cleanupExistingElements(node) {
     `.xiser-curve-node-${node.id}`,
     `.xiser-curve-canvas-container-${node.id}`,
     `.xiser-control-panel-${node.id}`,
-    `[data-node-id="${node.id}"]`
+    `[data-node-id="${node.id}"]`,
+    `#curve-canvas-${node.id}`
   ];
 
   selectors.forEach(selector => {
     document.querySelectorAll(selector).forEach(el => {
       if (el.parentNode) {
+        log.info(`Node ${node.id} removing element:`, selector);
         el.remove();
       }
     });
   });
 
-  log.info(`Node ${node.id} existing DOM elements cleaned up`);
+  // 清理节点上的画布引用
+  if (node.canvas) {
+    node.canvas = null;
+  }
+  if (node.ctx) {
+    node.ctx = null;
+  }
+
+  log.info(`Node ${node.id} existing DOM elements and canvas references cleaned up`);
 }
 
 /**
@@ -405,29 +415,47 @@ function initializeCanvas(node, canvas) {
     return;
   }
 
-  // 简化检查：只检查Canvas元素是否存在
-  if (!canvas) {
-    log.warning(`Node ${node.id} canvas not found, retrying...`);
+  // 检查Canvas元素是否存在且有效
+  if (!canvas || !canvas.getContext) {
+    log.warning(`Node ${node.id} canvas not found or invalid, retrying...`);
     setTimeout(() => initializeCanvas(node, canvas), 100);
     return;
   }
 
-  try {
-    // 立即尝试绘制
-    updateDisplay(node);
+  // 添加防护标志，防止重复初始化
+  if (node._canvasInitialized) {
+    log.warning(`Node ${node.id} canvas already initialized, skipping`);
+    return;
+  }
 
-    // 添加延迟重绘确保内容显示
-    setTimeout(() => updateDisplay(node), 50);
-    setTimeout(() => updateDisplay(node), 200);
-    setTimeout(() => updateDisplay(node), 500);
+  try {
+    node._canvasInitialized = true;
+
+    // 等待DOM元素完全插入后再绘制
+    const waitForDOMInsertion = () => {
+      // 检查Canvas元素是否已插入到DOM中
+      const canvasInDOM = document.contains(canvas);
+      if (canvasInDOM) {
+        // DOM元素已插入，进行绘制
+        updateDisplay(node);
+        log.info(`Node ${node.id} canvas initialization completed`);
+      } else {
+        // DOM元素未插入，等待后重试
+        log.info(`Node ${node.id} canvas not in DOM yet, waiting...`);
+        setTimeout(waitForDOMInsertion, 50);
+      }
+    };
+
+    // 启动DOM插入检查
+    waitForDOMInsertion();
 
     // 标记为已初始化
     node._curveState.initialized = true;
-    log.info(`Node ${node.id} canvas initialization completed`);
   } catch (error) {
     log.error(`Node ${node.id} canvas initialization error:`, error);
     // 即使出错也标记为已初始化，避免无限重试
     node._curveState.initialized = true;
+    node._canvasInitialized = true;
   }
 }
 
@@ -441,37 +469,50 @@ export function setupCanvas(node) {
     return;
   }
 
-  log.info(`Node ${node.id} starting setupCanvas`);
-
-  // 1. 清理已存在的元素和widget
-  cleanupExistingElements(node);
-  cleanupExistingWidgets(node);
-
-  // 2. 初始化节点状态
-  initializeNodeState(node);
-
-  // 3. 创建UI元素
-  const uiElements = createUIElements(node);
-  if (!uiElements) {
-    log.error(`Node ${node.id} failed to create UI elements`);
+  // 添加防护标志，防止重复设置
+  if (node._canvasSetupInProgress) {
+    log.warning(`Node ${node.id} canvas setup already in progress, skipping`);
     return;
   }
 
-  const { mainContainer, canvasContainer, canvas } = uiElements;
+  node._canvasSetupInProgress = true;
+  log.info(`Node ${node.id} starting setupCanvas`);
 
-  // 4. 创建控制面板
-  const controlPanel = createControlPanel(node);
-  if (controlPanel) {
-    mainContainer.appendChild(controlPanel);
+  try {
+    // 1. 彻底清理已存在的元素和widget
+    cleanupExistingElements(node);
+    cleanupExistingWidgets(node);
+
+    // 2. 初始化节点状态
+    initializeNodeState(node);
+
+    // 3. 创建UI元素
+    const uiElements = createUIElements(node);
+    if (!uiElements) {
+      log.error(`Node ${node.id} failed to create UI elements`);
+      return;
+    }
+
+    const { mainContainer, canvasContainer, canvas } = uiElements;
+
+    // 4. 创建控制面板
+    const controlPanel = createControlPanel(node);
+    if (controlPanel) {
+      mainContainer.appendChild(controlPanel);
+    }
+
+    // 5. 注册DOM控件
+    registerDOMWidget(node, mainContainer, canvas);
+
+    // 6. 初始化Canvas
+    initializeCanvas(node, canvas);
+
+    log.info(`Node ${node.id} setupCanvas completed successfully`);
+  } catch (error) {
+    log.error(`Node ${node.id} setupCanvas error:`, error);
+  } finally {
+    node._canvasSetupInProgress = false;
   }
-
-  // 5. 注册DOM控件
-  registerDOMWidget(node, mainContainer, canvas);
-
-  // 6. 初始化Canvas
-  initializeCanvas(node, canvas);
-
-  log.info(`Node ${node.id} setupCanvas completed`);
 }
 
 /**
@@ -484,30 +525,48 @@ export const updateDisplay = debounce((node) => {
       return;
     }
 
+    // 添加防护标志，防止重复绘制
+    if (node._updatingDisplay) {
+      log.warning(`Node ${node.id} display update already in progress, skipping`);
+      return;
+    }
+
+    node._updatingDisplay = true;
+
     // 检查Canvas和上下文是否已初始化
     if (!node.ctx || !node.canvas) {
       log.warning(`Node ${node.id} canvas or context not initialized, attempting to reinitialize`);
 
       // 尝试重新获取Canvas引用
       const canvasEl = document.querySelector(`#curve-canvas-${node.id}`);
-      if (canvasEl) {
+      if (canvasEl && canvasEl.getContext) {
         node.canvas = canvasEl;
         node.ctx = canvasEl.getContext('2d');
         log.info(`Node ${node.id} canvas reinitialized`);
       } else {
-        log.warning(`Node ${node.id} canvas element not found`);
+        log.warning(`Node ${node.id} canvas element not found or invalid`);
+        node._updatingDisplay = false;
         return;
       }
+    }
+
+    // 额外检查Canvas元素是否在DOM中
+    if (!document.contains(node.canvas)) {
+      log.warning(`Node ${node.id} canvas element not in DOM, skipping draw`);
+      node._updatingDisplay = false;
+      return;
     }
 
     // 检查Canvas尺寸是否有效
     if (node.canvas.width <= 0 || node.canvas.height <= 0) {
       log.warning(`Node ${node.id} canvas has invalid dimensions: ${node.canvas.width}x${node.canvas.height}`);
+      node._updatingDisplay = false;
       return;
     }
 
     const now = Date.now();
     if (now - node._curveState.lastUpdateTime < 16) { // 限制60fps
+      node._updatingDisplay = false;
       return;
     }
     node._curveState.lastUpdateTime = now;
@@ -515,6 +574,8 @@ export const updateDisplay = debounce((node) => {
     drawCurve(node);
   } catch (error) {
     log.error(`Node ${node?.id || 'unknown'} error in updateDisplay:`, error);
+  } finally {
+    node._updatingDisplay = false;
   }
 }, 16);
 
@@ -544,8 +605,12 @@ function drawCurve(node) {
     const plotWidth = width - 2 * padding;
     const plotHeight = height - 2 * padding;
 
-  // 清除画布
+  // 彻底清除画布 - 使用透明背景确保完全清除
   ctx.clearRect(0, 0, width, height);
+
+  // 绘制透明背景确保完全覆盖
+  ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+  ctx.fillRect(0, 0, width, height);
 
   // 绘制背景 - 使用半透明黑色背景，确保内容可见
   ctx.fillStyle = 'rgba(90, 90, 90, 0.15)';

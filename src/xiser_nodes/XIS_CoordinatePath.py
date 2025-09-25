@@ -107,7 +107,8 @@ class XIS_CoordinatePath:
 
     def calculate_curve_path(self, control_points: List[Dict[str, float]], segments: int) -> List[Dict[str, float]]:
         """
-        Calculate curve path coordinates using Catmull-Rom spline with improved smoothness.
+        Calculate curve path coordinates using Catmull-Rom spline with arc-length parameterization.
+        Points are distributed evenly along the total curve length.
 
         Args:
             control_points: List of control points with x, y coordinates
@@ -143,39 +144,32 @@ class XIS_CoordinatePath:
                     "y": points[-1]["y"] + 0.1 * (points[-1]["y"] - points[-2]["y"])}
             points = [p0] + points + [p_end]
 
-        path_coords = []
-
         # 计算曲线段数量
         num_curve_segments = len(points) - 3
         if num_curve_segments <= 0:
             return []
 
-        # 使用改进的参数化方法，提高曲线流畅度
-        # 为每个曲线段生成更多采样点，确保曲线平滑
-        for seg in range(num_curve_segments):
-            # 每个曲线段生成多个采样点，确保曲线连续性
-            samples_per_segment = max(10, segments // num_curve_segments)
+        # 计算曲线总长度
+        total_length = self.calculate_curve_length(points)
+        if total_length == 0:
+            return []
 
-            for j in range(samples_per_segment):
-                t_local = j / (samples_per_segment - 1) if samples_per_segment > 1 else 0.5
+        path_coords = []
 
-                # 使用Catmull-Rom生成曲线点
-                point = self.catmull_rom(points, seg, t_local)
-                path_coords.append(point)
+        # 基于弧长均匀分布点
+        for i in range(segments):
+            # 计算目标弧长（从0到总长度）
+            if segments == 1:
+                target_arc_length = total_length / 2  # 单个点放在中间
+            else:
+                target_arc_length = (i / (segments - 1)) * total_length
 
-        # 如果生成的采样点数量超过目标段数，进行均匀采样
-        if len(path_coords) > segments:
-            # 均匀采样到目标段数
-            step = len(path_coords) / segments
-            sampled_coords = []
-            for i in range(segments):
-                index = min(len(path_coords) - 1, int(i * step))
-                sampled_coords.append(path_coords[index])
-            path_coords = sampled_coords
-        elif len(path_coords) < segments:
-            # 如果采样点不足，使用线性插值补充
-            while len(path_coords) < segments:
-                path_coords.append(path_coords[-1])
+            # 找到对应的曲线段和参数t
+            segment_index, t = self.find_t_for_arc_length(points, target_arc_length)
+
+            # 生成曲线点
+            point = self.catmull_rom(points, segment_index, t)
+            path_coords.append(point)
 
         return path_coords
 
@@ -209,17 +203,121 @@ class XIS_CoordinatePath:
         t2 = t * t
         t3 = t2 * t
 
-        x = 0.5 * ((2 * p1["x"]) + 
-                  (-p0["x"] + p2["x"]) * t + 
-                  (2 * p0["x"] - 5 * p1["x"] + 4 * p2["x"] - p3["x"]) * t2 + 
+        x = 0.5 * ((2 * p1["x"]) +
+                  (-p0["x"] + p2["x"]) * t +
+                  (2 * p0["x"] - 5 * p1["x"] + 4 * p2["x"] - p3["x"]) * t2 +
                   (-p0["x"] + 3 * p1["x"] - 3 * p2["x"] + p3["x"]) * t3)
 
-        y = 0.5 * ((2 * p1["y"]) + 
-                  (-p0["y"] + p2["y"]) * t + 
-                  (2 * p0["y"] - 5 * p1["y"] + 4 * p2["y"] - p3["y"]) * t2 + 
+        y = 0.5 * ((2 * p1["y"]) +
+                  (-p0["y"] + p2["y"]) * t +
+                  (2 * p0["y"] - 5 * p1["y"] + 4 * p2["y"] - p3["y"]) * t2 +
                   (-p0["y"] + 3 * p1["y"] - 3 * p2["y"] + p3["y"]) * t3)
 
         return {"x": x, "y": y}
+
+    def calculate_curve_length(self, points: List[Dict[str, float]], samples_per_segment: int = 100) -> float:
+        """
+        Calculate the total length of the Catmull-Rom curve.
+
+        Args:
+            points: Control points with virtual endpoints
+            samples_per_segment: Number of samples per curve segment for length calculation
+
+        Returns:
+            Total curve length
+        """
+        num_curve_segments = len(points) - 3
+        if num_curve_segments <= 0:
+            return 0.0
+
+        total_length = 0.0
+
+        for seg in range(num_curve_segments):
+            # Sample points along the curve segment
+            prev_point = self.catmull_rom(points, seg, 0.0)
+            for j in range(1, samples_per_segment + 1):
+                t = j / samples_per_segment
+                current_point = self.catmull_rom(points, seg, t)
+
+                # Calculate distance between consecutive points
+                dx = current_point["x"] - prev_point["x"]
+                dy = current_point["y"] - prev_point["y"]
+                segment_length = np.sqrt(dx * dx + dy * dy)
+                total_length += segment_length
+
+                prev_point = current_point
+
+        return total_length
+
+    def find_t_for_arc_length(self, points: List[Dict[str, float]], target_arc_length: float,
+                            samples_per_segment: int = 100) -> tuple:
+        """
+        Find the curve segment and parameter t that corresponds to a given arc length.
+
+        Args:
+            points: Control points with virtual endpoints
+            target_arc_length: Target arc length along the curve
+            samples_per_segment: Number of samples per segment for length calculation
+
+        Returns:
+            Tuple of (segment_index, t) that corresponds to the target arc length
+        """
+        num_curve_segments = len(points) - 3
+        if num_curve_segments <= 0:
+            return (0, 0.0)
+
+        accumulated_length = 0.0
+
+        for seg in range(num_curve_segments):
+            # Calculate segment length
+            prev_point = self.catmull_rom(points, seg, 0.0)
+            segment_length = 0.0
+
+            for j in range(1, samples_per_segment + 1):
+                t = j / samples_per_segment
+                current_point = self.catmull_rom(points, seg, t)
+
+                dx = current_point["x"] - prev_point["x"]
+                dy = current_point["y"] - prev_point["y"]
+                segment_length += np.sqrt(dx * dx + dy * dy)
+                prev_point = current_point
+
+            # Check if target is within this segment
+            if accumulated_length + segment_length >= target_arc_length:
+                # Find exact t within this segment
+                remaining_length = target_arc_length - accumulated_length
+
+                prev_point = self.catmull_rom(points, seg, 0.0)
+                current_length = 0.0
+
+                for j in range(1, samples_per_segment + 1):
+                    t = j / samples_per_segment
+                    current_point = self.catmull_rom(points, seg, t)
+
+                    dx = current_point["x"] - prev_point["x"]
+                    dy = current_point["y"] - prev_point["y"]
+                    step_length = np.sqrt(dx * dx + dy * dy)
+
+                    if current_length + step_length >= remaining_length:
+                        # Interpolate t based on remaining distance
+                        if step_length > 0:
+                            t_interp = (remaining_length - current_length) / step_length
+                            final_t = (j - 1) / samples_per_segment + t_interp / samples_per_segment
+                        else:
+                            final_t = (j - 1) / samples_per_segment
+
+                        return (seg, max(0.0, min(1.0, final_t)))
+
+                    current_length += step_length
+                    prev_point = current_point
+
+                # If we reach here, return the end of the segment
+                return (seg, 1.0)
+
+            accumulated_length += segment_length
+
+        # If target length exceeds total length, return last segment end
+        return (num_curve_segments - 1, 1.0)
 
 
     def execute(self, width: int, height: int, path_segments: int, path_mode: str, path_canvas: Dict[str, Any]) -> tuple:

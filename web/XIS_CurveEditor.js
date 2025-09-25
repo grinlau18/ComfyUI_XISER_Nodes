@@ -54,8 +54,8 @@ async function initializeNode(node) {
   }
 
   // 添加初始化防护标志，防止重复初始化
-  if (node._initializing) {
-    log.warning(`Node ${node.id} is already initializing, skipping duplicate initialization`);
+  if (node._initializing || node._initialized) {
+    log.warning(`Node ${node.id} is already initializing or initialized, skipping duplicate initialization`);
     return;
   }
 
@@ -75,7 +75,9 @@ async function initializeNode(node) {
     // 直接调用setupCanvas进行初始化
     setupCanvas(node);
     setupInputListeners(node);
-    updateDisplay(node);
+
+    // 不在这里调用updateDisplay，因为setupCanvas中的initializeCanvas会处理绘制
+    // updateDisplay(node);
 
     log.info(`Node ${node.id} initialized successfully`);
   } catch (error) {
@@ -171,23 +173,11 @@ app.registerExtension({
         );
       }
 
-      // 使用分阶段延迟初始化策略，避免多个节点并发初始化时的竞争条件
-      const initializeWithDelay = async (delay) => {
-        setTimeout(async () => {
-          if (node && !node._removed && !node._initializing) {
-            log.info(`Node ${node.id} starting delayed initialization with ${delay}ms delay`);
-            await initializeNode(node);
-            log.info(`Node ${node.id} delayed initialization completed`);
-          }
-        }, delay);
-      };
-
-      // 分阶段初始化：立即、50ms、100ms、200ms
-      // 这样可以避免多个节点同时初始化时的竞争条件
-      initializeWithDelay(0);
-      initializeWithDelay(50);
-      initializeWithDelay(100);
-      initializeWithDelay(200);
+      // 对于已有有效ID的节点，在配置阶段处理初始化
+      // 避免在nodeCreated和onConfigure中重复初始化
+      if (node.id !== -1) {
+        log.info(`Node ${node.id} has valid ID, initialization will be handled in onConfigure`);
+      }
     }
   },
 
@@ -215,18 +205,46 @@ app.registerExtension({
 
         log.info(`Node ${this.id} configured`);
 
+        // 防止重复调度初始化
+        if (this._initializationScheduled) {
+          log.warning(`Node ${this.id} initialization already scheduled, skipping`);
+          return;
+        }
+        this._initializationScheduled = true;
+
         // 对于临时节点（ID为-1），延迟初始化直到获得有效ID
         if (this.id === -1) {
           log.info(`Node ${this.id} is temporary, waiting for valid ID`);
           const checkValidId = async () => {
             if (this.id !== -1 && !this._removed && !this._initializing) {
               log.info(`Node ${this.id} now has valid ID, starting initialization`);
-              await initializeNode(this);
+
+              // 使用基于节点ID的延迟初始化策略
+              const nodeHash = Math.abs(this.id) % 100;
+              const delay = 100 + (nodeHash * 50);
+
+              setTimeout(async () => {
+                if (!this._removed && !this._initializing) {
+                  await initializeNode(this);
+                  this._initialized = true;
+                }
+              }, delay);
             } else if (this.id === -1 && !this._removed) {
               setTimeout(checkValidId, 100);
             }
           };
           checkValidId();
+        } else {
+          // 对于已有有效ID的节点，直接使用延迟初始化策略
+          const nodeHash = Math.abs(this.id) % 100;
+          const delay = 100 + (nodeHash * 50);
+
+          setTimeout(async () => {
+            if (!this._removed && !this._initializing) {
+              await initializeNode(this);
+              this._initialized = true;
+            }
+          }, delay);
         }
       };
 
@@ -264,13 +282,14 @@ app.registerExtension({
           `.xiser-curve-node-${this.id}`,
           `.xiser-curve-canvas-container-${this.id}`,
           `.xiser-control-panel-${this.id}`,
-          `[data-node-id="${this.id}"]`
+          `[data-node-id="${this.id}"]`,
+          `#curve-canvas-${this.id}`
         ];
 
         selectors.forEach(selector => {
           document.querySelectorAll(selector).forEach(el => {
             if (el.parentNode) {
-              log.info(`Node ${this.id} removing element:`, el.className || selector);
+              log.info(`Node ${this.id} removing element:`, selector);
               el.remove();
             }
           });
@@ -285,6 +304,11 @@ app.registerExtension({
         this._nodeCreatedProcessed = false;
         this._configured = false;
         this._resizing = false;
+        this._initialized = false;
+        this._canvasSetupInProgress = false;
+        this._canvasInitialized = false;
+        this._updatingDisplay = false;
+        this._initializationScheduled = false;
 
         log.info(`Node ${this.id} completely removed`);
       };
