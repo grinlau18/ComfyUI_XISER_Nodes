@@ -58,6 +58,7 @@ class XISER_Canvas:
             },
             "optional": {
                 "file_data": ("FILE_DATA", {"default": None}),
+                "canvas_config": ("CANVAS_CONFIG", {}),  # 支持从上游节点传入控件配置
             },
         }
 
@@ -206,17 +207,39 @@ class XISER_Canvas:
         auto_size: str,
         image_states: str,
         file_data=None,
+        canvas_config=None,
     ):
         logger.info(
             f"Instance {self.instance_id} - Rendering with inputs: board_width={board_width}, board_height={board_height}, "
             f"border_width={border_width}, canvas_color={canvas_color}, auto_size={auto_size}, "
-            f"file_data={'present' if file_data else 'None'}"
+            f"file_data={'present' if file_data else 'None'}, "
+            f"canvas_config={'present' if canvas_config else 'None'}"
         )
 
         # Validate inputs
         if pack_images is None:
             logger.error(f"Instance {self.instance_id} - images input cannot be None")
             raise ValueError("images input must be provided")
+
+        # Handle canvas_config from upstream node
+        if canvas_config:
+            logger.info(f"Instance {self.instance_id} - Processing canvas_config: {canvas_config}")
+            # Update parameters from canvas_config
+            if "board_width" in canvas_config:
+                board_width = max(256, min(8192, int(canvas_config["board_width"])))
+                logger.info(f"Instance {self.instance_id} - Updated board_width from canvas_config: {board_width}")
+            if "board_height" in canvas_config:
+                board_height = max(256, min(8192, int(canvas_config["board_height"])))
+                logger.info(f"Instance {self.instance_id} - Updated board_height from canvas_config: {board_height}")
+            if "border_width" in canvas_config:
+                border_width = max(10, min(200, int(canvas_config["border_width"])))
+                logger.info(f"Instance {self.instance_id} - Updated border_width from canvas_config: {border_width}")
+            if "canvas_color" in canvas_config and canvas_config["canvas_color"] in ["black", "white", "transparent"]:
+                canvas_color = canvas_config["canvas_color"]
+                logger.info(f"Instance {self.instance_id} - Updated canvas_color from canvas_config: {canvas_color}")
+            if "auto_size" in canvas_config and canvas_config["auto_size"] in ["off", "on"]:
+                auto_size = canvas_config["auto_size"]
+                logger.info(f"Instance {self.instance_id} - Updated auto_size from canvas_config: {auto_size}")
 
         if not isinstance(pack_images, list):
             logger.error(f"Instance {self.instance_id} - Invalid images input: expected list, got {type(pack_images)}")

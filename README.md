@@ -156,7 +156,7 @@ Email: <grinlau18@gmail.com>
 ## 7. sampling.py
 - **功能**：提供高级采样和潜在空间混合节点。
 - **节点**：
-  - `XIS_DynamicBatchKSampler`：动态批量采样，支持多种去噪曲线（线性、二次、三次、指数等）。
+  - `XIS_DynamicKSampler`：动态批量采样，支持多种去噪曲线和CFG曲线（线性、二次、三次、指数等）。
   - `XIS_LatentBlendNode`：混合两个潜在空间，支持多种混合模式（线性、Sigmoid、Ease-in/out）。
 - **用途**：生成高质量图像，优化采样过程。
 

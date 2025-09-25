@@ -1,0 +1,305 @@
+/**
+ * @file XIS_CurveEditor.js
+ * @description ComfyUI 节点注册和前端逻辑，用于曲线编辑器节点。
+ * @author grinlau18
+ */
+
+import { app } from "/scripts/app.js";
+import { setupCanvas, updateDisplay, setupInputListeners, updateCanvasSize } from "./XIS_CurveEditor_canvas.js";
+
+// 日志级别控制
+const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
+
+// 节点最小尺寸配置 (方便手动修改)
+const MIN_NODE_WIDTH = 440;   // 节点最小宽度 (px)
+const MIN_NODE_HEIGHT = 580;  // 节点最小高度 (px)
+
+/**
+ * 确保节点ID有效
+ * @param {Object} node - 节点实例
+ * @returns {Promise<number>} 有效的节点ID
+ */
+async function ensureNodeId(node) {
+  let attempts = 0;
+  const maxAttempts = 50; // 最多尝试50次（5秒）
+
+  while (node.id === -1 && attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+
+  if (node.id === -1) {
+    log.warning(`Node ${node.id}: Failed to get valid node ID after ${maxAttempts} attempts`);
+    return -1;
+  }
+
+  return node.id;
+}
+
+/**
+ * 初始化节点 - 直接调用setupCanvas进行初始化
+ * @param {Object} node - 节点实例
+ */
+async function initializeNode(node) {
+  if (!node || node._removed) {
+    log.warning(`Node ${node?.id || 'unknown'} is invalid or removed, skipping initialization`);
+    return;
+  }
+
+  // 确保节点ID有效
+  const validId = await ensureNodeId(node);
+  if (validId === -1) {
+    log.error(`Node ${node.id} has invalid ID, skipping initialization`);
+    return;
+  }
+
+  // 添加初始化防护标志，防止重复初始化
+  if (node._initializing) {
+    log.warning(`Node ${node.id} is already initializing, skipping duplicate initialization`);
+    return;
+  }
+
+  try {
+    node._initializing = true;
+
+    // 设置初始节点大小（使用防护标志避免递归）
+    if (!node._resizing) {
+      node._resizing = true;
+      node.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+      if (node.setSize && LGraphNode && LGraphNode.prototype.setSize) {
+        LGraphNode.prototype.setSize.call(node, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
+      }
+      node._resizing = false;
+    }
+
+    // 直接调用setupCanvas进行初始化
+    setupCanvas(node);
+    setupInputListeners(node);
+    updateDisplay(node);
+
+    log.info(`Node ${node.id} initialized successfully`);
+  } catch (error) {
+    log.error(`Node ${node.id} initialization error:`, error);
+  } finally {
+    node._initializing = false;
+  }
+}
+
+/**
+ * 日志工具
+ * @type {Object}
+ */
+const log = {
+  info: (...args) => { if (LOG_LEVEL === "info") console.log(...args); },
+  warning: (...args) => { if (LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.warn(...args); },
+  error: (...args) => { if (LOG_LEVEL === "error" || LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.error(...args); }
+};
+
+// 注册扩展
+app.registerExtension({
+  name: "XISER.CurveEditor",
+
+  /**
+   * 节点创建时初始化 UI 和监听器
+   * @param {Object} node - 节点实例
+   */
+  nodeCreated(node) {
+    if (node.comfyClass === "XIS_CurveEditor") {
+      log.info(`Node ${node.id} created`);
+
+      // 添加节点创建防护标志，防止重复处理
+      if (node._nodeCreatedProcessed) {
+        log.warning(`Node ${node.id} nodeCreated already processed, skipping`);
+        return;
+      }
+      node._nodeCreatedProcessed = true;
+
+      // 仅在必要时初始化默认属性，避免覆盖已有状态（特别是复制节点时）
+      const defaultProperties = {
+        curve_points: [
+          { x: 0, y: 0 },
+          { x: 1, y: 1 }
+        ],
+        node_size: [MIN_NODE_WIDTH, MIN_NODE_HEIGHT],
+        data_type: "FLOAT",
+        start_value: "0",
+        end_value: "1",
+        point_count: 10
+      };
+
+      // 仅为未定义的属性设置默认值
+      node.properties = node.properties || {};
+      Object.keys(defaultProperties).forEach(key => {
+        if (node.properties[key] === undefined) {
+          node.properties[key] = defaultProperties[key];
+        }
+      });
+
+      // 确保属性对象是独立的，不是共享引用（但保持已有值）
+      if (Array.isArray(node.properties.curve_points)) {
+        node.properties.curve_points = node.properties.curve_points.map(p => ({...p}));
+      }
+      if (Array.isArray(node.properties.node_size)) {
+        node.properties.node_size = [...node.properties.node_size];
+      }
+
+      // 设置初始节点大小
+      node.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+      // 使用LiteGraph的原型方法避免递归（与XIS_CreateShape_Konva.js保持一致）
+      if (node.setSize && LGraphNode && LGraphNode.prototype.setSize) {
+        LGraphNode.prototype.setSize.call(node, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
+      }
+
+      // 清理可能存在的旧DOM元素（防止节点复制和刷新时冲突）
+      const selectors = [
+        `.xiser-curve-node-${node.id}`,
+        `.xiser-curve-canvas-container-${node.id}`,
+        `.xiser-control-panel-${node.id}`,
+        `[data-node-id="${node.id}"]`
+      ];
+
+      selectors.forEach(selector => {
+        document.querySelectorAll(selector).forEach(el => {
+          el.remove();
+        });
+      });
+
+      // 清理可能存在的旧widget（防止节点复制时冲突）
+      if (node.widgets) {
+        node.widgets = node.widgets.filter(widget =>
+          !widget.name || !widget.name.includes('curve_editor')
+        );
+      }
+
+      // 使用分阶段延迟初始化策略，避免多个节点并发初始化时的竞争条件
+      const initializeWithDelay = async (delay) => {
+        setTimeout(async () => {
+          if (node && !node._removed && !node._initializing) {
+            log.info(`Node ${node.id} starting delayed initialization with ${delay}ms delay`);
+            await initializeNode(node);
+            log.info(`Node ${node.id} delayed initialization completed`);
+          }
+        }, delay);
+      };
+
+      // 分阶段初始化：立即、50ms、100ms、200ms
+      // 这样可以避免多个节点同时初始化时的竞争条件
+      initializeWithDelay(0);
+      initializeWithDelay(50);
+      initializeWithDelay(100);
+      initializeWithDelay(200);
+    }
+  },
+
+  /**
+   * 定义节点并重写执行逻辑
+   * @param {Object} nodeType - 节点类型
+   * @param {Object} nodeData - 节点数据
+   * @param {Object} app - ComfyUI 应用实例
+   */
+  beforeRegisterNodeDef(nodeType, nodeData, app) {
+    if (nodeData.name === "XIS_CurveEditor") {
+      nodeType.prototype.comfyClass = "XIS_CurveEditor";
+
+      // 处理节点配置（简化版本，不需要复杂的临时节点处理）
+      const origOnConfigure = nodeType.prototype.onConfigure;
+      nodeType.prototype.onConfigure = function (config) {
+        if (origOnConfigure) origOnConfigure.apply(this, [config]);
+
+        // 添加配置防护标志，防止重复配置
+        if (this._configured) {
+          log.warning(`Node ${this.id} already configured, skipping`);
+          return;
+        }
+        this._configured = true;
+
+        log.info(`Node ${this.id} configured`);
+
+        // 对于临时节点（ID为-1），延迟初始化直到获得有效ID
+        if (this.id === -1) {
+          log.info(`Node ${this.id} is temporary, waiting for valid ID`);
+          const checkValidId = async () => {
+            if (this.id !== -1 && !this._removed && !this._initializing) {
+              log.info(`Node ${this.id} now has valid ID, starting initialization`);
+              await initializeNode(this);
+            } else if (this.id === -1 && !this._removed) {
+              setTimeout(checkValidId, 100);
+            }
+          };
+          checkValidId();
+        }
+      };
+
+      // 处理节点调整大小 - 防止手动调整小于最小尺寸
+      nodeType.prototype.onResize = function (size) {
+        if (this.id === -1 || this._removed) return;
+
+        // 如果尝试调整的尺寸小于最小尺寸，强制设置为最小尺寸
+        const newWidth = size ? size[0] : this.size[0];
+        const newHeight = size ? size[1] : this.size[1];
+
+        if (newWidth < MIN_NODE_WIDTH || newHeight < MIN_NODE_HEIGHT) {
+          // 使用防护标志避免递归调用
+          if (!this._resizing) {
+            this._resizing = true;
+            // 直接设置最小尺寸，使用LiteGraph的原型方法避免递归
+            this.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+            if (this.setSize && LGraphNode && LGraphNode.prototype.setSize) {
+              LGraphNode.prototype.setSize.call(this, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
+            }
+            this.properties.node_size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+            this._resizing = false;
+            log.info(`Node ${this.id} resize enforced to: ${MIN_NODE_WIDTH}x${MIN_NODE_HEIGHT}`);
+          }
+        }
+      };
+
+      // 处理节点移除
+      nodeType.prototype.onRemoved = function () {
+        // 标记节点为已移除
+        this._removed = true;
+
+        // 清理DOM元素
+        const selectors = [
+          `.xiser-curve-node-${this.id}`,
+          `.xiser-curve-canvas-container-${this.id}`,
+          `.xiser-control-panel-${this.id}`,
+          `[data-node-id="${this.id}"]`
+        ];
+
+        selectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(el => {
+            if (el.parentNode) {
+              log.info(`Node ${this.id} removing element:`, el.className || selector);
+              el.remove();
+            }
+          });
+        });
+
+        // 清理所有相关状态
+        this.widgets = [];
+        this.canvas = null;
+        this.ctx = null;
+        this._curveState = null;
+        this._initializing = false;
+        this._nodeCreatedProcessed = false;
+        this._configured = false;
+        this._resizing = false;
+
+        log.info(`Node ${this.id} completely removed`);
+      };
+    }
+  },
+
+  /**
+   * 设置扩展样式
+   */
+  setup() {
+    const style = document.createElement("style");
+    style.textContent = `
+      /* 移除全局样式定义，改为内联样式避免冲突 */
+    `;
+    document.head.appendChild(style);
+    log.info("XISER.CurveEditor extension styles applied");
+  }
+});

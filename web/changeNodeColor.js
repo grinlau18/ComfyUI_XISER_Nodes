@@ -1,23 +1,42 @@
 import { app } from "/scripts/app.js";
 
-// 96 种预设颜色
+// 现代预设颜色 - 柔和舒适的色彩选择
 const PRESET_COLORS = [
-    "#FF0000", "#B71C1C", "#D81B60", "#E91E63", "#F44336", "#FF5252",
-    "#FF9800", "#F57C00", "#FF5722", "#FF6E40", "#FF8A65", "#FFA726",
-    "#FFFF00", "#FFCA28", "#FFB300", "#FFD740", "#FFEB3B", "#FFF176",
-    "#4CAF50", "#2E7D32", "#00C853", "#43A047", "#66BB6A", "#81C784",
-    "#00BCD4", "#00838F", "#00695C", "#0097A7", "#26A69A", "#4DD0E1",
-    "#2196F3", "#1565C0", "#0288D1", "#1976D2", "#42A5F5", "#90CAF9",
-    "#9C27B0", "#6A1B9A", "#7B1FA2", "#AB47BC", "#CE93D8", "#E040FB",
-    "#FFFFFF", "#F5F5F5", "#E0E0E0", "#B0BEC5", "#000000", "#212121",
-    "#663333", "#5C2E2E", "#4D2626", "#773939", "#6B3333", "#803D3D",
-    "#664C33", "#5C442E", "#4D3A26", "#775839", "#6B5033", "#80633D",
-    "#666633", "#5C5C2E", "#4D4D26", "#777739", "#6B6B33", "#80803D",
-    "#336633", "#2E5C2E", "#264D26", "#397739", "#336B33", "#3D803D",
-    "#336666", "#2E5C5C", "#264D4D", "#397777", "#336B6B", "#3D8080",
-    "#333366", "#2E2E5C", "#26264D", "#393977", "#33336B", "#3D3D80",
-    "#553366", "#4B2E5C", "#3F264D", "#643977", "#59336B", "#6B3D80",
-    "#333333", "#2A2A2A", "#222222", "#1A1A1A", "#111111", "#000000"
+    // 红色系 (柔和的红橙到酒红)
+    "#FF8A65", "#FF7043", "#FF5722", "#F4511E", "#E64A19", "#D84315",
+    "#C62828", "#B71C1C", "#A21212", "#8D0000", "#781414", "#631F1F",
+
+    // 棕色系 (温暖的棕褐色到深咖啡)
+    "#BCAAA4", "#A1887F", "#8D6E63", "#795548", "#6D4C41", "#5D4037",
+    "#8B4513", "#7A3D10", "#69350D", "#582D0A", "#472507", "#361D04",
+
+    // 绿色系 (柔和的黄绿到深橄榄)
+    "#AED581", "#9CCC65", "#8BC34A", "#7CB342", "#689F38", "#558B2F",
+    "#4CAF50", "#43A047", "#388E3C", "#2E7D32", "#1B5E20", "#0D4D16",
+
+    // 蓝色系 (柔和的天空蓝到深海军)
+    "#81D4FA", "#4FC3F7", "#29B6F6", "#03A9F4", "#039BE5", "#0288D1",
+    "#1976D2", "#1565C0", "#0D47A1", "#083D8C", "#063377", "#042962",
+
+    // 紫红色系 (柔和的粉红到深紫红)
+    "#F8BBD0", "#F48FB1", "#F06292", "#EC407A", "#E91E63", "#D81B60",
+    "#C2185B", "#AD1457", "#880E4F", "#6A1B5A", "#4A148C", "#38006B",
+
+    // 青色系 (清新的青绿到深青)
+    "#80DEEA", "#4DD0E1", "#26C6DA", "#00BCD4", "#00ACC1", "#0097A7",
+    "#00838F", "#006F79", "#005B63", "#00474D", "#003337", "#001F21",
+
+    // 紫色系 (柔和的薰衣草到深紫)
+    "#CE93D8", "#BA68C8", "#AB47BC", "#9C27B0", "#8E24AA", "#7B1FA2",
+    "#6A1B9A", "#5D1782", "#50136A", "#430F52", "#360B3A", "#290722",
+
+    // 黄色系 (柔和的奶油黄到深琥珀)
+    "#FFF176", "#FFEE58", "#FFEB3B", "#FDD835", "#FBC02D", "#F9A825",
+    "#F57F17", "#E7711B", "#D5631F", "#C35523", "#B14727", "#9F392B",
+
+    // 中性色系 (柔和的灰阶)
+    "#FAFAFA", "#F5F5F5", "#EEEEEE", "#E0E0E0", "#BDBDBD", "#9E9E9E",
+    "#757575", "#616161", "#424242", "#303030", "#212121", "#121212"
 ];
 
 function createColorPickerDialog(defaultColor, callback) {
@@ -42,8 +61,8 @@ function createColorPickerDialog(defaultColor, callback) {
     dialog.style.zIndex = "10000";
     dialog.style.color = textColor;
     dialog.style.fontFamily = "Arial, sans-serif";
-    dialog.style.width = "440px";
-    dialog.style.maxHeight = "600px";
+    dialog.style.width = "500px";
+    dialog.style.maxHeight = "900px";
     dialog.style.overflowY = "auto";
 
     const title = document.createElement("h3");
@@ -59,86 +78,50 @@ function createColorPickerDialog(defaultColor, callback) {
     colorInput.style.marginBottom = "10px";
     dialog.appendChild(colorInput);
 
-    // 鲜艳颜色
-    const vibrantLabel = document.createElement("div");
-    vibrantLabel.textContent = "鲜艳颜色";
-    vibrantLabel.style.margin = "10px 0 5px";
-    vibrantLabel.style.fontSize = "14px";
-    dialog.appendChild(vibrantLabel);
+    // 创建所有色系的分类
+    const colorCategories = [
+        { name: "红色系", start: 0, end: 11 },
+        { name: "棕色系", start: 12, end: 23 },
+        { name: "绿色系", start: 24, end: 35 },
+        { name: "蓝色系", start: 36, end: 47 },
+        { name: "淡蓝色系", start: 48, end: 59 },
+        { name: "青色系", start: 60, end: 71 },
+        { name: "紫色系", start: 72, end: 83 },
+        { name: "黄色系", start: 84, end: 95 },
+        { name: "中性色系", start: 96, end: 107 }
+    ];
 
-    const vibrantContainer = document.createElement("div");
-    vibrantContainer.style.display = "grid";
-    vibrantContainer.style.gridTemplateColumns = "repeat(12, 30px)";
-    vibrantContainer.style.gap = "4px";
-    vibrantContainer.style.marginBottom = "10px";
-    PRESET_COLORS.slice(0, 48).forEach(color => {
-        const swatch = document.createElement("div");
-        swatch.style.backgroundColor = color;
-        swatch.style.width = "30px";
-        swatch.style.height = "30px";
-        swatch.style.border = `1px solid ${borderColor}`;
-        swatch.style.cursor = "pointer";
-        swatch.addEventListener("click", () => {
-            colorInput.value = color;
-            colorInput.dispatchEvent(new Event("change"));
-        });
-        vibrantContainer.appendChild(swatch);
+    colorCategories.forEach(category => {
+        const categoryLabel = document.createElement("div");
+        categoryLabel.textContent = category.name;
+        categoryLabel.style.margin = "10px 0 5px";
+        categoryLabel.style.fontSize = "14px";
+        categoryLabel.style.fontWeight = "bold";
+        dialog.appendChild(categoryLabel);
+
+        const categoryContainer = document.createElement("div");
+        categoryContainer.style.display = "grid";
+        categoryContainer.style.gridTemplateColumns = "repeat(12, 30px)";
+        categoryContainer.style.gap = "4px";
+        categoryContainer.style.marginBottom = "10px";
+
+        for (let i = category.start; i <= category.end; i++) {
+            const color = PRESET_COLORS[i];
+            const swatch = document.createElement("div");
+            swatch.style.backgroundColor = color;
+            swatch.style.width = "30px";
+            swatch.style.height = "30px";
+            swatch.style.border = `1px solid ${borderColor}`;
+            swatch.style.cursor = "pointer";
+            swatch.addEventListener("click", () => {
+                colorInput.value = color;
+                colorInput.dispatchEvent(new Event("change"));
+            });
+            categoryContainer.appendChild(swatch);
+        }
+
+        dialog.appendChild(categoryContainer);
     });
-    dialog.appendChild(vibrantContainer);
-
-    // 低饱和颜色
-    const mutedLabel = document.createElement("div");
-    mutedLabel.textContent = "低饱和颜色";
-    mutedLabel.style.margin = "10px 0 5px";
-    mutedLabel.style.fontSize = "14px";
-    dialog.appendChild(mutedLabel);
-
-    const mutedContainer = document.createElement("div");
-    mutedContainer.style.display = "grid";
-    mutedContainer.style.gridTemplateColumns = "repeat(12, 30px)";
-    mutedContainer.style.gap = "4px";
-    mutedContainer.style.marginBottom = "10px";
-    PRESET_COLORS.slice(48, 90).forEach(color => {
-        const swatch = document.createElement("div");
-        swatch.style.backgroundColor = color;
-        swatch.style.width = "30px";
-        swatch.style.height = "30px";
-        swatch.style.border = `1px solid ${borderColor}`;
-        swatch.style.cursor = "pointer";
-        swatch.addEventListener("click", () => {
-            colorInput.value = color;
-            colorInput.dispatchEvent(new Event("change"));
-        });
-        mutedContainer.appendChild(swatch);
-    });
-    dialog.appendChild(mutedContainer);
-
-    // 深灰到黑色
-    const darkLabel = document.createElement("div");
-    darkLabel.textContent = "深灰到黑色";
-    darkLabel.style.margin = "10px 0 5px";
-    darkLabel.style.fontSize = "14px";
-    dialog.appendChild(darkLabel);
-
-    const darkContainer = document.createElement("div");
-    darkContainer.style.display = "grid";
-    darkContainer.style.gridTemplateColumns = "repeat(6, 30px)";
-    darkContainer.style.gap = "4px";
-    darkContainer.style.marginBottom = "10px";
-    PRESET_COLORS.slice(90, 96).forEach(color => {
-        const swatch = document.createElement("div");
-        swatch.style.backgroundColor = color;
-        swatch.style.width = "30px";
-        swatch.style.height = "30px";
-        swatch.style.border = `1px solid ${borderColor}`;
-        swatch.style.cursor = "pointer";
-        swatch.addEventListener("click", () => {
-            colorInput.value = color;
-            colorInput.dispatchEvent(new Event("change"));
-        });
-        darkContainer.appendChild(swatch);
-    });
-    dialog.appendChild(darkContainer);
 
     const eyeDropperButton = document.createElement("button");
     eyeDropperButton.textContent = "吸管";

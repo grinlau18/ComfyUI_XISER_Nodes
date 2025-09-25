@@ -19,7 +19,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 # Log level control
-LOG_LEVEL = "error"  # Options: "info", "warning", "error"
+LOG_LEVEL = "info"  # Options: "info", "warning", "error", "debug"
 
 # Initialize logger
 logger = logging.getLogger("XISER_ReorderImages")
@@ -28,6 +28,8 @@ logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.ERROR))
 # Cleanup threshold for old files (7 days)
 CLEANUP_THRESHOLD_SECONDS = 7 * 24 * 60 * 60
 CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60  # Run cleanup every 24 hours
+
+# State version tracking removed - now handled through widget system
 
 class XIS_ReorderImages:
     """A custom node for reordering images with frontend-managed state."""
@@ -68,20 +70,40 @@ class XIS_ReorderImages:
     @classmethod
     def IS_CHANGED(cls, pack_images, image_order="[]", node_id="", **kwargs):
         """Compute a lightweight hash to determine if node execution is needed."""
+        # IS_CHANGED is called BEFORE node execution and should only depend on input parameters
+        # not on any node state that gets updated during execution
+        
         hasher = hashlib.sha256()
-        # Hash image metadata instead of full content
+        
+        # Hash pack_images input - this is the primary source of changes
         if pack_images is not None and isinstance(pack_images, list):
+            image_count = len(pack_images)
+            hasher.update(f"count:{image_count}".encode('utf-8'))
             for i, img in enumerate(pack_images):
                 if isinstance(img, torch.Tensor):
-                    hasher.update(f"{i}:{img.shape}".encode('utf-8'))
-        hasher.update(image_order.encode('utf-8'))
-        instance = kwargs.get('instance', {})
-        properties = instance.get('properties', {})
-        hasher.update(json.dumps({
-            'enabled_layers': properties.get('enabled_layers', []),
-            'is_single_mode': properties.get('is_single_mode', False)
-        }, sort_keys=True).encode('utf-8'))
+                    # Hash tensor metadata and a content sample
+                    hasher.update(f"{i}:{tuple(img.shape)}:{img.dtype}:{img.device}".encode('utf-8'))
+                    if img.numel() > 0:
+                        # Sample content for change detection
+                        sample_size = min(10, img.numel())
+                        step = max(1, img.numel() // sample_size)
+                        sample_indices = torch.arange(0, img.numel(), step)[:sample_size]
+                        sample_values = img.view(-1)[sample_indices]
+                        hasher.update(sample_values.cpu().numpy().tobytes())
+        else:
+            hasher.update("none".encode('utf-8'))
+        
+        # IMPORTANT: Do NOT hash widget values (image_order)
+        # Widget values change after execution due to frontend state updates and would
+        # prevent proper caching. The frontend state should be managed separately
+        # from the execution caching logic.
+        
+        # DEBUG: Log basic information for troubleshooting
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"IS_CHANGED pack_images count: {len(pack_images) if pack_images else 0}")
+        
         return hasher.hexdigest()
+    
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("pack_images",)
@@ -106,10 +128,27 @@ class XIS_ReorderImages:
         return b64_data
 
     def _compute_image_hash(self, images):
-        """Compute a lightweight hash for the image list based on metadata."""
+        """Compute a content-based hash for the image list."""
         hasher = hashlib.sha256()
-        for i, img in enumerate(images):
-            hasher.update(f"{i}:{img.shape}".encode('utf-8'))
+        
+        if images is not None and isinstance(images, list):
+            image_count = len(images)
+            hasher.update(f"count:{image_count}".encode('utf-8'))
+            for i, img in enumerate(images):
+                if isinstance(img, torch.Tensor):
+                    # Include detailed tensor information for content-based change detection
+                    hasher.update(f"{i}:{tuple(img.shape)}:{img.dtype}:{img.device}".encode('utf-8'))
+                    # Include a small sample of tensor data for content-based change detection
+                    if img.numel() > 0:
+                        sample_size = min(10, img.numel())
+                        # Use deterministic sampling for consistent hashing
+                        step = max(1, img.numel() // sample_size)
+                        sample_indices = torch.arange(0, img.numel(), step)[:sample_size]
+                        sample_values = img.view(-1)[sample_indices]
+                        hasher.update(sample_values.cpu().numpy().tobytes())
+        else:
+            hasher.update("none".encode('utf-8'))
+            
         return hasher.hexdigest()
 
     def _validate_image_order(self, order, num_images):
@@ -152,7 +191,7 @@ class XIS_ReorderImages:
         """Process images, generate previews, and reorder based on frontend order."""
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"Node {node_id}: Processing {len(pack_images)} images, order: {image_order}")
-
+        
         # Validate input
         if pack_images is None or not isinstance(pack_images, list):
             if logger.isEnabledFor(logging.ERROR):
@@ -170,20 +209,55 @@ class XIS_ReorderImages:
                     logger.error(f"Node {node_id}: Invalid image format: expected RGBA torch.Tensor, got {img.shape}")
                 raise ValueError("All images must be RGBA torch.Tensor")
 
-        # Parse frontend order
+        # Parse frontend order (this is the filtered order containing only enabled images)
         try:
-            order = json.loads(image_order) if image_order and image_order != "[]" else [i for i in range(len(pack_images))]
-            order = self._validate_image_order(order, len(pack_images))
+            filtered_order = json.loads(image_order) if image_order and image_order != "[]" else [i for i in range(len(pack_images))]
+            filtered_order = self._validate_image_order(filtered_order, len(pack_images))
         except Exception as e:
             if logger.isEnabledFor(logging.ERROR):
                 logger.error(f"Node {node_id}: Failed to parse image_order: {e}")
-            order = [i for i in range(len(pack_images))]
+            filtered_order = [i for i in range(len(pack_images))]
+        
+        # Get or initialize the full order (all images, not just enabled ones)
+        full_order = self.properties.get("full_image_order")
+        if full_order is None or len(full_order) != len(pack_images):
+            # Initialize or update full order when image count changes
+            if full_order is not None and len(full_order) > 0:
+                # Preserve existing order for existing images, add new ones to end
+                valid_order = [idx for idx in full_order if isinstance(idx, int) and idx < len(pack_images)]
+                missing_indices = sorted(set(range(len(pack_images))) - set(valid_order))
+                full_order = valid_order + missing_indices
+            else:
+                full_order = [i for i in range(len(pack_images))]
+            
+            self.properties["full_image_order"] = full_order
+            if logger.isEnabledFor(logging.INFO):
+                logger.info(f"Node {node_id}: Updated full order for {len(pack_images)} images: {full_order}")
+        
+        # Use the filtered order for output (contains only enabled images)
+        order = filtered_order
 
         # Generate previews with caching
         image_previews = []
         input_hash = self._compute_image_hash(pack_images)
-        if input_hash != self.last_input_hash or not self.properties.get("image_previews"):
+        
+        # DEBUG: Log hash comparison
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Node {node_id}: input_hash={input_hash}, last_input_hash={self.last_input_hash}")
+        
+        # Check if we need to regenerate previews
+        need_new_previews = (input_hash != self.last_input_hash or 
+                           not self.properties.get("image_previews") or
+                           len(self.properties.get("image_previews", [])) != len(pack_images))
+        
+        if need_new_previews:
             self.last_input_hash = input_hash
+            # Also store in properties for IS_CHANGED access
+            self.properties["last_input_hash"] = input_hash
+            
+            # DEBUG: Log hash update
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Node {node_id}: Updating last_input_hash to {input_hash}")
             with ThreadPoolExecutor() as executor:
                 futures = []
                 for i, img_tensor in enumerate(pack_images):
@@ -192,24 +266,27 @@ class XIS_ReorderImages:
                     futures.append(executor.submit(self._generate_base64_thumbnail, pil_img))
                 image_previews = [
                     {
-                        "id": i,
+                        "id": idx,
                         "preview": future.result(),
                         "width": img.shape[1],
                         "height": img.shape[0]
-                    } for i, (img, future) in enumerate(zip(pack_images, futures))
+                    } for idx, (img, future) in enumerate(zip(pack_images, futures))
                 ]
             self.properties["image_previews"] = image_previews
         else:
             image_previews = self.properties.get("image_previews", [])
 
-        # Reordered images
+        # Reordered images - use the filtered order directly
+        # image_order parameter already contains only enabled images in the correct order
         reordered_images = [pack_images[i] for i in order if i < len(pack_images)]
 
         if logger.isEnabledFor(logging.INFO):
             logger.info(f"Node {node_id}: Returning {len(reordered_images)} images")
+        
         return {
             "ui": {
                 "image_previews": image_previews,
+                "full_image_order": full_order  # Send full order back to frontend for state maintenance
             },
             "result": (reordered_images,)
         }

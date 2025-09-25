@@ -15,7 +15,7 @@ const log = {
 };
 
 // 日志级别控制
-const LOG_LEVEL = "info"; // Options: "info", "warning", "error"
+const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
 /**
  * 防抖函数，使用 requestAnimationFrame 优化性能
@@ -67,6 +67,40 @@ export function complementaryColor(hex) {
   return `#${compRgb.map(c => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
+
+/**
+ * 优化的径向基函数 (RBF) 插值
+ * 使用高斯核函数，性能优于IDW
+ */
+function rbfInterpolation(x, y, points, sigma = 0.1) {
+  let numeratorR = 0, numeratorG = 0, numeratorB = 0;
+  let denominator = 0;
+  
+  for (const point of points) {
+    const px = point.x;
+    const py = point.y;
+    const influence = point.influence || 1.0;
+    
+    // 高斯核函数，比IDW的倒数平方更高效
+    const distance = Math.sqrt(Math.pow(x - px, 2) + Math.pow(y - py, 2));
+    const weight = Math.exp(-distance * distance / (2 * sigma * sigma * influence * influence));
+    
+    const rgb = hexToRgb(point.color);
+    numeratorR += rgb[0] * weight;
+    numeratorG += rgb[1] * weight;
+    numeratorB += rgb[2] * weight;
+    denominator += weight;
+  }
+  
+  if (denominator === 0) return [255, 255, 255];
+  
+  return [
+    Math.round(numeratorR / denominator),
+    Math.round(numeratorG / denominator),
+    Math.round(numeratorB / denominator)
+  ];
+}
+
 /**
  * 设置画布控件
  * @param {Object} node - 节点实例
@@ -76,7 +110,7 @@ export function setupCanvas(node) {
 
   // 初始化属性
   node.properties = node.properties || {};
-  // 初始化 linear 模式缓存
+  // 初始化所有模式的缓存
   if (!node.properties.linear_cache) {
     node.properties.linear_cache = [
       { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
@@ -84,74 +118,45 @@ export function setupCanvas(node) {
     ];
     log.info(`Node ${node.id} initialized default linear_cache`);
   }
+  if (!node.properties.other_modes_cache) {
+    node.properties.other_modes_cache = [
+      { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
+      { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
+    ];
+    log.info(`Node ${node.id} initialized default other_modes_cache`);
+  }
   // 初始化控制点
   if (!node.properties.control_points || node.properties.control_points.length === 0) {
     if (node.properties.interpolation === "linear") {
       node.properties.control_points = node.properties.linear_cache.slice();
       log.info(`Node ${node.id} initialized control_points from linear_cache`);
     } else {
-      node.properties.control_points = [
-        { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
-        { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
-      ];
-      log.info(`Node ${node.id} initialized default control_points`);
+      node.properties.control_points = node.properties.other_modes_cache.slice();
+      log.info(`Node ${node.id} initialized control_points from other_modes_cache`);
     }
   }
 
   // 创建主容器
   const mainContainer = document.createElement("div");
-  mainContainer.className = `xiser-gradient-container xiser-gradient-node-${node.id}`;
+  mainContainer.className = `xiser-gradient-container xiser-gradient-node xiser-gradient-node-${node.id}`;
   mainContainer.dataset.nodeId = node.id.toString();
-  mainContainer.style.cssText = `
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.6);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    position: relative;
-  `;
 
   // 创建错误消息显示
   node.errorMessage = document.createElement("div");
   node.errorMessage.className = `xiser-error-message xiser-error-message-${node.id}`;
-  node.errorMessage.style.cssText = `
-    color: #F55;
-    font-size: 12px;
-    padding: 4px 8px;
-    display: none;
-    text-align: center;
-  `;
   mainContainer.appendChild(node.errorMessage);
 
   // 创建加载动画
   node.loadingSpinner = document.createElement("div");
-  node.loadingSpinner.className = `xiser-loading-spinner node-${node.id}`;
+  node.loadingSpinner.className = `xiser-loading-spinner xiser-loading-spinner-${node.id}`;
   mainContainer.appendChild(node.loadingSpinner);
 
   // 创建画布容器
   const canvasContainer = document.createElement("div");
-  canvasContainer.className = `xiser-gradient-canvas-container-${node.id}`;
-  canvasContainer.style.cssText = `
-    flex-grow: 1;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    position: relative;
-  `;
+  canvasContainer.className = `xiser-gradient-canvas-container xiser-gradient-canvas-container-${node.id}`;
   node.canvas = document.createElement("canvas");
-  node.canvas.className = `xiser-gradient-canvas-${node.id}`;
-  node.canvas.style.cssText = `
-    display: block;
-    cursor: crosshair;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-  `;
+  node.canvas.className = `xiser-gradient-canvas xiser-gradient-canvas-${node.id}`;
+  node.canvas.style.display = "block";
   canvasContainer.appendChild(node.canvas);
   mainContainer.appendChild(canvasContainer);
   node.ctx = node.canvas.getContext("2d");
@@ -209,6 +214,8 @@ export function setupCanvas(node) {
       document.removeEventListener("click", closeHelp);
     };
     setTimeout(() => document.addEventListener("click", closeHelp), 0);
+    // Store the closeHelp function for cleanup
+    node._closeHelpHandler = closeHelp;
   });
   canvasContainer.appendChild(helpIcon);
 
@@ -240,6 +247,14 @@ export function setupCanvas(node) {
               : "#ffffff",
             influence: Math.max(0.5, Math.min(2.0, typeof point.influence === "number" ? point.influence : 1.0)),
           })),
+          other_modes_cache: (node.properties.other_modes_cache || []).slice(0, 50).map(point => ({
+            x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0.5)),
+            y: Math.max(0, Math.min(1, typeof point.y === "number" ? point.y : 0.5)),
+            color: typeof point.color === "string" && /^[0-9a-fA-F]{6}$/.test(point.color.replace(/^#/, ""))
+              ? point.color
+              : "#ffffff",
+            influence: Math.max(0.5, Math.min(2.0, typeof point.influence === "number" ? point.influence : 1.0)),
+          })),
           width: widthWidget ? Number(widthWidget.value) || 512 : (node.properties.width || 512),
           height: heightWidget ? Number(heightWidget.value) || 512 : (node.properties.height || 512),
           interpolation: interpolationWidget ? interpolationWidget.value : (node.properties.interpolation || "idw"),
@@ -259,6 +274,10 @@ export function setupCanvas(node) {
             { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
             { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
           ],
+          other_modes_cache: [
+            { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
+            { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
+          ],
           width: node.properties.width || 512,
           height: node.properties.height || 512,
           interpolation: node.properties.interpolation || "idw",
@@ -269,6 +288,12 @@ export function setupCanvas(node) {
     },
     setValue: (value) => {
       try {
+        // Only restore data if it belongs to this node or if no node_id is specified (backward compatibility)
+        if (value.node_id && value.node_id !== node.id.toString()) {
+          log.warning(`Node ${node.id} ignoring data for node ${value.node_id}`);
+          return;
+        }
+
         node.properties.control_points = (value.control_points && Array.isArray(value.control_points)
           ? value.control_points.slice(0, 50).map(point => ({
               x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0.5)),
@@ -284,6 +309,19 @@ export function setupCanvas(node) {
             ]);
         node.properties.linear_cache = (value.linear_cache && Array.isArray(value.linear_cache)
           ? value.linear_cache.slice(0, 50).map(point => ({
+              x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0.5)),
+              y: Math.max(0, Math.min(1, typeof point.y === "number" ? point.y : 0.5)),
+              color: typeof point.color === "string" && /^[0-9a-fA-F]{6}$/.test(point.color.replace(/^#/, ""))
+                ? point.color
+                : "#ffffff",
+              influence: Math.max(0.5, Math.min(2.0, typeof point.influence === "number" ? point.influence : 1.0)),
+            }))
+          : [
+              { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
+              { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
+            ]);
+        node.properties.other_modes_cache = (value.other_modes_cache && Array.isArray(value.other_modes_cache)
+          ? value.other_modes_cache.slice(0, 50).map(point => ({
               x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0.5)),
               y: Math.max(0, Math.min(1, typeof point.y === "number" ? point.y : 0.5)),
               color: typeof point.color === "string" && /^[0-9a-fA-F]{6}$/.test(point.color.replace(/^#/, ""))
@@ -340,9 +378,8 @@ export function setupCanvas(node) {
  * @param {Object} node - 节点实例
  */
 export function updateCanvasSize(node) {
-  if (!node.canvas || !node.ctx || !node.canvas.parentElement) {
-    log.warning(`Node ${node.id} canvas or context not initialized`);
-    requestAnimationFrame(() => updateCanvasSize(node));
+  if (!node || node.id === -1 || !node.canvas || !node.ctx || !node.canvas.parentElement) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas or context not initialized`);
     return;
   }
 
@@ -442,19 +479,32 @@ export function setupInputListeners(node) {
   if (interpolationWidget) {
     interpolationWidget.callback = () => {
       const newInterpolation = interpolationWidget.value;
+      const oldInterpolation = node.properties.interpolation;
+      
+      // 保存当前模式的状态到对应的缓存
+      if (oldInterpolation === "linear") {
+        // 从 linear 模式切换到其他模式，保存 linear 状态
+        node.properties.linear_cache = node.properties.control_points.slice().map(point => ({
+          x: point.x,
+          y: point.y,
+          color: point.color,
+          influence: point.influence
+        }));
+        log.info(`Node ${node.id} saved linear mode control points to linear_cache`);
+      } else {
+        // 从其他模式切换到其他模式或 linear 模式，保存其他模式状态
+        node.properties.other_modes_cache = node.properties.control_points.slice().map(point => ({
+          x: point.x,
+          y: point.y,
+          color: point.color,
+          influence: point.influence
+        }));
+        log.info(`Node ${node.id} saved other modes control points to other_modes_cache`);
+      }
+      
+      // 恢复目标模式的状态
       if (newInterpolation === "linear") {
-        // 切换到 linear 模式，保存当前控制点到其他模式的缓存（如果需要）
-        if (node.properties.interpolation === "linear") {
-          // 保存当前 linear 模式的状态到 linear_cache
-          node.properties.linear_cache = node.properties.control_points.slice().map(point => ({
-            x: point.x,
-            y: point.y,
-            color: point.color,
-            influence: point.influence
-          }));
-          log.info(`Node ${node.id} saved linear mode control points to linear_cache`);
-        }
-        // 恢复 linear_cache 中的控制点
+        // 切换到 linear 模式，恢复 linear_cache 中的控制点
         node.properties.control_points = (node.properties.linear_cache && node.properties.linear_cache.length >= 2)
           ? node.properties.linear_cache.slice()
           : [
@@ -463,28 +513,20 @@ export function setupInputListeners(node) {
             ];
         log.info(`Node ${node.id} restored control points for linear mode`);
       } else {
-        // 切换到其他模式，保存 linear 模式状态
-        if (node.properties.interpolation === "linear") {
-          node.properties.linear_cache = node.properties.control_points.slice().map(point => ({
-            x: point.x,
-            y: point.y,
-            color: point.color,
-            influence: point.influence
-          }));
-          log.info(`Node ${node.id} saved linear mode control points to linear_cache`);
-        }
-        // 如果 control_points 为空，为其他模式初始化默认点
-        if (!node.properties.control_points || node.properties.control_points.length === 0) {
-          node.properties.control_points = [
-            { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
-            { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
-          ];
-        }
+        // 切换到其他模式，恢复 other_modes_cache 中的控制点
+        node.properties.control_points = (node.properties.other_modes_cache && node.properties.other_modes_cache.length > 0)
+          ? node.properties.other_modes_cache.slice()
+          : [
+              { x: 0.2, y: 0.2, color: "#ff0000", influence: 1.0 },
+              { x: 0.8, y: 0.8, color: "#0000ff", influence: 1.0 }
+            ];
+        log.info(`Node ${node.id} restored control points for other modes`);
       }
+      
       node.properties.interpolation = newInterpolation;
       updateDisplay(node);
       node.setDirtyCanvas(true, true);
-      log.info(`Node ${node.id} interpolation updated to: ${node.properties.interpolation}`);
+      log.info(`Node ${node.id} interpolation updated from ${oldInterpolation} to: ${newInterpolation}`);
     };
   }
 }
@@ -519,10 +561,12 @@ function projectPointToLine(x, y, x1, y1, x2, y2) {
  * @param {Object} [message] - 执行结果
  */
 export const updateDisplay = debounce((node, message) => {
-  if (!node.ctx || !node.canvas || !node.offscreenCanvas) {
-    log.warning(`Node ${node.id} canvas or context not initialized`);
+  if (!node || node.id === -1 || !node.ctx || !node.canvas || !node.offscreenCanvas) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas or context not initialized`);
     return;
   }
+
+  const startTime = performance.now();
 
   // 获取输入值
   const widgets = node.widgets || [];
@@ -889,7 +933,9 @@ export const updateDisplay = debounce((node, message) => {
     node.loadingSpinner.style.display = "none";
   }
   log.info(`Node ${node.id} canvas updated with ${node.properties.control_points?.length || 0} points, interpolation: ${interpolation}`);
+  
 }, 100);
+
 
 /**
  * 处理画布鼠标按下事件
@@ -898,8 +944,8 @@ export const updateDisplay = debounce((node, message) => {
  */
 export function onCanvasMouseDown(node, e) {
   if (e.button !== 0) return;
-  if (!node.canvas) {
-    log.warning(`Node ${node.id} canvas not initialized`);
+  if (!node || node.id === -1 || !node.canvas) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas not initialized`);
     return;
   }
   const rect = node.canvas.getBoundingClientRect();
@@ -999,7 +1045,7 @@ export function onCanvasMouseDown(node, e) {
  * @param {MouseEvent} e - 鼠标事件
  */
 export function onCanvasMouseMove(node, e) {
-  if (node.draggingPoint === null || !node.canvas || !(e.buttons & 1)) return;
+  if (!node || node.id === -1 || node.draggingPoint === null || !node.canvas || !(e.buttons & 1)) return;
   const rect = node.canvas.getBoundingClientRect();
   let x = (e.clientX - rect.left) / rect.width;
   let y = (e.clientY - rect.top) / rect.height;
@@ -1041,8 +1087,12 @@ export function onCanvasMouseMove(node, e) {
         node.properties.control_points[node.draggingPoint].x = proj.x;
         node.properties.control_points[node.draggingPoint].y = proj.y;
       }
-      // 更新 linear_cache
-      node.properties.linear_cache = node.properties.control_points.slice();
+      // 更新当前模式的缓存
+      if (node.properties.interpolation === "linear") {
+        node.properties.linear_cache = node.properties.control_points.slice();
+      } else {
+        node.properties.other_modes_cache = node.properties.control_points.slice();
+      }
     } else {
       node.properties.control_points[node.draggingPoint].x = x;
       node.properties.control_points[node.draggingPoint].y = y;
@@ -1058,10 +1108,15 @@ export function onCanvasMouseMove(node, e) {
  * @param {Object} node - 节点实例
  */
 export function onCanvasMouseUp(node) {
-  if (node.properties.interpolation === "linear" && node.draggingPoint !== null) {
-    // 更新 linear_cache
-    node.properties.linear_cache = node.properties.control_points.slice();
-    log.info(`Node ${node.id} updated linear_cache after dragging`);
+  if (node.draggingPoint !== null) {
+    // 更新当前模式的缓存
+    if (node.properties.interpolation === "linear") {
+      node.properties.linear_cache = node.properties.control_points.slice();
+      log.info(`Node ${node.id} updated linear_cache after dragging`);
+    } else {
+      node.properties.other_modes_cache = node.properties.control_points.slice();
+      log.info(`Node ${node.id} updated other_modes_cache after dragging`);
+    }
   }
   node.draggingPoint = null;
   log.info(`Node ${node.id} stopped dragging`);
@@ -1073,8 +1128,8 @@ export function onCanvasMouseUp(node) {
  * @param {MouseEvent} e - 鼠标事件
  */
 export function onCanvasDblClick(node, e) {
-  if (!node.canvas) {
-    log.warning(`Node ${node.id} canvas not initialized`);
+  if (!node || node.id === -1 || !node.canvas) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas not initialized`);
     return;
   }
   const rect = node.canvas.getBoundingClientRect();
@@ -1093,9 +1148,13 @@ export function onCanvasDblClick(node, e) {
       document.body.appendChild(input);
       input.addEventListener("change", () => {
         point.color = input.value;
+        // 更新当前模式的缓存
         if (node.properties.interpolation === "linear") {
           node.properties.linear_cache = node.properties.control_points.slice();
           log.info(`Node ${node.id} updated linear_cache after color change`);
+        } else {
+          node.properties.other_modes_cache = node.properties.control_points.slice();
+          log.info(`Node ${node.id} updated other_modes_cache after color change`);
         }
         updateDisplay(node);
         node.setDirtyCanvas(true, true);
@@ -1118,11 +1177,11 @@ export function onCanvasDblClick(node, e) {
  */
 export function onCanvasWheel(node, e) {
   e.preventDefault();
-  if (!node.canvas || node.properties.interpolation === "voronoi") {
+  if (!node || node.id === -1 || !node.canvas || node.properties.interpolation === "voronoi") {
     if (node.properties.interpolation === "voronoi") {
-      log.info(`Node ${node.id} influence adjustment skipped in voronoi mode`);
+      log.info(`Node ${node?.id || 'unknown'} influence adjustment skipped in voronoi mode`);
     } else {
-      log.warning(`Node ${node.id} canvas not initialized`);
+      log.warning(`Node ${node?.id || 'unknown'} canvas not initialized`);
     }
     return;
   }
@@ -1138,9 +1197,13 @@ export function onCanvasWheel(node, e) {
     if (Math.sqrt(dx * dx + dy * dy) < selectionRadius) {
       const delta = e.deltaY < 0 ? 0.1 : -0.1; // 向上滚轮增加，向下减少
       point.influence = Math.max(0.5, Math.min(2.0, (point.influence || 1.0) + delta));
+      // 更新当前模式的缓存
       if (node.properties.interpolation === "linear") {
         node.properties.linear_cache = node.properties.control_points.slice();
         log.info(`Node ${node.id} updated linear_cache after influence change`);
+      } else {
+        node.properties.other_modes_cache = node.properties.control_points.slice();
+        log.info(`Node ${node.id} updated other_modes_cache after influence change`);
       }
       updateDisplay(node);
       node.setDirtyCanvas(true, true);
@@ -1159,8 +1222,8 @@ export function onCanvasRightClick(node, e) {
   e.preventDefault();
   e.stopPropagation();
   node.draggingPoint = null;
-  if (!node.canvas) {
-    log.warning(`Node ${node.id} canvas not initialized`);
+  if (!node || node.id === -1 || !node.canvas) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas not initialized`);
     return;
   }
   const rect = node.canvas.getBoundingClientRect();
@@ -1263,9 +1326,13 @@ export function onCanvasRightClick(node, e) {
         return;
       }
       node.properties.control_points.splice(selectedIndex, 1);
+      // 更新当前模式的缓存
       if (node.properties.interpolation === "linear") {
         node.properties.linear_cache = node.properties.control_points.slice();
         log.info(`Node ${node.id} updated linear_cache after deletion`);
+      } else {
+        node.properties.other_modes_cache = node.properties.control_points.slice();
+        log.info(`Node ${node.id} updated other_modes_cache after deletion`);
       }
       node.draggingPoint = null;
       updateDisplay(node);
@@ -1291,6 +1358,7 @@ export function onCanvasRightClick(node, e) {
         node.properties.linear_cache = node.properties.control_points.slice();
       } else {
         node.properties.control_points = [];
+        node.properties.other_modes_cache = [];
       }
       updateDisplay(node);
       node.setDirtyCanvas(true, true);
@@ -1308,5 +1376,7 @@ export function onCanvasRightClick(node, e) {
       document.removeEventListener("click", closeMenu);
     };
     setTimeout(() => document.addEventListener("click", closeMenu), 0);
+    // Store the closeMenu function for cleanup
+    node._closeMenuHandler = closeMenu;
   }
 }

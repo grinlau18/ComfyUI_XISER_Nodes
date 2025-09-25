@@ -318,59 +318,7 @@ app.registerExtension({
         }
       }
 
-      /**
-       * Triggers the ComfyUI prompt with updated states.
-       * @async
-       */
-      async function triggerPrompt() {
-        try {
-          let newImagePaths = (node.properties?.ui_config?.image_paths || []).filter(p => typeof p === 'string' && p.trim().length > 0);
-
-          if (JSON.stringify(newImagePaths) !== JSON.stringify(imagePaths)) {
-            imagePaths = newImagePaths;
-            nodeState.imageNodes = new Array(imagePaths.length).fill(null);
-            node.properties.ui_config.image_paths = imagePaths;
-            nodeState.lastImagePaths = imagePaths.slice();
-            log.debug(`Image paths updated for node ${node.id}: ${JSON.stringify(imagePaths)}`);
-          }
-
-          if (autoSize === 'on' && imagePaths.length) {
-            statusText.innerText = '正在调整画板并重置...';
-            statusText.style.color = '#fff';
-            await debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
-            boardWidth = node.properties.ui_config.board_width || 1024;
-            boardHeight = node.properties.ui_config.board_height || 1024;
-            borderWidth = node.properties.ui_config.border_width || 40;
-            nodeState.initialStates = imagePaths.map(() => ({
-              x: borderWidth + boardWidth / 2,
-              y: borderWidth + boardHeight / 2,
-              scaleX: 1,
-              scaleY: 1,
-              rotation: 0,
-            }));
-            applyStates(nodeState);
-            updateSize();
-            statusText.innerText = '调整完成，准备渲染...';
-          }
-
-          nodeState.initialStates = nodeState.initialStates.slice(0, imagePaths.length);
-          node.properties.image_states = nodeState.initialStates;
-          node.widgets.find((w) => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
-          node.setProperty('image_states', nodeState.initialStates);
-          node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, autoSize, node.widgets.find((w) => w.name === 'display_scale')?.value || 1, node.widgets.find((w) => w.name === 'height_adjustment')?.value || HEIGHT_ADJUSTMENT, JSON.stringify(nodeState.initialStates)];
-
-          app.queuePrompt?.();
-          statusText.innerText = '渲染中...';
-          statusText.style.color = '#fff';
-        } catch (e) {
-          log.error(`Failed to queue prompt for node ${node.id}:`, e);
-          statusText.innerText = '触发队列失败';
-          statusText.style.color = '#f00';
-        }
-      }
-
       // Bind methods to nodeState
-      nodeState.triggerPrompt = triggerPrompt;
       nodeState.resetCanvas = () => resetCanvas(node, nodeState, imagePaths, updateSize);
       nodeState.undo = () => undo(node, nodeState);
       nodeState.redo = () => redo(node, nodeState);

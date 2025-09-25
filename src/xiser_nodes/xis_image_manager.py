@@ -20,7 +20,7 @@ from aiohttp import web
 import glob
 
 # Log level control
-LOG_LEVEL = "debug"  # Set to debug for detailed logging
+LOG_LEVEL = "warning"  # Set to warning to reduce logging noise
 
 # Initialize logger
 logger = logging.getLogger("XISER_ImageManager")
@@ -62,7 +62,7 @@ class XIS_ImageManager:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("pack_images",)
     FUNCTION = "manage_images"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/ImageManager"
     OUTPUT_NODE = True
 
     def _generate_base64_thumbnail(self, pil_img, max_size=64, format="PNG"):
@@ -228,17 +228,42 @@ class XIS_ImageManager:
                     "originalFilename": filename
                 })
 
-        # Load uploaded images
+        # Load uploaded images - only load images that belong to this specific node instance
         node_dir = self._get_node_output_dir(node_id)
         existing_filenames = {p["filename"] for p in image_previews}
+        
+        # Load uploaded images for this node, sorted by upload time to preserve order
         uploaded_files = glob.glob(os.path.join(node_dir, "xis_image_manager_*.png"))
+        # Create list of files with their upload time from tracking files
+        files_with_upload_time = []
+        for file in uploaded_files:
+            filename = os.path.basename(file)
+            tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+            if os.path.exists(tracking_file):
+                try:
+                    with open(tracking_file, 'r') as f:
+                        tracking_data = json.loads(f.read())
+                    upload_time = tracking_data.get("upload_time", os.path.getmtime(file))
+                    files_with_upload_time.append((file, upload_time))
+                except Exception as e:
+                    logger.warning(f"Instance {self.instance_id} - Node {node_id}: Failed to read tracking file for {filename}: {e}")
+                    files_with_upload_time.append((file, os.path.getmtime(file)))
+            else:
+                files_with_upload_time.append((file, os.path.getmtime(file)))
+        
+        # Sort files by upload time to preserve upload order
+        files_with_upload_time.sort(key=lambda x: x[1])
+        uploaded_files = [file for file, _ in files_with_upload_time]
+        
         for file in uploaded_files:
             filename = os.path.basename(file)
             if filename in existing_filenames:
                 continue
+            # Check if this image belongs to this node using tracking files
+            tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+            if not os.path.exists(tracking_file):
+                continue
             try:
-                if filename not in self.created_files:
-                    self.created_files.add(filename)
                 pil_img = Image.open(file).convert("RGBA")
                 img_array = np.array(pil_img).astype(np.float32) / 255.0
                 img_tensor = torch.from_numpy(img_array)
@@ -253,6 +278,9 @@ class XIS_ImageManager:
                     "filename": filename,
                     "originalFilename": filename
                 })
+                # Add to created_files for backward compatibility
+                if filename not in self.created_files:
+                    self.created_files.add(filename)
                 logger.debug(f"Instance {self.instance_id} - Node {node_id}: Loaded uploaded image {filename}")
             except Exception as e:
                 logger.error(f"Instance {self.instance_id} - Node {node_id}: Failed to load uploaded image {file}: {e}")
@@ -308,7 +336,8 @@ class XIS_ImageManager:
             "enabled_layers": [enabled],  # Ensure iterable
             "node_size": [node_size_list],  # Already a list
             "is_reversed": [is_reversed_flag],  # Ensure iterable
-            "is_single_mode": [is_single_mode_flag]  # Ensure iterable
+            "is_single_mode": [is_single_mode_flag],  # Ensure iterable
+            "full_image_order": order  # For frontend state restoration
         }
         logger.info(f"Instance {self.instance_id} - Node {node_id}: Returning {len(reordered_images)} images, order: {order}, enabled: {enabled}, single_mode: {is_single_mode_flag}, node_size: {node_size_list}")
         return {
@@ -360,12 +389,19 @@ class XIS_ImageManager:
 
     def cleanup(self):
         """Clean up all files created by this instance."""
+        # Clean up image files
+        node_dir = self._get_node_output_dir(self.id)
         for filename in list(self.created_files):
-            file_path = os.path.join(self.output_dir, filename)
+            file_path = os.path.join(node_dir, filename)
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
                     logger.info(f"Instance {self.instance_id} - Deleted file during cleanup: {file_path}")
+                # Also remove tracking file
+                tracking_file = os.path.join(node_dir, f".{filename}.node_{self.id}")
+                if os.path.exists(tracking_file):
+                    os.remove(tracking_file)
+                    logger.info(f"Instance {self.instance_id} - Deleted tracking file during cleanup: {tracking_file}")
                 self.created_files.discard(filename)
             except Exception as e:
                 logger.error(f"Instance {self.instance_id} - Failed to delete file during cleanup {file_path}: {e}")
@@ -407,6 +443,21 @@ async def handle_upload(request):
                 img_filename = f"xis_image_manager_{uuid.uuid4().hex}.png"
                 img_path = os.path.join(node_dir, img_filename)
                 pil_img.save(img_path, format="PNG")
+                
+                # Create a tracking file to mark this image as belonging to the node
+                # Store both node_id and the original filename to help with ordering
+                try:
+                    tracking_file = os.path.join(node_dir, f".{img_filename}.node_{node_id}")
+                    with open(tracking_file, 'w') as f:
+                        f.write(json.dumps({
+                            "node_id": node_id,
+                            "original_filename": filename,
+                            "upload_time": time.time()
+                        }))
+                    logger.debug(f"Instance - Created tracking file for {img_filename} to node {node_id}")
+                except Exception as e:
+                    logger.warning(f"Instance - Could not create tracking file for {img_filename}: {e}")
+                
                 preview_b64 = XIS_ImageManager()._generate_base64_thumbnail(pil_img)
                 images.append({
                     "filename": img_filename,
@@ -443,6 +494,11 @@ async def handle_delete(request):
         if os.path.exists(img_path):
             os.remove(img_path)
             logger.info(f"Instance - Deleted image {filename} for node {node_id}")
+            # Also remove tracking file
+            tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+            if os.path.exists(tracking_file):
+                os.remove(tracking_file)
+                logger.info(f"Instance - Deleted tracking file for image {filename}")
         else:
             logger.warning(f"Instance - Image {filename} for node {node_id} not found")
             return web.json_response({"error": f"Image not found: {filename}"}, status=404)

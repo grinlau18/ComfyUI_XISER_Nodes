@@ -236,6 +236,7 @@ class XIS_MultiPointGradient:
                             break
                     image[y, x] = color
 
+
         # Convert to torch tensor
         image = np.clip(image, 0, 255).astype(np.uint8)
         image_tensor = torch.from_numpy(image).float() / 255.0
