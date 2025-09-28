@@ -1,0 +1,389 @@
+# 将多个图像和蒙版打包成一个 IMAGE 对象
+import torch
+import torch.nn.functional as F
+import numpy as np
+from typing import Optional, Tuple, Union, List
+from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
+import hashlib
+import uuid
+import time
+import comfy.samplers
+
+class XIS_PackImages:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "invert_mask": ("BOOLEAN", {"default": False, "label_on": "Invert", "label_off": "Normal"}),
+                "before_pack_images": ("BOOLEAN", {"default": False, "label_on": "on", "label_off": "off"}),
+            },
+            "optional": {
+                "pack_images": ("IMAGE", {"default": None}),
+                "image1": ("IMAGE", {"default": None}),
+                "mask1": ("MASK", {"default": None}),
+                "image2": ("IMAGE", {"default": None}),
+                "mask2": ("MASK", {"default": None}),
+                "image3": ("IMAGE", {"default": None}),
+                "mask3": ("MASK", {"default": None}),
+                "image4": ("IMAGE", {"default": None}),
+                "mask4": ("MASK", {"default": None}),
+                "image5": ("IMAGE", {"default": None}),
+                "mask5": ("MASK", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("pack_images",)
+    FUNCTION = "pack_images"
+    CATEGORY = "XISER_Nodes/Data_Processing"
+
+    def pack_images(self, invert_mask, before_pack_images, image1=None, pack_images=None, 
+                    mask1=None, image2=None, mask2=None, image3=None, mask3=None, 
+                    image4=None, mask4=None, image5=None, mask5=None):
+        
+        # 收集当前节点的图像和蒙版输入
+        input_images = [image1, image2, image3, image4, image5]
+        input_masks = [mask1, mask2, mask3, mask4, mask5]
+        
+        # 过滤掉 None 的图像输入
+        images = [img for img in input_images if img is not None]
+        
+        # 检查是否有有效的图像输入
+        if not images and (pack_images is None or not pack_images):
+            logger.error("No valid images provided (all image inputs and pack_images are None)")
+            raise ValueError("At least one valid image must be provided")
+
+        # 初始化输出图像列表
+        normalized_images = []
+
+        # 根据 before_pack_images 的值决定添加顺序
+        if not before_pack_images:
+            # 默认行为：pack_images 在前，image1 到 image5 在后
+            if pack_images is not None:
+                if not isinstance(pack_images, (list, tuple)):
+                    logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
+                    raise ValueError("pack_images must be a list or tuple")
+                normalized_images.extend(pack_images)
+        
+        # 规范化当前节点的图像和蒙版
+        for idx, img in enumerate(images):
+            if not isinstance(img, torch.Tensor):
+                logger.error(f"Invalid image type: expected torch.Tensor, got {type(img)}")
+                raise ValueError("All images must be torch.Tensor")
+
+            # 确保图像维度正确
+            if len(img.shape) == 3:  # (H, W, C)
+                img = img.unsqueeze(0)  # 转换为 (1, H, W, C)
+            elif len(img.shape) != 4:  # (N, H, W, C)
+                logger.error(f"Invalid image dimensions: {img.shape}")
+                raise ValueError(f"Image has invalid dimensions: {img.shape}")
+
+            # 获取对应蒙版
+            mask = input_masks[idx]
+
+            # 处理每个批次中的图像
+            for i in range(img.shape[0]):
+                single_img = img[i]  # (H, W, C)
+                
+                # 处理蒙版
+                alpha = None
+                if mask is not None:
+                    if not isinstance(mask, torch.Tensor):
+                        logger.error(f"Invalid mask type: expected torch.Tensor, got {type(mask)}")
+                        raise ValueError("Mask must be torch.Tensor")
+                    
+                    # 确保蒙版维度正确
+                    mask_dim = len(mask.shape)
+                    if mask_dim == 2:  # (H, W)
+                        mask = mask.unsqueeze(0)  # 转换为 (1, H, W)
+                    elif mask_dim == 3:  # (N, H, W)
+                        pass
+                    else:
+                        logger.error(f"Invalid mask dimensions: {mask.shape}")
+                        raise ValueError(f"Mask has invalid dimensions: {mask.shape}")
+
+                    # 获取对应批次的蒙版
+                    single_mask = mask[i] if mask.shape[0] > i else mask[0]
+                    
+                    # 检查是否为 64x64 全 0 蒙版
+                    if single_mask.shape == (64, 64) and torch.all(single_mask == 0):
+                        alpha = None  # 视为无蒙版输入
+                    else:
+                        # 确保蒙版尺寸与图像匹配（除非是 64x64 全 0）
+                        if single_mask.shape != single_img.shape[:2]:
+                            logger.error(f"Mask size {single_mask.shape} does not match image size {single_img.shape[:2]}")
+                            raise ValueError("Mask size must match image size")
+                        
+                        # 规范化蒙版为单通道
+                        alpha = single_mask.unsqueeze(-1)  # (H, W, 1)
+                        if alpha.max() > 1.0 or alpha.min() < 0.0:
+                            alpha = (alpha - alpha.min()) / (alpha.max() - alpha.min() + 1e-8)  # 归一化到 [0,1]
+                        
+                        # 如果 invert_mask 为 True，进行蒙版反转
+                        if invert_mask:
+                            alpha = 1.0 - alpha
+
+                # 处理图像通道
+                if single_img.shape[-1] == 3:  # RGB
+                    if alpha is None:
+                        alpha = torch.ones_like(single_img[..., :1])  # 默认全 1 Alpha 通道
+                    single_img = torch.cat([single_img, alpha], dim=-1)  # 转换为 RGBA
+                elif single_img.shape[-1] == 4:  # RGBA
+                    if alpha is not None:
+                        # 替换 Alpha 通道
+                        single_img = torch.cat([single_img[..., :3], alpha], dim=-1)
+                else:
+                    logger.error(f"Image has invalid channels: {single_img.shape[-1]}")
+                    raise ValueError(f"Image has invalid channels: {single_img.shape[-1]}")
+                
+                normalized_images.append(single_img)
+
+        # 如果 before_pack_images 为 True，将 pack_images 添加到末尾
+        if before_pack_images and pack_images is not None:
+            if not isinstance(pack_images, (list, tuple)):
+                logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
+                raise ValueError("pack_images must be a list or tuple")
+            normalized_images.extend(pack_images)
+
+        logger.info(f"Packed {len(normalized_images)} images for canvas")
+        return (normalized_images,)
+
+
+class XIS_MergePackImages:
+    """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
+
+    def __init__(self):
+        """Initialize the node instance."""
+        self.instance_id = uuid.uuid4().hex
+        logger.info(f"Instance {self.instance_id} - XIS_MergePackImages initialized")
+
+    @classmethod
+    def INPUT_TYPES(cls) -> dict:
+        """Define input types for the node, matching XIS_ImageManager's data type."""
+        return {
+            "optional": {
+                "pack_images_1": ("IMAGE", {"default": None}),
+                "pack_images_2": ("IMAGE", {"default": None}),
+                "pack_images_3": ("IMAGE", {"default": None}),
+                "pack_images_4": ("IMAGE", {"default": None}),
+                "pack_images_5": ("IMAGE", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("pack_images",)
+    FUNCTION = "merge_images"
+    CATEGORY = "XISER_Nodes/Data_Processing"
+    OUTPUT_NODE = True
+
+    def merge_images(
+        self,
+        pack_images_1: Optional[List[torch.Tensor]] = None,
+        pack_images_2: Optional[List[torch.Tensor]] = None,
+        pack_images_3: Optional[List[torch.Tensor]] = None,
+        pack_images_4: Optional[List[torch.Tensor]] = None,
+        pack_images_5: Optional[List[torch.Tensor]] = None,
+    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
+        """
+        Merge multiple pack_images inputs into a single pack_images output.
+
+        Args:
+            pack_images_1 to pack_images_5: Optional list of torch.Tensor, each of shape [H, W, 4] (RGBA).
+
+        Returns:
+            A tuple containing:
+            - List of merged torch.Tensor images (IMAGE).
+            - torch.Tensor of merged images (IMAGE) if all images have the same size, else empty tensor.
+        """
+        logger.debug(f"Instance {self.instance_id} - Merging pack_images inputs")
+
+        # 收集所有非空输入
+        input_packs = [
+            (i + 1, pack) for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5])
+            if pack is not None and isinstance(pack, list) and pack
+        ]
+
+        if not input_packs:
+            logger.info(f"Instance {self.instance_id} - No valid pack_images inputs provided, returning empty outputs")
+            return ([], torch.empty(0, 0, 0, 4))
+
+        # 验证输入格式并收集图像
+        merged_images = []
+        image_sizes = []
+        for port_idx, pack in input_packs:
+            if not all(isinstance(img, torch.Tensor) for img in pack):
+                logger.error(f"Instance {self.instance_id} - Invalid image type in pack_images_{port_idx}: expected list of torch.Tensor")
+                raise ValueError(f"pack_images_{port_idx} must contain torch.Tensor images")
+            for j, img in enumerate(pack):
+                if len(img.shape) != 3 or img.shape[-1] != 4:
+                    logger.error(f"Instance {self.instance_id} - Invalid shape for image {j} in pack_images_{port_idx}: expected [H, W, 4], got {img.shape}")
+                    raise ValueError(f"Image {j} in pack_images_{port_idx} must be [H, W, 4] (RGBA)")
+                merged_images.append(img)
+                image_sizes.append(img.shape[:2])  # Record [H, W]
+                logger.debug(f"Instance {self.instance_id} - Added image {j} from pack_images_{port_idx} with size {img.shape[:2]}")
+
+        if not merged_images:
+            logger.info(f"Instance {self.instance_id} - No images after validation, returning empty outputs")
+            return ([], torch.empty(0, 0, 0, 4))
+
+        return (merged_images,)
+
+    @staticmethod
+    def IS_CHANGED(
+        pack_images_1: Optional[List[torch.Tensor]] = None,
+        pack_images_2: Optional[List[torch.Tensor]] = None,
+        pack_images_3: Optional[List[torch.Tensor]] = None,
+        pack_images_4: Optional[List[torch.Tensor]] = None,
+        pack_images_5: Optional[List[torch.Tensor]] = None,
+    ) -> str:
+        """Compute a hash to detect changes in inputs."""
+        logger.debug(f"IS_CHANGED called for XIS_MergePackImages")
+        try:
+            hasher = hashlib.sha256()
+            for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5], 1):
+                if pack is None or not pack:
+                    hasher.update(f"pack_images_{i}_empty".encode('utf-8'))
+                    continue
+                if not isinstance(pack, list):
+                    logger.warning(f"Invalid pack_images_{i} type: {type(pack)}")
+                    hasher.update(f"pack_images_{i}_invalid_{id(pack)}".encode('utf-8'))
+                    continue
+                hasher.update(f"pack_images_{i}_len_{len(pack)}".encode('utf-8'))
+                for j, img in enumerate(pack):
+                    if isinstance(img, torch.Tensor):
+                        hasher.update(str(img.shape).encode('utf-8'))
+                        sample_data = img.cpu().numpy().flatten()[:100].tobytes()
+                        hasher.update(sample_data)
+                    else:
+                        logger.warning(f"Invalid image type at index {j} in pack_images_{i}: {type(img)}")
+                        hasher.update(f"img_{j}_invalid_{id(img)}".encode('utf-8'))
+            hash_value = hasher.hexdigest()
+            logger.debug(f"IS_CHANGED returning hash: {hash_value}")
+            return hash_value
+        except Exception as e:
+            logger.error(f"IS_CHANGED failed: {e}")
+            return str(time.time())
+
+# K采样器设置打包节点
+class XIS_KSamplerSettingsNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        sampler_options = comfy.samplers.SAMPLER_NAMES
+        scheduler_options = comfy.samplers.SCHEDULER_NAMES
+        
+        return {
+            "required": {
+                "steps": ("INT", {
+                    "default": 20,
+                    "min": 0,
+                    "max": 100,
+                    "step": 1,
+                    "display": "slider"
+                }),
+                "cfg": ("FLOAT", {
+                    "default": 7.5,
+                    "min": 0.0,
+                    "max": 15.0,
+                    "step": 0.1,
+                    "display": "slider"
+                }),
+                "denoise": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01,
+                    "display": "slider"
+                }),
+                "sampler_name": (sampler_options, {
+                    "default": "euler"
+                }),
+                "scheduler": (scheduler_options, {
+                    "default": "normal"
+                }),
+                "start_step": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 10000,
+                    "step": 1,
+                    "display": "number"
+                }),
+                "end_step": ("INT", {
+                    "default": 20,
+                    "min": 1,
+                    "max": 10000,
+                    "step": 1,
+                    "display": "number"
+                })
+            },
+            "optional": {
+                "model": ("MODEL",),
+                "vae": ("VAE",),
+                "clip": ("CLIP",),
+            }
+        }
+
+    RETURN_TYPES = ("DICT",)
+    RETURN_NAMES = ("settings_pack",)
+    
+    FUNCTION = "get_settings"
+    CATEGORY = "XISER_Nodes/Data_Processing"
+
+    def get_settings(self, steps, cfg, denoise, sampler_name, scheduler, start_step, end_step, model=None, vae=None, clip=None):
+        if end_step <= start_step:
+            end_step = start_step + 1
+            
+        settings_pack = {
+            "model": model,
+            "vae": vae,
+            "clip": clip,
+            "steps": steps,
+            "cfg": cfg,
+            "denoise": denoise,
+            "sampler_name": sampler_name,
+            "scheduler": scheduler,
+            "start_step": start_step,
+            "end_step": end_step
+        }
+        
+        return (settings_pack,)
+
+
+class XIS_KSamplerSettingsUnpackNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "settings_pack": ("DICT", {})
+            }
+        }
+
+    RETURN_TYPES = ("MODEL", "VAE", "CLIP", "INT", "FLOAT", "FLOAT", comfy.samplers.KSampler.SAMPLERS, comfy.samplers.KSampler.SCHEDULERS, "INT", "INT")
+    RETURN_NAMES = ("model", "vae", "clip", "steps", "cfg", "denoise", "sampler_name", "scheduler", "start_step", "end_step")
+    
+    FUNCTION = "unpack_settings"
+    CATEGORY = "XISER_Nodes/Data_Processing"
+
+    def unpack_settings(self, settings_pack):
+        model = settings_pack.get("model")
+        vae = settings_pack.get("vae")
+        clip = settings_pack.get("clip")
+        steps = settings_pack.get("steps", 20)
+        cfg = settings_pack.get("cfg", 7.5)
+        denoise = settings_pack.get("denoise", 1.0)
+        sampler_name = settings_pack.get("sampler_name", "euler")
+        scheduler = settings_pack.get("scheduler", "normal")
+        start_step = settings_pack.get("start_step", 0)
+        end_step = settings_pack.get("end_step", 20)
+        
+        if end_step <= start_step:
+            end_step = start_step + 1
+            
+        return (model, vae, clip, steps, cfg, denoise, sampler_name, scheduler, start_step, end_step)
+
+
+NODE_CLASS_MAPPINGS = {
+    "XIS_PackImages": XIS_PackImages,
+    "XIS_MergePackImages": XIS_MergePackImages,
+    "XIS_KSamplerSettingsNode": XIS_KSamplerSettingsNode,
+    "XIS_KSamplerSettingsUnpackNode": XIS_KSamplerSettingsUnpackNode,
+}

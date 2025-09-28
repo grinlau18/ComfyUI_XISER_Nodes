@@ -15,11 +15,10 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   // Configurable button positions (px, at displayScale = 1)
   const BUTTON_POSITIONS = {
-    trigger: 130, // Queue button
     instruction: 30, // Tips button
-    reset: 254, // Reset button
-    undo: 480, // Undo button
-    redo: 370 // Redo button
+    reset: 128, // Reset button
+    undo: 354, // Undo button
+    redo: 244 // Redo button
   };
 
   /**
@@ -78,7 +77,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
       .xiser-button-${nodeState.nodeId}:hover {
         background-color: rgb(30, 121, 195);
       }
-      .xiser-trigger-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.trigger}px; }
       .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction}px; }
       .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset}px; }
       .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo}px; }
@@ -172,19 +170,11 @@ export function initializeUI(node, nodeState, widgetContainer) {
   }
 
   /**
-   * Creates control buttons (Queue, Tips, Reset, Undo, Redo).
+   * Creates control buttons (Tips, Reset, Undo, Redo).
    * @private
    * @returns {Object} Button elements.
    */
   function createButtons() {
-    const triggerButton = document.createElement("button");
-    triggerButton.className = `xiser-button-${nodeState.nodeId} xiser-trigger-button-${nodeState.nodeId}`;
-    triggerButton.innerText = "▶️ Queue";
-    triggerButton.onclick = () => {
-      log.info(`Queue button clicked for node ${nodeState.nodeId}`);
-      nodeState.triggerPrompt();
-    };
-
     const instructionButton = document.createElement("button");
     instructionButton.className = `xiser-button-${nodeState.nodeId} xiser-instruction-button-${nodeState.nodeId}`;
     instructionButton.innerText = "ℹ️ Tips";
@@ -218,7 +208,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       nodeState.redo();
     };
 
-    return { triggerButton, instructionButton, resetButton, undoButton, redoButton };
+    return { instructionButton, resetButton, undoButton, redoButton };
   }
 
   /**
@@ -348,7 +338,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
         font-size: ${20 * displayScale}px;
         border-radius: ${5 * displayScale}px;
       }
-      .xiser-trigger-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.trigger * displayScale}px; }
       .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction * displayScale}px; }
       .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset * displayScale}px; }
       .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo * displayScale}px; }
@@ -378,7 +367,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
   const buttons = createButtons();
 
   // Append UI elements
-  boardContainer.appendChild(buttons.triggerButton);
   boardContainer.appendChild(buttons.instructionButton);
   boardContainer.appendChild(buttons.resetButton);
   boardContainer.appendChild(buttons.undoButton);

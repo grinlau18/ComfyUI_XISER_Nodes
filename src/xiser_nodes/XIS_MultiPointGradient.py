@@ -40,7 +40,7 @@ class XIS_MultiPointGradient:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
     FUNCTION = "execute"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Visual_Editing"
 
     def hex_to_rgb(self, hex_color: str) -> List[int]:
         """
@@ -235,6 +235,7 @@ class XIS_MultiPointGradient:
                             color = rgb0 + (rgb1 - rgb0) * factor
                             break
                     image[y, x] = color
+
 
         # Convert to torch tensor
         image = np.clip(image, 0, 255).astype(np.uint8)

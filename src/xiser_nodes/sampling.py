@@ -2,11 +2,13 @@
 import torch
 import numpy as np
 from typing import Dict, Tuple, List
+from scipy.interpolate import interp1d
+from tqdm import tqdm
 import comfy.samplers
 from .utils import logger
 
 # 自定义动态去噪采样器
-class XIS_DynamicBatchKSampler:
+class XIS_DynamicKSampler:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -16,17 +18,25 @@ class XIS_DynamicBatchKSampler:
                 "positive": ("CONDITIONING",),
                 "negative": ("CONDITIONING",),
                 "start_denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "mid_denoise": ("FLOAT", {"default": -1.0, "min": -1.0, "max": 1.0, "step": 0.01}),
-                "end_denoise": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "curve_type": (
+                "end_denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "denoise_curve_type": (
                     ["linear", "quadratic", "cubic", "exponential", "logarithmic", "sigmoid", "sine", "step"],
                     {"default": "linear"}
                 ),
                 "steps": ("INT", {"default": 20, "min": 1, "max": 100, "step": 1}),
-                "cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 20.0, "step": 0.1}),
+                "start_cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 20.0, "step": 0.1}),
+                "end_cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 20.0, "step": 0.1}),
+                "CFG_curve_type": (
+                    ["linear", "quadratic", "cubic", "exponential", "logarithmic", "sigmoid", "sine", "step"],
+                    {"default": "linear"}
+                ),
                 "sampler_name": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_sde"}),
                 "scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "karras"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            },
+            "optional": {
+                "denoise_list": ("LIST",),
+                "CFG_list": ("LIST",),
             }
         }
 
@@ -35,69 +45,70 @@ class XIS_DynamicBatchKSampler:
     FUNCTION = "sample"
     CATEGORY = "XISER_Nodes/Sampling"
 
-    def compute_denoise_values(self, start_denoise, mid_denoise, end_denoise, batch_size, curve_type):
+    def compute_interpolated_values(self, start_val, end_val, batch_size, curve_type, min_clip=0.0, max_clip=1.0):
         if batch_size <= 0:
             return []
 
         t = np.linspace(0, 1, batch_size)
-        use_mid = mid_denoise >= 0
 
-        if use_mid:
-            t_control = np.array([0.0, 0.5, 1.0])
-            values_control = np.array([start_denoise, mid_denoise, end_denoise])
+        if curve_type == "linear":
+            values = start_val + (end_val - start_val) * t
+        elif curve_type == "quadratic":
+            values = start_val + (end_val - start_val) * t**2
+        elif curve_type == "cubic":
+            values = start_val + (end_val - start_val) * t**3
+        elif curve_type == "exponential":
+            values = start_val + (end_val - start_val) * (np.exp(t * 3) - 1) / (np.exp(3) - 1)
+        elif curve_type == "logarithmic":
+            values = start_val + (end_val - start_val) * np.log1p(t * (np.e - 1)) / np.log(np.e)
+        elif curve_type == "sigmoid":
+            values = start_val + (end_val - start_val) / (1 + np.exp(-10 * (t - 0.5)))
+        elif curve_type == "sine":
+            values = start_val + (end_val - start_val) * np.sin(np.pi / 2 * t)
+        elif curve_type == "step":
+            steps = 5
+            values = start_val + (end_val - start_val) * np.floor(t * steps) / (steps - 1)
 
-            if curve_type in ["linear", "quadratic", "cubic"]:
-                f = interp1d(t_control, values_control, kind=curve_type)
-                values = f(t)
-            elif curve_type == "exponential":
-                base = (np.exp(3 * t) - 1) / (np.exp(3) - 1)
-                f = interp1d(t_control, values_control, kind="linear")
-                values = f(base)
-            elif curve_type == "logarithmic":
-                base = np.log1p(t * (np.e - 1)) / np.log(np.e)
-                f = interp1d(t_control, values_control, kind="linear")
-                values = f(base)
-            elif curve_type == "sigmoid":
-                base = 1 / (1 + np.exp(-10 * (t - 0.5)))
-                f = interp1d(t_control, values_control, kind="linear")
-                values = f(base)
-            elif curve_type == "sine":
-                base = np.sin(np.pi / 2 * t)
-                f = interp1d(t_control, values_control, kind="linear")
-                values = f(base)
-            elif curve_type == "step":
-                steps = 5
-                base = np.floor(t * steps) / (steps - 1)
-                f = interp1d(t_control, values_control, kind="nearest")
-                values = f(base)
-        else:
-            if curve_type == "linear":
-                values = start_denoise + (end_denoise - start_denoise) * t
-            elif curve_type == "quadratic":
-                values = start_denoise + (end_denoise - start_denoise) * t**2
-            elif curve_type == "cubic":
-                values = start_denoise + (end_denoise - start_denoise) * t**3
-            elif curve_type == "exponential":
-                values = start_denoise + (end_denoise - start_denoise) * (np.exp(t * 3) - 1) / (np.exp(3) - 1)
-            elif curve_type == "logarithmic":
-                values = start_denoise + (end_denoise - start_denoise) * np.log1p(t * (np.e - 1)) / np.log(np.e)
-            elif curve_type == "sigmoid":
-                values = start_denoise + (end_denoise - start_denoise) / (1 + np.exp(-10 * (t - 0.5)))
-            elif curve_type == "sine":
-                values = start_denoise + (end_denoise - start_denoise) * np.sin(np.pi / 2 * t)
-            elif curve_type == "step":
-                steps = 5
-                values = start_denoise + (end_denoise - start_denoise) * np.floor(t * steps) / (steps - 1)
+        return np.clip(values, min_clip, max_clip).tolist()
 
-        return np.clip(values, 0.0, 1.0).tolist()
+    def compute_denoise_values(self, start_denoise, end_denoise, batch_size, curve_type):
+        return self.compute_interpolated_values(start_denoise, end_denoise, batch_size, curve_type, 0.0, 1.0)
 
-    def sample(self, model, latent_image, positive, negative, start_denoise, mid_denoise, end_denoise, curve_type, steps, cfg, sampler_name, scheduler, seed):
+    def compute_cfg_values(self, start_cfg, end_cfg, batch_size, curve_type):
+        return self.compute_interpolated_values(start_cfg, end_cfg, batch_size, curve_type, 0.0, 20.0)
+
+    def sample(self, model, latent_image, positive, negative, start_denoise, end_denoise, denoise_curve_type, steps, start_cfg, end_cfg, CFG_curve_type, sampler_name, scheduler, seed, denoise_list=None, CFG_list=None):
         latents = latent_image["samples"]
         batch_size = latents.shape[0]
         if batch_size == 0:
             raise ValueError("Input latent batch is empty")
 
-        denoise_values = self.compute_denoise_values(start_denoise, mid_denoise, end_denoise, batch_size, curve_type)
+        # 计算去噪值：优先使用denoise_list，如果没有则使用曲线计算
+        if denoise_list is not None and len(denoise_list) > 0:
+            denoise_values = []
+            for i in range(batch_size):
+                if i < len(denoise_list):
+                    denoise_values.append(denoise_list[i])
+                else:
+                    denoise_values.append(denoise_list[-1])  # 重复最后一个值
+            print(f"Using denoise_list values: {denoise_values}")
+        else:
+            denoise_values = self.compute_denoise_values(start_denoise, end_denoise, batch_size, denoise_curve_type)
+            print(f"Computed denoise values: {denoise_values}")
+
+        # 计算CFG值：优先使用CFG_list，如果没有则使用曲线计算
+        if CFG_list is not None and len(CFG_list) > 0:
+            cfg_values = []
+            for i in range(batch_size):
+                if i < len(CFG_list):
+                    cfg_values.append(CFG_list[i])
+                else:
+                    cfg_values.append(CFG_list[-1])  # 重复最后一个值
+            print(f"Using CFG_list values: {cfg_values}")
+        else:
+            cfg_values = self.compute_cfg_values(start_cfg, end_cfg, batch_size, CFG_curve_type)
+            print(f"Computed CFG values: {cfg_values}")
+
         print(f"Denoise values: {denoise_values}")
 
         device = model.device if hasattr(model, 'device') else torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,6 +129,7 @@ class XIS_DynamicBatchKSampler:
         for i in tqdm(range(batch_size), desc="Sampling latents", unit="latent"):
             current_latent = latents[i:i+1]
             current_denoise = denoise_values[i]
+            current_cfg = cfg_values[i]
 
             if abs(current_denoise) < 1e-6:
                 output_latents.append(current_latent)
@@ -138,13 +150,13 @@ class XIS_DynamicBatchKSampler:
                     noise=noise,
                     positive=positive,
                     negative=negative,
-                    cfg=cfg,
+                    cfg=current_cfg,
                     latent_image=input_latent,
                     start_step=start_step,
                     disable_pbar=False,  # 启用 KSampler 进度条
                     seed=seed + i
                 )
-                print(f"Latent {i}: denoise={current_denoise:.3f}, noise_scale={noise_scale:.3f}, start_step={start_step}, sampled, input mean={input_latent.mean().item():.4f}, output mean={sampled_latent.mean().item():.4f}")
+                print(f"Latent {i}: denoise={current_denoise:.3f}, cfg={current_cfg:.3f}, noise_scale={noise_scale:.3f}, start_step={start_step}, sampled, input mean={input_latent.mean().item():.4f}, output mean={sampled_latent.mean().item():.4f}")
             except Exception as e:
                 print(f"Error sampling latent {i}: {e}")
                 raise
@@ -193,7 +205,7 @@ class XIS_LatentBlendNode:
     RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent_batch",)
     FUNCTION = "blend_latents"
-    CATEGORY = "XISER_Nodes/Other"
+    CATEGORY = "XISER_Nodes/Sampling"
 
     def blend_latents(self, latent1, latent2, start_strength, end_strength, batch_size, blend_mode):
         # Extract latent tensors
@@ -248,6 +260,6 @@ class XIS_LatentBlendNode:
         return ({"samples": output_tensor},)
 
 NODE_CLASS_MAPPINGS = {
-    "XIS_DynamicBatchKSampler": XIS_DynamicBatchKSampler,
+    "XIS_DynamicKSampler": XIS_DynamicKSampler,
     "XIS_LatentBlendNode": XIS_LatentBlendNode,
 }

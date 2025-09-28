@@ -8,7 +8,7 @@ import { app } from "/scripts/app.js";
 import { setupCanvas, updateDisplay, setupInputListeners, updateCanvasSize } from "./XIS_MultiPointGradient_canvas.js";
 
 // 日志级别控制
-const LOG_LEVEL = "info"; // Options: "info", "warning", "error"
+const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
 /**
  * 日志工具
@@ -44,14 +44,30 @@ app.registerExtension({
       };
 
       // 延迟初始化，确保 DOM 和扩展注册完成
-      requestAnimationFrame(() => {
-        setupCanvas(node);
-        setupInputListeners(node);
-        updateDisplay(node);
-        if (node.onResize) {
-          node.onResize(node.properties.node_size);
+      // 使用随机延迟避免多个节点同时初始化冲突
+      const randomDelay = 100 + Math.random() * 100;
+      setTimeout(() => {
+        if (node && node.id !== -1) {
+          // 检查节点是否仍然存在且未被移除
+          if (document.querySelector(`.xiser-gradient-node-${node.id}`)) {
+            setupCanvas(node);
+            setupInputListeners(node);
+            updateDisplay(node);
+            if (node.onResize) {
+              node.onResize(node.properties.node_size);
+            }
+          } else {
+            // 如果元素不存在，可能是DOM还未完全加载，尝试直接初始化
+            log.info(`Node ${node.id} element not found, attempting direct initialization`);
+            setupCanvas(node);
+            setupInputListeners(node);
+            updateDisplay(node);
+            if (node.onResize) {
+              node.onResize(node.properties.node_size);
+            }
+          }
         }
-      });
+      }, randomDelay);
     }
   },
 
@@ -88,10 +104,21 @@ app.registerExtension({
 
       // 处理节点移除
       nodeType.prototype.onRemoved = function () {
-        document.querySelectorAll(`.xiser-gradient-node-${this.id}, .xiser-gradient-canvas-container-${this.id}, .xiser-color-picker-container-${this.id}, .xiser-context-menu-${this.id}, .xiser-help-icon-${this.id}, .xiser-help-text-${this.id}`).forEach(el => {
+        document.querySelectorAll(`.xiser-gradient-node-${this.id}, .xiser-gradient-canvas-container-${this.id}, .xiser-color-picker-container-${this.id}, .xiser-context-menu-${this.id}, .xiser-help-icon-${this.id}, .xiser-help-text-${this.id}, .xiser-loading-spinner-${this.id}`).forEach(el => {
           log.info(`Node ${this.id} removing element:`, el.className);
           el.remove();
         });
+
+        // Clean up global event listeners
+        if (this._closeHelpHandler) {
+          document.removeEventListener("click", this._closeHelpHandler);
+          this._closeHelpHandler = null;
+        }
+        if (this._closeMenuHandler) {
+          document.removeEventListener("click", this._closeMenuHandler);
+          this._closeMenuHandler = null;
+        }
+
         this.widgets = [];
         this.canvas = null;
         this.errorMessage = null;
@@ -115,6 +142,18 @@ app.registerExtension({
         display: flex;
         flex-direction: column;
         align-items: stretch;
+      }
+      .xiser-gradient-canvas-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 200px;
+      }
+      .xiser-gradient-canvas {
+        display: block;
+        background: #000;
+        border: 1px solid #444;
       }
       .xiser-gradient-node {
         background: rgba(30, 30, 30, 0.6);

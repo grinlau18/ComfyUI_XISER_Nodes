@@ -365,18 +365,39 @@ app.registerExtension({
          * @param {number[]} order - Image order
          * @param {boolean[]} enabled - Enabled layers
          */
-        function updateWidgetAndDirty(order, enabled) {
+        function updateWidgetAndDirty(order, enabled, forceUpdate = false) {
             const enabledOrder = order.filter((_, i) => enabled[i]);
-            node.widgets_values[0] = JSON.stringify(enabledOrder);
-            if (node.widgets[0]) {
-                node.widgets[0].value = JSON.stringify(enabledOrder);
-                if (node.onWidgetChanged) {
-                    node.onWidgetChanged(node.widgets[0].name, node.widgets[0].value);
+            const currentWidgetValue = node.widgets[0] ? node.widgets[0].value : JSON.stringify(enabledOrder);
+            const newWidgetValue = JSON.stringify(enabledOrder);
+            
+            // Only update widget if order actually changed or forced
+            if (forceUpdate || currentWidgetValue !== newWidgetValue) {
+                node.widgets_values[0] = newWidgetValue;
+                if (node.widgets[0]) {
+                    node.widgets[0].value = newWidgetValue;
+                    if (node.onWidgetChanged) {
+                        node.onWidgetChanged(node.widgets[0].name, node.widgets[0].value);
+                    }
                 }
+                
+                // Force immediate property updates to ensure IS_CHANGED can access latest state
+                node.properties.image_order = order;
+                node.properties.enabled_layers = enabled;
+                node.properties.is_reversed = isReversed;
+                node.properties.is_single_mode = isSingleMode;
+                
+                // Set properties immediately to make them available to IS_CHANGED
+                node.setProperty("image_order", order);
+                node.setProperty("enabled_layers", enabled);
+                node.setProperty("is_reversed", isReversed);
+                node.setProperty("is_single_mode", isSingleMode);
+                
+                node.setDirtyCanvas(true, true);
+                app.graph.setDirtyCanvas(true, true);
+                log.info(`Updated widget with order: ${enabledOrder}, state synced`);
+            } else {
+                log.info(`Widget order unchanged: ${enabledOrder}, skipping update`);
             }
-            node.setDirtyCanvas(true, true);
-            app.graph.setDirtyCanvas(true, true);
-            log.info(`Updated widget with order: ${enabledOrder}`);
         }
 
         // Add widgets
@@ -388,9 +409,7 @@ app.registerExtension({
                     throw new Error("Invalid state after order update");
                 }
                 imageOrder = newOrder;
-                node.properties.image_order = imageOrder;
-                node.setProperty("image_order", imageOrder);
-                updateWidgetAndDirty(imageOrder, enabledLayers);
+                updateWidgetAndDirty(imageOrder, enabledLayers, false);  // Don't force update for order parsing
                 debouncedUpdateCardList();
                 errorMessage.style.display = "none";
             } catch (e) {
@@ -403,17 +422,13 @@ app.registerExtension({
 
         const reverseWidget = node.addWidget("toggle", "Reverse Display", isReversed, (value) => {
             isReversed = value;
-            node.properties.is_reversed = isReversed;
-            node.setProperty("is_reversed", isReversed);
-            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateWidgetAndDirty(imageOrder, enabledLayers, true);  // Force update for reverse toggle
             debouncedUpdateCardList();
             errorMessage.style.display = "none";
         }, { serialize: true });
 
         const singleModeWidget = node.addWidget("toggle", "Single Mode", isSingleMode, (value) => {
             isSingleMode = value;
-            node.properties.is_single_mode = isSingleMode;
-            node.setProperty("is_single_mode", isSingleMode);
             if (isSingleMode) {
                 const enabledIndex = enabledLayers.findIndex(x => x);
                 enabledLayers = Array(imagePreviews.length).fill(false);
@@ -422,10 +437,8 @@ app.registerExtension({
                 } else if (imagePreviews.length > 0) {
                     enabledLayers[0] = true;
                 }
-                node.properties.enabled_layers = enabledLayers;
-                node.setProperty("enabled_layers", enabledLayers);
             }
-            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateWidgetAndDirty(imageOrder, enabledLayers, true);  // Force update for single mode toggle
             debouncedUpdateCardList();
             log.info(`Single mode toggled: ${isSingleMode}`);
             errorMessage.style.display = "none";
@@ -434,11 +447,7 @@ app.registerExtension({
         const resetButtonWidget = node.addWidget("button", "Reset Order", "Reset Order", () => {
             imageOrder = imagePreviews.map(p => p.id);
             enabledLayers = Array(imagePreviews.length).fill(true);
-            node.properties.image_order = imageOrder;
-            node.properties.enabled_layers = enabledLayers;
-            node.setProperty("image_order", imageOrder);
-            node.setProperty("enabled_layers", enabledLayers);
-            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateWidgetAndDirty(imageOrder, enabledLayers, true);  // Force update for reset
             debouncedUpdateCardList();
             log.info(`Reset image order to: ${imageOrder}`);
             errorMessage.style.display = "none";
@@ -481,8 +490,6 @@ app.registerExtension({
                 if (isSingleMode && imagePreviews.length > 0) {
                     enabledLayers[0] = true;
                 }
-                node.properties.enabled_layers = enabledLayers;
-                node.setProperty("enabled_layers", enabledLayers);
             }
 
             imageOrder = validateImageOrder(imageOrder, imagePreviews);
@@ -495,15 +502,9 @@ app.registerExtension({
                 }
                 errorMessage.innerText = "Invalid state, reset to default";
                 errorMessage.style.display = "block";
-                node.properties.image_order = imageOrder;
-                node.properties.enabled_layers = enabledLayers;
-                node.setProperty("image_order", imageOrder);
-                node.setProperty("enabled_layers", enabledLayers);
             }
 
-            node.properties.image_order = imageOrder;
-            node.properties.enabled_layers = enabledLayers;
-            updateWidgetAndDirty(imageOrder, enabledLayers);
+            updateWidgetAndDirty(imageOrder, enabledLayers, false);  // Don't force update for card list update
 
             const orderedPreviews = imageOrder.map(id => imagePreviews.find(p => p.id === id)).filter(p => p);
             const displayPreviews = isReversed ? [...orderedPreviews].reverse() : orderedPreviews;
@@ -565,14 +566,8 @@ app.registerExtension({
                         enabledLayers = Array(imagePreviews.length).fill(true);
                         errorMessage.innerText = "Invalid layer state, reset to default";
                         errorMessage.style.display = "block";
-                        node.properties.image_order = imageOrder;
-                        node.properties.enabled_layers = enabledLayers;
-                        node.setProperty("image_order", imageOrder);
-                        node.setProperty("enabled_layers", enabledLayers);
                     }
-                    node.properties.enabled_layers = enabledLayers;
-                    node.setProperty("enabled_layers", enabledLayers);
-                    updateWidgetAndDirty(imageOrder, enabledLayers);
+                    updateWidgetAndDirty(imageOrder, enabledLayers, true);  // Force update for toggle changes
                     debouncedUpdateCardList();
                     log.info(`Layer ${preview.id} enabled: ${toggle.checked}`);
                 });
@@ -599,12 +594,8 @@ app.registerExtension({
                             imageOrder = imagePreviews.map(p => p.id);
                             errorMessage.innerText = "Invalid order state, reset to default";
                             errorMessage.style.display = "block";
-                            node.properties.image_order = imageOrder;
-                            node.setProperty("image_order", imageOrder);
                         }
-                        node.properties.image_order = imageOrder;
-                        node.setProperty("image_order", imageOrder);
-                        updateWidgetAndDirty(imageOrder, enabledLayers);
+                        updateWidgetAndDirty(imageOrder, enabledLayers, true);  // Force update for drag changes
                         debouncedUpdateCardList();
                         log.info(`Image order updated: ${imageOrder}`);
                     }
@@ -662,17 +653,9 @@ app.registerExtension({
                         }
                         errorMessage.innerText = "Invalid state, reset to default";
                         errorMessage.style.display = "block";
-                        node.properties.image_order = imageOrder;
-                        node.properties.enabled_layers = enabledLayers;
-                        node.setProperty("image_order", imageOrder);
-                        node.setProperty("enabled_layers", enabledLayers);
                     }
                     node.properties.image_previews = imagePreviews;
-                    node.properties.image_order = imageOrder;
-                    node.properties.is_reversed = isReversed;
-                    node.properties.enabled_layers = enabledLayers;
-                    node.properties.is_single_mode = isSingleMode;
-                    updateWidgetAndDirty(imageOrder, enabledLayers);
+                    updateWidgetAndDirty(imageOrder, enabledLayers, false);  // Don't force update for setValue
                     reverseWidget.value = isReversed;
                     singleModeWidget.value = isSingleMode;
 
@@ -732,20 +715,57 @@ app.registerExtension({
                 if (imageCountChanged) {
                     log.info(`Image count changed from ${prevImageCount} to ${newPreviews.length}`);
                     imagePreviews = newPreviews;
-                    imageOrder = newPreviews.map(p => p.id);
-                    enabledLayers = isSingleMode
-                        ? Array(newPreviews.length).fill(false)
-                        : Array(newPreviews.length).fill(true);
-                    if (isSingleMode && newPreviews.length > 0) {
-                        enabledLayers[0] = true;
+                    
+                    // Use full order from server if available, otherwise preserve existing order
+                    if (message.full_image_order && Array.isArray(message.full_image_order)) {
+                        imageOrder = message.full_image_order;
+                    } else {
+                        // Preserve existing image order for existing images, add new images to end
+                        const existingOrder = imageOrder.filter(id => newPreviews.some(p => p.id === id));
+                        const newImageIds = newPreviews.map(p => p.id).filter(id => !existingOrder.includes(id));
+                        imageOrder = [...existingOrder, ...newImageIds];
                     }
+                    
+                    // Preserve enabled state for existing images, default new images based on mode
+                    const existingEnabled = enabledLayers.slice(0, Math.min(enabledLayers.length, newPreviews.length));
+                    const newEnabledCount = newPreviews.length - existingEnabled.length;
+                    
+                    if (isSingleMode) {
+                        // In single mode, keep existing selection and disable new images
+                        const newEnabled = Array(newEnabledCount).fill(false);
+                        enabledLayers = [...existingEnabled, ...newEnabled];
+                    } else {
+                        // In multi mode, keep existing state and enable new images by default
+                        const newEnabled = Array(newEnabledCount).fill(true);
+                        enabledLayers = [...existingEnabled, ...newEnabled];
+                    }
+                    
+                    // Immediately update node properties for proper caching
+                    node.properties.image_order = imageOrder;
+                    node.properties.enabled_layers = enabledLayers;
+                    node.setProperty("image_order", imageOrder);
+                    node.setProperty("enabled_layers", enabledLayers);
+                    // Force widget update to ensure IS_CHANGED detects the change
+                    updateWidgetAndDirty(imageOrder, enabledLayers, true);
                 } else {
                     const oldIds = imagePreviews.map(p => p.id);
                     const newIds = newPreviews.map(p => p.id);
-                    if (!oldIds.every((id, i) => id === newIds[i])) {
-                        log.info("Image IDs changed, updating previews");
+                    const imagesChanged = !oldIds.every((id, i) => id === newIds[i]);
+                    
+                    // Always update previews when new data arrives, even if IDs are the same
+                    // This ensures that updated image content is reflected in the UI
+                    const previewsChanged = imagesChanged || 
+                        JSON.stringify(imagePreviews) !== JSON.stringify(newPreviews);
+                    
+                    if (previewsChanged) {
+                        log.info("Image previews changed, updating UI");
                         imagePreviews = newPreviews;
                         imageOrder = validateImageOrder(imageOrder, imagePreviews);
+                        // Immediately update node properties for proper caching
+                        node.properties.image_order = imageOrder;
+                        node.setProperty("image_order", imageOrder);
+                        // Force widget update when images change to ensure IS_CHANGED consistency
+                        updateWidgetAndDirty(imageOrder, enabledLayers, true);
                     } else {
                         imagePreviews = newPreviews;
                     }
@@ -756,6 +776,11 @@ app.registerExtension({
                         if (isSingleMode && imagePreviews.length > 0) {
                             enabledLayers[0] = true;
                         }
+                        // Immediately update node properties for proper caching
+                        node.properties.enabled_layers = enabledLayers;
+                        node.setProperty("enabled_layers", enabledLayers);
+                        // Force widget update when layer count changes
+                        updateWidgetAndDirty(imageOrder, enabledLayers, true);
                     }
                 }
 
@@ -766,19 +791,21 @@ app.registerExtension({
                     if (isSingleMode && imagePreviews.length > 0) {
                         enabledLayers[0] = true;
                     }
-                    errorMessage.innerText = "Invalid server state, reset to default";
-                    errorMessage.style.display = "block";
+                    // Immediately update node properties for proper caching
                     node.properties.image_order = imageOrder;
                     node.properties.enabled_layers = enabledLayers;
                     node.setProperty("image_order", imageOrder);
                     node.setProperty("enabled_layers", enabledLayers);
+                    // Force widget update after reset
+                    updateWidgetAndDirty(imageOrder, enabledLayers, true);
+                    errorMessage.innerText = "Invalid server state, reset to default";
+                    errorMessage.style.display = "block";
                 }
 
                 node.properties.image_previews = imagePreviews;
-                node.properties.image_order = imageOrder;
-                node.properties.enabled_layers = enabledLayers;
                 node.properties.is_single_mode = isSingleMode;
-                updateWidgetAndDirty(imageOrder, enabledLayers);
+                // Always update widget to ensure IS_CHANGED consistency after execution
+                updateWidgetAndDirty(imageOrder, enabledLayers, true);
                 debouncedUpdateCardList();
                 log.info(`Node ${nodeId} executed, imageOrder: ${imageOrder}`);
                 errorMessage.style.display = "none";
@@ -826,13 +853,9 @@ app.registerExtension({
             errorMessage.innerText = "Invalid initial state, reset to default";
             errorMessage.style.display = "block";
         }
-        node.properties.image_order = imageOrder;
-        node.properties.enabled_layers = enabledLayers;
         node.properties.is_single_mode = isSingleMode;
-        node.setProperty("image_order", imageOrder);
-        node.setProperty("enabled_layers", enabledLayers);
         node.setProperty("is_single_mode", isSingleMode);
-        updateWidgetAndDirty(imageOrder, enabledLayers);
+        updateWidgetAndDirty(imageOrder, enabledLayers, false);  // Don't force update for initialization
         debouncedUpdateCardList();
     }
 });

@@ -15,7 +15,7 @@ const logger = {
 };
 
 // Log level: 0=error, 1=warn, 2=info, 3=debug
-let logLevel = 2; // Default to info level
+let logLevel = 0; // Default to info level
 
 /**
  * Sets the logging level for the extension.
@@ -115,23 +115,15 @@ async function loadCodeMirrorResources() {
     const criticalResources = [
         {
             type: "script",
-            src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/codemirror.js",
-            fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"
+            src: "/extensions/ComfyUI_XISER_Nodes/lib/external/codemirror/codemirror.js"
         },
         {
             type: "css",
-            src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/codemirror.css",
-            fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css"
-        },
-        {
-            type: "script",
-            src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/htmlmixed.js",
-            fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/htmlmixed/htmlmixed.min.js"
+            src: "/extensions/ComfyUI_XISER_Nodes/lib/external/codemirror/codemirror.css"
         },
         {
             type: "css",
-            src: "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/theme/dracula.css",
-            fallback: "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/dracula.min.css"
+            src: "/extensions/ComfyUI_XISER_Nodes/lib/external/codemirror/theme/dracula.css"
         }
     ];
 
@@ -149,6 +141,37 @@ async function loadCodeMirrorResources() {
             logger.error(`Failed to load resource: ${res.src}`, e);
             throw e;
         }
+    }
+
+    // Load htmlmixed.js after CodeMirror is available
+    try {
+        // 确保CodeMirror对象已经定义
+        if (typeof CodeMirror === 'undefined') {
+            // 等待CodeMirror对象可用（最多等待5秒）
+            await new Promise((resolve, reject) => {
+                const maxWaitTime = 5000; // 5秒超时
+                const startTime = Date.now();
+
+                const checkCodeMirror = () => {
+                    if (typeof CodeMirror !== 'undefined') {
+                        resolve();
+                    } else if (Date.now() - startTime > maxWaitTime) {
+                        reject(new Error('CodeMirror not available after timeout'));
+                    } else {
+                        setTimeout(checkCodeMirror, 50);
+                    }
+                };
+                checkCodeMirror();
+            });
+        }
+
+        await loadScript(
+            "/extensions/ComfyUI_XISER_Nodes/lib/external/codemirror/htmlmixed.js"
+        );
+        logger.info("Loaded htmlmixed.js");
+    } catch (e) {
+        logger.error("Failed to load htmlmixed.js", e);
+        throw e;
     }
 }
 

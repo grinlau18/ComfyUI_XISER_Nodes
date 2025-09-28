@@ -106,43 +106,118 @@ function computeOutputHash(imagePreviews, imageOrder, enabledLayers) {
  * @param {HTMLElement} statusText - Status text element for UI feedback.
  * @param {Function} debouncedUpdateCardList - Debounced function to update the card list.
  */
+
+/**
+ * Get current state from node widgets
+ * @param {Object} node - The node instance
+ * @returns {Object} Current state object
+ */
+function getStateFromNode(node) {
+  try {
+    const orderData = JSON.parse(node.widgets[0].value || "{}");
+    const enabledData = JSON.parse(node.widgets[1].value || "{}");
+    const reversedData = JSON.parse(node.widgets[4].value || "{}");
+    const singleModeData = JSON.parse(node.widgets[5].value || "{}");
+    const nodeSizeData = JSON.parse(node.widgets[3].value || "[360, 360]");
+    
+    return {
+      imageOrder: orderData.order || [],
+      enabledLayers: enabledData.enabled || [],
+      isReversed: reversedData.reversed || false,
+      isSingleMode: singleModeData.single_mode || false,
+      nodeSize: Array.isArray(nodeSizeData) ? nodeSizeData : [360, 360]
+    };
+  } catch (e) {
+    log.error(`Failed to get state from node ${node.id}: ${e}`);
+    return {
+      imageOrder: [],
+      enabledLayers: [],
+      isReversed: false,
+      isSingleMode: false,
+      nodeSize: [360, 360]
+    };
+  }
+}
+
 function updateState(node, state, statusText, debouncedUpdateCardList) {
   const { imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, nodeSize } = state;
 
   let stateChanged = false;
 
-  // Update widgets only if values have changed
+  // Update widgets only if values have changed - parse existing values to compare content, not just string equality
   const newOrderValue = JSON.stringify({ node_id: node.id, order: imageOrder });
-  if (node.widgets[0].value !== newOrderValue) {
+  try {
+    const currentOrderData = JSON.parse(node.widgets[0].value || "{}");
+    const currentOrder = currentOrderData.order || [];
+    if (JSON.stringify(currentOrder) !== JSON.stringify(imageOrder) || currentOrderData.node_id !== node.id) {
+      node.widgets[0].value = newOrderValue;
+      if (node.widgets[0].onChange) node.widgets[0].onChange(newOrderValue);
+      stateChanged = true;
+    }
+  } catch (e) {
     node.widgets[0].value = newOrderValue;
     if (node.widgets[0].onChange) node.widgets[0].onChange(newOrderValue);
     stateChanged = true;
   }
+  
   const newEnabledValue = JSON.stringify({ node_id: node.id, enabled: enabledLayers });
-  if (node.widgets[1].value !== newEnabledValue) {
+  try {
+    const currentEnabledData = JSON.parse(node.widgets[1].value || "{}");
+    const currentEnabled = currentEnabledData.enabled || [];
+    if (JSON.stringify(currentEnabled) !== JSON.stringify(enabledLayers) || currentEnabledData.node_id !== node.id) {
+      node.widgets[1].value = newEnabledValue;
+      if (node.widgets[1].onChange) node.widgets[1].onChange(newEnabledValue);
+      stateChanged = true;
+    }
+  } catch (e) {
     node.widgets[1].value = newEnabledValue;
     if (node.widgets[1].onChange) node.widgets[1].onChange(newEnabledValue);
     stateChanged = true;
   }
+  
   if (node.widgets[2].value !== node.id) {
     node.widgets[2].value = node.id;
     if (node.widgets[2].onChange) node.widgets[2].onChange(node.id);
     stateChanged = true;
   }
+  
   const newSizeValue = JSON.stringify(nodeSize);
-  if (node.widgets[3].value !== newSizeValue) {
+  try {
+    const currentSize = JSON.parse(node.widgets[3].value || "[360, 360]");
+    if (JSON.stringify(currentSize) !== JSON.stringify(nodeSize)) {
+      node.widgets[3].value = newSizeValue;
+      if (node.widgets[3].onChange) node.widgets[3].onChange(newSizeValue);
+      stateChanged = true;
+    }
+  } catch (e) {
     node.widgets[3].value = newSizeValue;
     if (node.widgets[3].onChange) node.widgets[3].onChange(newSizeValue);
     stateChanged = true;
   }
+  
   const newReverseValue = JSON.stringify({ node_id: node.id, reversed: isReversed });
-  if (node.widgets[4].value !== newReverseValue) {
+  try {
+    const currentReverseData = JSON.parse(node.widgets[4].value || "{}");
+    if (currentReverseData.reversed !== isReversed || currentReverseData.node_id !== node.id) {
+      node.widgets[4].value = newReverseValue;
+      if (node.widgets[4].onChange) node.widgets[4].onChange(newReverseValue);
+      stateChanged = true;
+    }
+  } catch (e) {
     node.widgets[4].value = newReverseValue;
     if (node.widgets[4].onChange) node.widgets[4].onChange(newReverseValue);
     stateChanged = true;
   }
+  
   const newSingleModeValue = JSON.stringify({ node_id: node.id, single_mode: isSingleMode });
-  if (node.widgets[5].value !== newSingleModeValue) {
+  try {
+    const currentSingleModeData = JSON.parse(node.widgets[5].value || "{}");
+    if (currentSingleModeData.single_mode !== isSingleMode || currentSingleModeData.node_id !== node.id) {
+      node.widgets[5].value = newSingleModeValue;
+      if (node.widgets[5].onChange) node.widgets[5].onChange(newSingleModeValue);
+      stateChanged = true;
+    }
+  } catch (e) {
     node.widgets[5].value = newSingleModeValue;
     if (node.widgets[5].onChange) node.widgets[5].onChange(newSingleModeValue);
     stateChanged = true;
@@ -154,7 +229,37 @@ function updateState(node, state, statusText, debouncedUpdateCardList) {
 
   // Trigger card list update and canvas serialization only if state changed
   debouncedUpdateCardList();
+  
+  // Update node properties to persist state across operations like resize
   if (stateChanged) {
+    node.properties = {
+      ...node.properties,
+      image_previews: imagePreviews,
+      image_order: imageOrder,
+      enabled_layers: enabledLayers,
+      is_reversed: isReversed,
+      is_single_mode: isSingleMode,
+      node_size: nodeSize
+    };
+    log.debug(`Updated node properties for ${node.id}`);
+  }
+  
+  // Generate current cache key for comparison
+  const outputImages = imageOrder
+    .filter((_, i) => enabledLayers[i])
+    .map(idx => imagePreviews.find(p => p.index === idx)?.filename || "");
+  const currentCacheKey = JSON.stringify({
+    output_images: outputImages,
+    order: imageOrder,
+    enabled: enabledLayers,
+    reversed: isReversed,
+    single_mode: isSingleMode
+  });
+  
+  // Only mark as dirty if the actual output state has changed
+  // Also mark dirty if this is the first execution (cache key is empty)
+  if (stateChanged || node._lastCacheKey === "" || node._lastCacheKey !== currentCacheKey) {
+    node._lastCacheKey = currentCacheKey;
     app.graph.setDirtyCanvas(true, true);
     log.info(`State updated for node ${node.id}: ${imagePreviews.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, nodeSize=${nodeSize}`);
   } else {
@@ -179,6 +284,7 @@ app.registerExtension({
         node_size: [360, MIN_NODE_HEIGHT]
       };
       this.setSize([360, MIN_NODE_HEIGHT]);
+      this._lastCacheKey = ""; // Initialize cache key
     };
   },
 
@@ -224,51 +330,31 @@ app.registerExtension({
       })(app.graph.afterGraphConfigured || null);
     }
 
-    function isNodePositioned(node) {
-      const element = node.getElement ? node.getElement() : null;
-      if (!element) return false;
-      const rect = element.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && (rect.left !== 0 || rect.top !== 0);
-    }
 
     function initializeNode(node, callback, retries = 20, delay = 200) {
       if (!node) {
         log.error(`Node is null or undefined. Aborting initialization.`);
         return;
       }
+      
+      // Check if node already has a valid ID
       if (node.id > 0 && app.graph.getNodeById(node.id)) {
         log.info(`Node immediately initialized: ID ${node.id}, type ${node.type}, title ${node.title || "undefined"}`);
         callback(node.id);
         return;
       }
-      pendingNodes.set(node, callback);
-      app.graph.setDirtyCanvas(true);
-      let foundId = null;
-      for (const graphNode of app.graph.nodes) {
-        if (graphNode === node || (graphNode.id > 0 && graphNode.type === "XIS_ImageManager" && graphNode.id !== node.id)) {
-          if (graphNode === node && graphNode.id > 0) {
-            foundId = graphNode.id;
-            break;
-          } else if (graphNode.type === "XIS_ImageManager" && graphNode.id > 0) {
-            if (JSON.stringify(graphNode.properties) === JSON.stringify(node.properties)) {
-              foundId = graphNode.id;
-              break;
-            }
-          }
-        }
-      }
-      if (foundId) {
-        log.info(`Node found in graph: ID ${foundId}, type ${node.type}, title ${node.title || "undefined"}`);
-        pendingNodes.delete(node);
-        node.id = foundId;
-        callback(foundId);
-        return;
-      }
+      
+      // For workflow loading, nodes might start with negative IDs that get resolved later
+      // Just wait for the node to get a valid ID through normal ComfyUI processes
       if (retries <= 0) {
-        log.error(`Node ID not assigned after ${retries * delay}ms (current ID: ${node.id || "undefined"}, graph nodes: ${app.graph.nodes.length}, type: ${node.type}, title: ${node.title || "undefined"}). Awaiting graph configuration or refresh browser.`);
+        log.warning(`Node ID ${node.id || "undefined"} not assigned after max retries. UI may show but functionality limited.`);
+        // Still proceed with initialization but use a temporary ID
+        const tempId = node.id > 0 ? node.id : Math.abs(node.id) || Date.now();
+        callback(tempId);
         return;
       }
-      log.warning(`Node ID ${node.id || "undefined"} not yet valid (nodes: ${app.graph.nodes.length}), retrying (${retries} attempts left)...`);
+      
+      // Wait a bit and try again
       setTimeout(() => initializeNode(node, callback, retries - 1, delay), delay);
     }
 
@@ -317,30 +403,10 @@ app.registerExtension({
         deleteImage
       );
 
-      // Wait for node to be positioned before showing UI
-      function showUI() {
-        if (isNodePositioned(node)) {
-          mainContainer.style.visibility = "visible";
-          log.debug(`Node ${nodeId}: UI made visible after positioning`);
-          return;
-        }
-        let attempts = 20;
-        function tryShowUI() {
-          if (isNodePositioned(node)) {
-            mainContainer.style.visibility = "visible";
-            log.debug(`Node ${nodeId}: UI made visible after ${20 - attempts} attempts`);
-            return;
-          }
-          if (--attempts <= 0) {
-            mainContainer.style.visibility = "visible";
-            log.warning(`Node ${nodeId}: UI shown after max attempts, position may not be finalized`);
-            return;
-          }
-          requestAnimationFrame(tryShowUI);
-        }
-        requestAnimationFrame(tryShowUI);
-      }
-      requestAnimationFrame(showUI);
+      // Show UI immediately - the complex positioning logic was causing issues
+      // ComfyUI will handle node positioning automatically
+      mainContainer.style.visibility = "visible";
+      log.debug(`Node ${nodeId}: UI made visible`);
 
       // Add widgets
       const orderWidget = node.addWidget("hidden", "image_order", JSON.stringify({ node_id: nodeId, order: imageOrder }), value => {
@@ -428,6 +494,11 @@ app.registerExtension({
       node.addDOMWidget("image_manager", "Image Manager", mainContainer, {
         serialize: true,
         getValue() {
+          // Generate a stable cache key based on the actual output state
+          const outputImages = imageOrder
+            .filter((_, i) => enabledLayers[i])
+            .map(idx => imagePreviews.find(p => p.index === idx)?.filename || "");
+          
           return {
             image_previews: imagePreviews.map(p => ({
               index: p.index,
@@ -442,8 +513,14 @@ app.registerExtension({
             is_reversed: isReversed,
             is_single_mode: isSingleMode,
             node_id: nodeId,
-            node_size: nodeSize
-            // state_version removed to avoid affecting cache
+            node_size: nodeSize,
+            cache_key: JSON.stringify({
+              output_images: outputImages,
+              order: imageOrder,
+              enabled: enabledLayers,
+              reversed: isReversed,
+              single_mode: isSingleMode
+            })
           };
         },
         setValue(value) {
@@ -471,23 +548,36 @@ app.registerExtension({
               newEnabled[trueIndex >= 0 ? trueIndex : newOrder[0]] = true;
             }
 
-            imagePreviews = newPreviews;
-            imageOrder = newOrder;
-            enabledLayers = newEnabled;
-            isReversed = newIsReversed;
-            isSingleMode = newIsSingleMode;
-            nodeSize = newNodeSize;
-            node.properties = {
-              image_previews: imagePreviews,
-              image_order: imageOrder,
-              enabled_layers: enabledLayers,
-              is_reversed: isReversed,
-              is_single_mode: isSingleMode,
-              node_size: nodeSize
-            };
-            node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
-            setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
-            log.info(`Restored state for node ${nodeId}: ${imageOrder.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, node_size=${nodeSize}`);
+            // Check if state has actually changed before updating
+            const stateChanged = 
+              JSON.stringify(imagePreviews) !== JSON.stringify(newPreviews) ||
+              JSON.stringify(imageOrder) !== JSON.stringify(newOrder) ||
+              JSON.stringify(enabledLayers) !== JSON.stringify(newEnabled) ||
+              isReversed !== newIsReversed ||
+              isSingleMode !== newIsSingleMode ||
+              JSON.stringify(nodeSize) !== JSON.stringify(newNodeSize);
+
+            if (stateChanged) {
+              imagePreviews = newPreviews;
+              imageOrder = newOrder;
+              enabledLayers = newEnabled;
+              isReversed = newIsReversed;
+              isSingleMode = newIsSingleMode;
+              nodeSize = newNodeSize;
+              node.properties = {
+                image_previews: imagePreviews,
+                image_order: imageOrder,
+                enabled_layers: enabledLayers,
+                is_reversed: isReversed,
+                is_single_mode: isSingleMode,
+                node_size: nodeSize
+              };
+              node.setSize([Math.max(nodeSize[0], 360), Math.max(nodeSize[1], MIN_NODE_HEIGHT)]);
+              setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
+              log.info(`Restored state for node ${nodeId}: ${imageOrder.length} images, order=${imageOrder}, enabled=${enabledLayers}, reversed=${isReversed}, single_mode=${isSingleMode}, node_size=${nodeSize}`);
+            } else {
+              log.debug(`State unchanged in setValue for node ${nodeId}, skipping update`);
+            }
           } catch (error) {
             statusText.innerText = "State error";
             statusText.style.color = "#F55";
@@ -507,7 +597,23 @@ app.registerExtension({
         }
         nodeSize = newNodeSize;
         node.properties.node_size = newNodeSize;
-        setState({ imagePreviews, imageOrder, enabledLayers, isReversed, isSingleMode, stateVersion, nodeSize });
+        
+        // Get current state from node properties to ensure we have the latest state including uploaded images
+        const currentImagePreviews = node.properties.image_previews || [];
+        const currentImageOrder = node.properties.image_order || [...Array(currentImagePreviews.length).keys()];
+        const currentEnabledLayers = node.properties.enabled_layers || Array(currentImagePreviews.length).fill(true);
+        const currentIsReversed = node.properties.is_reversed || false;
+        const currentIsSingleMode = node.properties.is_single_mode || false;
+        
+        setState({ 
+          imagePreviews: currentImagePreviews, 
+          imageOrder: currentImageOrder, 
+          enabledLayers: currentEnabledLayers, 
+          isReversed: currentIsReversed, 
+          isSingleMode: currentIsSingleMode, 
+          stateVersion, 
+          nodeSize: newNodeSize 
+        });
         log.debug(`Node ${nodeId} resized: width=${size[0]}, height=${size[1]}`);
       };
 
@@ -533,10 +639,11 @@ app.registerExtension({
         }
         log.debug(`Node ${node.id}: onExecuted received image_previews: ${JSON.stringify(message.image_previews)}`);
 
-        // Prepare new previews
+        // Prepare new previews - preserve originalFilename from backend
         const newPreviews = message.image_previews.map((p, i) => ({
           ...p,
           index: i,
+          // Preserve original filename from backend, fallback to filename
           originalFilename: p.originalFilename || p.filename
         }));
 
@@ -566,40 +673,69 @@ app.registerExtension({
           log.error(`Failed to parse widget state for node ${node.id}: ${error}`);
         }
 
-        // Match existing images by filename to preserve order and enabled state
+        // Use full order from backend if available, otherwise match by filename
         const newOrder = [];
         const newEnabled = Array(newPreviews.length).fill(true); // Default to true for new nodes
-        const matchedIndices = new Set();
-
-        // Match existing images
-        for (const oldIdx of currentOrder) {
-          const oldPreview = imagePreviews.find(p => p.index === oldIdx);
-          if (!oldPreview) continue;
-          const newPreviewIndex = newPreviews.findIndex(p => p.filename === oldPreview.filename);
-          if (newPreviewIndex >= 0 && !matchedIndices.has(newPreviewIndex)) {
-            newOrder.push(newPreviewIndex);
-            newEnabled[newPreviewIndex] = currentEnabled[oldIdx] ?? true;
-            matchedIndices.add(newPreviewIndex);
+        
+        if (message.full_image_order && Array.isArray(message.full_image_order)) {
+          // Use the full order provided by backend for state preservation
+          newOrder.push(...message.full_image_order.filter(idx => idx < newPreviews.length));
+          
+          // Preserve enabled states for existing images, default new ones based on mode
+          for (let i = 0; i < newPreviews.length; i++) {
+            if (i < currentEnabled.length) {
+              newEnabled[i] = currentEnabled[i];
+            } else {
+              // New images: enable by default in multi mode, disable in single mode
+              newEnabled[i] = !currentIsSingleMode;
+            }
           }
+          
+          // Add any missing indices (new images not in full order)
+          const missingIndices = [];
+          for (let i = 0; i < newPreviews.length; i++) {
+            if (!newOrder.includes(i)) {
+              missingIndices.push(i);
+            }
+          }
+          newOrder.push(...missingIndices);
+        } else {
+          // Fallback: match existing images by filename
+          const matchedIndices = new Set();
+          
+          // Match existing images
+          for (const oldIdx of currentOrder) {
+            const oldPreview = imagePreviews.find(p => p.index === oldIdx);
+            if (!oldPreview) continue;
+            const newPreviewIndex = newPreviews.findIndex(p => p.filename === oldPreview.filename);
+            if (newPreviewIndex >= 0 && !matchedIndices.has(newPreviewIndex)) {
+              newOrder.push(newPreviewIndex);
+              newEnabled[newPreviewIndex] = currentEnabled[oldIdx] ?? true;
+              matchedIndices.add(newPreviewIndex);
+            }
+          }
+
+          // Add new images
+          newPreviews.forEach((p, i) => {
+            if (!matchedIndices.has(i)) {
+              newOrder.push(i);
+              newEnabled[i] = true; // New images enabled by default
+            }
+          });
         }
-
-        // Add new images
-        newPreviews.forEach((p, i) => {
-          if (!matchedIndices.has(i)) {
-            newOrder.push(i);
-            newEnabled[i] = true; // New images enabled by default
-          }
-        });
 
         // Enforce single mode
         if (currentIsSingleMode && newPreviews.length) {
           const trueIndex = newEnabled.indexOf(true);
           if (trueIndex === -1) {
+            // No enabled images, enable the first one
             newEnabled.fill(false);
             newEnabled[newOrder[0]] = true;
           } else if (newEnabled.filter(x => x).length > 1) {
+            // Multiple enabled images, keep only the first one
+            const firstTrueIndex = newEnabled.findIndex(x => x);
             newEnabled.fill(false);
-            newEnabled[trueIndex] = true;
+            newEnabled[firstTrueIndex] = true;
           }
         }
 
