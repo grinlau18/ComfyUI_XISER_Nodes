@@ -5,14 +5,14 @@
  */
 
 import { app } from "/scripts/app.js";
-import { setupCanvas, updateDisplay, setupInputListeners, updateCanvasSize } from "./XIS_CurveEditor_canvas.js";
+import { setupCanvas, updateDisplay, setupInputListeners, removeInputListeners, updateCanvasSize } from "./XIS_CurveEditor_canvas.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
 // 节点最小尺寸配置 (方便手动修改)
-const MIN_NODE_WIDTH = 440;   // 节点最小宽度 (px)
-const MIN_NODE_HEIGHT = 580;  // 节点最小高度 (px)
+const MIN_NODE_WIDTH = 640;   // 节点最小宽度 (px)
+const MIN_NODE_HEIGHT = 680;  // 节点最小高度 (px)
 
 /**
  * 确保节点ID有效
@@ -29,7 +29,6 @@ async function ensureNodeId(node) {
   }
 
   if (node.id === -1) {
-    log.warning(`Node ${node.id}: Failed to get valid node ID after ${maxAttempts} attempts`);
     return -1;
   }
 
@@ -42,7 +41,6 @@ async function ensureNodeId(node) {
  */
 async function initializeNode(node) {
   if (!node || node._removed) {
-    log.warning(`Node ${node?.id || 'unknown'} is invalid or removed, skipping initialization`);
     return;
   }
 
@@ -55,7 +53,6 @@ async function initializeNode(node) {
 
   // 添加初始化防护标志，防止重复初始化
   if (node._initializing || node._initialized) {
-    log.warning(`Node ${node.id} is already initializing or initialized, skipping duplicate initialization`);
     return;
   }
 
@@ -76,10 +73,6 @@ async function initializeNode(node) {
     setupCanvas(node);
     setupInputListeners(node);
 
-    // 不在这里调用updateDisplay，因为setupCanvas中的initializeCanvas会处理绘制
-    // updateDisplay(node);
-
-    log.info(`Node ${node.id} initialized successfully`);
   } catch (error) {
     log.error(`Node ${node.id} initialization error:`, error);
   } finally {
@@ -107,11 +100,9 @@ app.registerExtension({
    */
   nodeCreated(node) {
     if (node.comfyClass === "XIS_CurveEditor") {
-      log.info(`Node ${node.id} created`);
 
       // 添加节点创建防护标志，防止重复处理
       if (node._nodeCreatedProcessed) {
-        log.warning(`Node ${node.id} nodeCreated already processed, skipping`);
         return;
       }
       node._nodeCreatedProcessed = true;
@@ -126,7 +117,8 @@ app.registerExtension({
         data_type: "FLOAT",
         start_value: "0",
         end_value: "1",
-        point_count: 10
+        point_count: 10,
+        color_interpolation: "HSV"
       };
 
       // 仅为未定义的属性设置默认值
@@ -173,11 +165,20 @@ app.registerExtension({
         );
       }
 
-      // 对于已有有效ID的节点，在配置阶段处理初始化
-      // 避免在nodeCreated和onConfigure中重复初始化
-      if (node.id !== -1) {
-        log.info(`Node ${node.id} has valid ID, initialization will be handled in onConfigure`);
-      }
+      // 对于新添加的节点，立即进行初始化，但使用延迟确保DOM已准备好
+
+      // 使用延迟初始化确保DOM已准备好
+      setTimeout(() => {
+        if (!node._removed && node.id !== -1) {
+          initializeNode(node).then(() => {
+            node._initialized = true;
+            // 触发重绘确保内容显示
+            if (node.setDirtyCanvas) {
+              node.setDirtyCanvas(true, true);
+            }
+          });
+        }
+      }, 100);
     }
   },
 
@@ -191,60 +192,38 @@ app.registerExtension({
     if (nodeData.name === "XIS_CurveEditor") {
       nodeType.prototype.comfyClass = "XIS_CurveEditor";
 
-      // 处理节点配置（简化版本，不需要复杂的临时节点处理）
+      // 处理节点配置（主要用于恢复保存的工作流）
       const origOnConfigure = nodeType.prototype.onConfigure;
       nodeType.prototype.onConfigure = function (config) {
         if (origOnConfigure) origOnConfigure.apply(this, [config]);
 
         // 添加配置防护标志，防止重复配置
         if (this._configured) {
-          log.warning(`Node ${this.id} already configured, skipping`);
           return;
         }
         this._configured = true;
 
-        log.info(`Node ${this.id} configured`);
 
-        // 防止重复调度初始化
-        if (this._initializationScheduled) {
-          log.warning(`Node ${this.id} initialization already scheduled, skipping`);
+        // 防止重复初始化 - 如果已经在nodeCreated中初始化过，则跳过
+        if (this._initialized) {
           return;
         }
-        this._initializationScheduled = true;
 
-        // 对于临时节点（ID为-1），延迟初始化直到获得有效ID
-        if (this.id === -1) {
-          log.info(`Node ${this.id} is temporary, waiting for valid ID`);
-          const checkValidId = async () => {
-            if (this.id !== -1 && !this._removed && !this._initializing) {
-              log.info(`Node ${this.id} now has valid ID, starting initialization`);
+        // 对于恢复的节点，确保DOM元素已清理并重新初始化
+        if (this.id !== -1 && !this._removed) {
 
-              // 使用基于节点ID的延迟初始化策略
-              const nodeHash = Math.abs(this.id) % 100;
-              const delay = 100 + (nodeHash * 50);
-
-              setTimeout(async () => {
-                if (!this._removed && !this._initializing) {
-                  await initializeNode(this);
-                  this._initialized = true;
-                }
-              }, delay);
-            } else if (this.id === -1 && !this._removed) {
-              setTimeout(checkValidId, 100);
-            }
-          };
-          checkValidId();
-        } else {
-          // 对于已有有效ID的节点，直接使用延迟初始化策略
-          const nodeHash = Math.abs(this.id) % 100;
-          const delay = 100 + (nodeHash * 50);
-
-          setTimeout(async () => {
+          // 延迟初始化确保DOM已准备好
+          setTimeout(() => {
             if (!this._removed && !this._initializing) {
-              await initializeNode(this);
-              this._initialized = true;
+              initializeNode(this).then(() => {
+                this._initialized = true;
+                // 触发重绘确保内容显示
+                if (this.setDirtyCanvas) {
+                  this.setDirtyCanvas(true, true);
+                }
+              });
             }
-          }, delay);
+          }, 150);
         }
       };
 
@@ -267,7 +246,6 @@ app.registerExtension({
             }
             this.properties.node_size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
             this._resizing = false;
-            log.info(`Node ${this.id} resize enforced to: ${MIN_NODE_WIDTH}x${MIN_NODE_HEIGHT}`);
           }
         }
       };
@@ -276,6 +254,9 @@ app.registerExtension({
       nodeType.prototype.onRemoved = function () {
         // 标记节点为已移除
         this._removed = true;
+
+        // 移除事件监听器
+        removeInputListeners(this);
 
         // 清理DOM元素
         const selectors = [
@@ -300,6 +281,8 @@ app.registerExtension({
         this.canvas = null;
         this.ctx = null;
         this._curveState = null;
+        this._eventHandlers = null;
+        this._intersectionObserver = null;
         this._initializing = false;
         this._nodeCreatedProcessed = false;
         this._configured = false;
@@ -307,10 +290,7 @@ app.registerExtension({
         this._initialized = false;
         this._canvasSetupInProgress = false;
         this._canvasInitialized = false;
-        this._updatingDisplay = false;
-        this._initializationScheduled = false;
 
-        log.info(`Node ${this.id} completely removed`);
       };
     }
   },
@@ -327,3 +307,5 @@ app.registerExtension({
     log.info("XISER.CurveEditor extension styles applied");
   }
 });
+
+export { MIN_NODE_WIDTH, MIN_NODE_HEIGHT };

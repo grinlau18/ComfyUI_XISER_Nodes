@@ -19,12 +19,12 @@ import { updateHistory } from './canvas_history.js';
  * @returns {Object} Konva stage and layer objects.
  * @throws {Error} If Konva.js is not loaded.
  */
+// Define step constants for wheel interactions
+const ROTATION_STEP = 1; // Rotation step size (1 degree)
+const SCALE_STEP = 0.01; // Scaling step size (1%)
+
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
-
-  // Define step constants for wheel interactions
-  const ROTATION_STEP = 1; // Rotation step size (1 degree)
-  const SCALE_STEP = 0.01; // Scaling step size (1%)
 
   if (!window.Konva) {
     log.error(`Konva.js not available for node ${node.id}`);
@@ -418,9 +418,7 @@ function debounce(func, delay) {
 export function setupWheelEvents(node, nodeState) {
   const log = nodeState.log || console;
 
-  // Define constants for consistent transformation steps
-  const ROTATION_STEP = 1; // 1 degree per wheel tick
-  const SCALE_STEP = 0.01; // 1% scaling per wheel tick
+  // Use the global constants for consistent transformation steps
 
   // Remove existing wheel event listeners to prevent duplicates
   nodeState.stage.off('wheel');

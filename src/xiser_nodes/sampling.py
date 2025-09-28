@@ -205,7 +205,7 @@ class XIS_LatentBlendNode:
     RETURN_TYPES = ("LATENT",)
     RETURN_NAMES = ("latent_batch",)
     FUNCTION = "blend_latents"
-    CATEGORY = "XISER_Nodes/Other"
+    CATEGORY = "XISER_Nodes/Sampling"
 
     def blend_latents(self, latent1, latent2, start_strength, end_strength, batch_size, blend_mode):
         # Extract latent tensors

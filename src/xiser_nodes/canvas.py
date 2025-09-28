@@ -65,7 +65,7 @@ class XISER_Canvas:
     RETURN_TYPES = ("IMAGE", "STRING", "MASK",)
     RETURN_NAMES = ("canvas_image", "image_paths", "masks",)
     FUNCTION = "render"
-    CATEGORY = "XISER_Nodes/Canvas"
+    CATEGORY = "XISER_Nodes/Visual_Editing"
     OUTPUT_NODE = True
 
     def _generate_base64_chunks(self, pil_img, format="PNG", quality=10, chunk_size=512 * 1024):

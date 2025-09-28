@@ -34,6 +34,13 @@ class XIS_CoordinatePath:
                         "options": ["linear", "curve"]
                     }
                 ),
+                "distribution_mode": (
+                    "COMBO",
+                    {
+                        "default": "uniform",
+                        "options": ["uniform", "ease_in", "ease_out", "ease_in_out", "ease_out_in"]
+                    }
+                ),
                 "path_canvas": ("WIDGET", {}),
             }
         }
@@ -41,16 +48,17 @@ class XIS_CoordinatePath:
     RETURN_TYPES = ("INT", "INT", "FLOAT", "FLOAT", "LIST", "LIST")
     RETURN_NAMES = ("x_coordinate", "y_coordinate", "x_percent", "y_percent", "x_list", "y_list")
     FUNCTION = "execute"
-    CATEGORY = "XISER_Nodes/Other"
+    CATEGORY = "XISER_Nodes/Visual_Editing"
     OUTPUT_IS_LIST = (True, True, True, True, False, False)
 
-    def calculate_linear_path(self, control_points: List[Dict[str, float]], segments: int) -> List[Dict[str, float]]:
+    def calculate_linear_path(self, control_points: List[Dict[str, float]], segments: int, distribution_mode: str = "uniform") -> List[Dict[str, float]]:
         """
-        Calculate linear path coordinates between control points.
+        Calculate linear path coordinates between control points with distribution modes.
 
         Args:
             control_points: List of control points with x, y coordinates
             segments: Number of segments to generate
+            distribution_mode: Distribution mode for point spacing
 
         Returns:
             List of coordinate points
@@ -59,7 +67,7 @@ class XIS_CoordinatePath:
             return []
 
         path_coords = []
-        
+
         # Calculate total path length
         total_length = 0
         segment_lengths = []
@@ -73,11 +81,15 @@ class XIS_CoordinatePath:
         if total_length == 0:
             return []
 
-        # Generate evenly spaced points along the entire path
+        # Generate points along the entire path with distribution mode
         for i in range(segments):
-            # Calculate target distance along the path
-            target_distance = (i / (segments - 1)) * total_length if segments > 1 else 0
-            
+            # Calculate target distance using distribution mode
+            if segments == 1:
+                target_distance = total_length / 2
+            else:
+                ratio = self.calculate_distribution_ratio(i, segments, distribution_mode)
+                target_distance = ratio * total_length
+
             # Find which segment contains this distance
             current_distance = 0
             segment_index = 0
@@ -86,33 +98,34 @@ class XIS_CoordinatePath:
                     segment_index = j
                     break
                 current_distance += seg_length
-            
+
             # Calculate position within the segment
             segment_remaining = target_distance - current_distance
             segment_start = control_points[segment_index]
             segment_end = control_points[segment_index + 1]
-            
+
             if segment_lengths[segment_index] > 0:
                 t = segment_remaining / segment_lengths[segment_index]
             else:
                 t = 0
-            
+
             t = max(0, min(1, t))
             x = segment_start["x"] + t * (segment_end["x"] - segment_start["x"])
             y = segment_start["y"] + t * (segment_end["y"] - segment_start["y"])
-            
+
             path_coords.append({"x": x, "y": y})
 
         return path_coords
 
-    def calculate_curve_path(self, control_points: List[Dict[str, float]], segments: int) -> List[Dict[str, float]]:
+    def calculate_curve_path(self, control_points: List[Dict[str, float]], segments: int, distribution_mode: str = "uniform") -> List[Dict[str, float]]:
         """
         Calculate curve path coordinates using Catmull-Rom spline with arc-length parameterization.
-        Points are distributed evenly along the total curve length.
+        Points are distributed along the total curve length based on distribution mode.
 
         Args:
             control_points: List of control points with x, y coordinates
             segments: Number of segments to generate
+            distribution_mode: Distribution mode for point spacing
 
         Returns:
             List of coordinate points
@@ -156,13 +169,14 @@ class XIS_CoordinatePath:
 
         path_coords = []
 
-        # 基于弧长均匀分布点
+        # 基于弧长和分布模式分布点
         for i in range(segments):
-            # 计算目标弧长（从0到总长度）
+            # 计算目标弧长（基于分布模式）
             if segments == 1:
                 target_arc_length = total_length / 2  # 单个点放在中间
             else:
-                target_arc_length = (i / (segments - 1)) * total_length
+                ratio = self.calculate_distribution_ratio(i, segments, distribution_mode)
+                target_arc_length = ratio * total_length
 
             # 找到对应的曲线段和参数t
             segment_index, t = self.find_t_for_arc_length(points, target_arc_length)
@@ -319,8 +333,50 @@ class XIS_CoordinatePath:
         # If target length exceeds total length, return last segment end
         return (num_curve_segments - 1, 1.0)
 
+    def calculate_distribution_ratio(self, i: int, total_segments: int, distribution_mode: str) -> float:
+        """
+        Calculate the distribution ratio based on the selected mode.
 
-    def execute(self, width: int, height: int, path_segments: int, path_mode: str, path_canvas: Dict[str, Any]) -> tuple:
+        Args:
+            i: Current segment index (0 to total_segments-1)
+            total_segments: Total number of segments
+            distribution_mode: Distribution mode (uniform, ease_in, ease_out, etc.)
+
+        Returns:
+            Ratio value between 0 and 1
+        """
+        if total_segments <= 1:
+            return 0.5
+
+        # Normalize position from 0 to 1
+        t = i / (total_segments - 1) if total_segments > 1 else 0.5
+
+        if distribution_mode == "uniform":
+            # Linear distribution (current behavior)
+            return t
+
+        elif distribution_mode == "ease_in":
+            # Ease in: slow start, fast end (quadratic)
+            return t * t
+
+        elif distribution_mode == "ease_out":
+            # Ease out: fast start, slow end (inverse quadratic)
+            return 1 - (1 - t) * (1 - t)
+
+        elif distribution_mode == "ease_in_out":
+            # Ease in-out: slow start and end, fast middle (sine-based)
+            return 0.5 - 0.5 * np.cos(t * np.pi)
+
+        elif distribution_mode == "ease_out_in":
+            # Ease out-in: fast start and end, slow middle (inverse sine)
+            return 0.5 + 0.5 * np.sin((t - 0.5) * np.pi)
+
+        else:
+            # Default to uniform
+            return t
+
+
+    def execute(self, width: int, height: int, path_segments: int, path_mode: str, distribution_mode: str, path_canvas: Dict[str, Any]) -> tuple:
         """
         Execute the path coordinate generation.
 
@@ -345,9 +401,9 @@ class XIS_CoordinatePath:
 
         # Calculate path coordinates
         if path_mode == "linear":
-            path_coords = self.calculate_linear_path(control_points, path_segments)
+            path_coords = self.calculate_linear_path(control_points, path_segments, distribution_mode)
         else:  # curve mode
-            path_coords = self.calculate_curve_path(control_points, path_segments)
+            path_coords = self.calculate_curve_path(control_points, path_segments, distribution_mode)
 
         if not path_coords:
             # Return default coordinates if no valid path

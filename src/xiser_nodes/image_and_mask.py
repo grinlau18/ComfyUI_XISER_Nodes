@@ -6,9 +6,6 @@ import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
-import hashlib
-import uuid
-import time
 
 """
 Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
@@ -33,7 +30,7 @@ class XIS_LoadImage:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image", "mask")
     FUNCTION = "load_image"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def load_image(self, image: str, mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         img = Image.open(image).convert("RGBA")
@@ -85,7 +82,7 @@ class XIS_ImageStitcher:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("stitched_image", "stitched_mask")
     FUNCTION = "stitch_images"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def stitch_images(self, main_image, layout, main_position, background_color, border_size, sub_image1=None, sub_image2=None, sub_image3=None, sub_image4=None, main_mask=None):
         # 将所有输入图像转换为 PIL 格式
@@ -248,7 +245,7 @@ class XIS_ResizeToDivisible:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image_output", "mask_output")
     FUNCTION = "resize_to_divisible"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def resize_to_divisible(self, divisor, image=None, mask=None):
         if image is None and mask is None:
@@ -293,7 +290,7 @@ class XIS_CropImage:
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "process"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def process(self, image, mask, invert_mask, background_color, padding_width):
         image = image[0]  # [H, W, C]
@@ -388,7 +385,7 @@ class XIS_InvertMask:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("mask_output",)
     FUNCTION = "invert_mask"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def invert_mask(self, mask, invert, image=None):
         mask = mask.to(dtype=torch.float32)
@@ -419,7 +416,7 @@ class XIS_ImageMaskMirror:
     RETURN_TYPES = ("IMAGE", "MASK")
     RETURN_NAMES = ("image_output", "mask_output")
     FUNCTION = "mirror_flip"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def mirror_flip(self, flip_axis, enable_flip, image=None, mask=None):
         if image is None and mask is None:
@@ -465,7 +462,7 @@ class XIS_ResizeImageOrMask:
     RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT")
     RETURN_NAMES = ("resized_image", "resized_mask", "width", "height")
     FUNCTION = "resize_image_or_mask"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def resize_image_or_mask(self, resize_mode: str, scale_condition: str, interpolation: str, min_unit: int,
                             image: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None,
@@ -657,7 +654,7 @@ class XIS_ReorderImageMaskGroups:
 
     FUNCTION = "reorder_groups"
 
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def reorder_groups(self, insert_order, insert_image=None, insert_mask=None, image_1=None, mask_1=None, 
                       image_2=None, mask_2=None, image_3=None, mask_3=None, image_4=None, mask_4=None):
@@ -712,7 +709,7 @@ class XIS_MaskCompositeOperation:
     RETURN_TYPES = ("MASK", "IMAGE")
     RETURN_NAMES = ("result_mask", "overlay_image")
     FUNCTION = "apply_operations"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def apply_operations(self, mask1, operation, blur_radius, expand_shrink, invert_mask, overlay_color, opacity, mask2=None, reference_image=None):
         # 将 mask1 转换为 NumPy 数组并获取尺寸（保持浮点数）
@@ -820,7 +817,7 @@ class XIS_MaskBatchProcessor:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("processed_mask",)
     FUNCTION = "process_masks"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def process_masks(self, masks, operation, invert_output):
         """
@@ -908,7 +905,7 @@ class XIS_CanvasMaskProcessor:
     RETURN_TYPES = ("MASK",)
     RETURN_NAMES = ("output_mask",)
     FUNCTION = "blend_masks"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
     def blend_masks(self, invert_output, masks, **kwargs):
         batch_size = masks.shape[0] if masks.dim() == 3 else 1
@@ -963,262 +960,68 @@ class XIS_CanvasMaskProcessor:
         
         return (output_mask,)
 
-# 将多个图像和蒙版打包成一个 IMAGE 对象
-class XIS_PackImages:
+# 这是一个图像合成处理器，能对输入图像执行缩放、旋转等操作，并将处理后的图像放置在指定尺寸和颜色的画布上，最终输出合成结果。
+class XIS_CompositorProcessor:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "invert_mask": ("BOOLEAN", {"default": False, "label_on": "Invert", "label_off": "Normal"}),
-                "before_pack_images": ("BOOLEAN", {"default": False, "label_on": "on", "label_off": "off"}),
-            },
-            "optional": {
-                "pack_images": ("IMAGE", {"default": None}),
-                "image1": ("IMAGE", {"default": None}),
-                "mask1": ("MASK", {"default": None}),
-                "image2": ("IMAGE", {"default": None}),
-                "mask2": ("MASK", {"default": None}),
-                "image3": ("IMAGE", {"default": None}),
-                "mask3": ("MASK", {"default": None}),
-                "image4": ("IMAGE", {"default": None}),
-                "mask4": ("MASK", {"default": None}),
-                "image5": ("IMAGE", {"default": None}),
-                "mask5": ("MASK", {"default": None}),
+                "image": ("IMAGE",),  # 目标图片输入，ComfyUI 的 IMAGE 类型
+                "x": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 x 坐标
+                "y": ("INT", {"default": 0, "min": -9999, "max": 9999, "step": 1}),  # 中心点 y 坐标
+                "width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放宽度
+                "height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 缩放高度
+                "angle": ("INT", {"default": 0, "min": -360, "max": 360, "step": 1}),  # 旋转角度
+                "canvas_width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板宽度
+                "canvas_height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),  # 画板高度
+                "background_color": ("STRING", {"default": "#FFFFFF"}),  # 画板底色（HEX 值）
             }
         }
 
     RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("pack_images",)
-    FUNCTION = "pack_images"
-    CATEGORY = "XISER_Nodes/Canvas"
+    RETURN_NAMES = ("output_image",)
+    FUNCTION = "transform_image"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
 
-    def pack_images(self, invert_mask, before_pack_images, image1=None, pack_images=None, 
-                    mask1=None, image2=None, mask2=None, image3=None, mask3=None, 
-                    image4=None, mask4=None, image5=None, mask5=None):
-        
-        # 收集当前节点的图像和蒙版输入
-        input_images = [image1, image2, image3, image4, image5]
-        input_masks = [mask1, mask2, mask3, mask4, mask5]
-        
-        # 过滤掉 None 的图像输入
-        images = [img for img in input_images if img is not None]
-        
-        # 检查是否有有效的图像输入
-        if not images and (pack_images is None or not pack_images):
-            logger.error("No valid images provided (all image inputs and pack_images are None)")
-            raise ValueError("At least one valid image must be provided")
+    def transform_image(self, image, x, y, width, height, angle, canvas_width, canvas_height, background_color):
+        # 将 ComfyUI 的 IMAGE 类型（torch.Tensor）转换为 PIL 图像
+        image_tensor = image[0]  # 假设批量大小为 1，取第一张图
+        image_np = image_tensor.cpu().numpy() * 255  # 转换为 0-255 范围
+        image_np = image_np.astype(np.uint8)
+        pil_image = Image.fromarray(image_np)
 
-        # 初始化输出图像列表
-        normalized_images = []
+        # 确保 width 和 height 大于 0
+        width = max(1, width)
+        height = max(1, height)
 
-        # 根据 before_pack_images 的值决定添加顺序
-        if not before_pack_images:
-            # 默认行为：pack_images 在前，image1 到 image5 在后
-            if pack_images is not None:
-                if not isinstance(pack_images, (list, tuple)):
-                    logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
-                    raise ValueError("pack_images must be a list or tuple")
-                normalized_images.extend(pack_images)
-        
-        # 规范化当前节点的图像和蒙版
-        for idx, img in enumerate(images):
-            if not isinstance(img, torch.Tensor):
-                logger.error(f"Invalid image type: expected torch.Tensor, got {type(img)}")
-                raise ValueError("All images must be torch.Tensor")
-
-            # 确保图像维度正确
-            if len(img.shape) == 3:  # (H, W, C)
-                img = img.unsqueeze(0)  # 转换为 (1, H, W, C)
-            elif len(img.shape) != 4:  # (N, H, W, C)
-                logger.error(f"Invalid image dimensions: {img.shape}")
-                raise ValueError(f"Image has invalid dimensions: {img.shape}")
-
-            # 获取对应蒙版
-            mask = input_masks[idx]
-
-            # 处理每个批次中的图像
-            for i in range(img.shape[0]):
-                single_img = img[i]  # (H, W, C)
-                
-                # 处理蒙版
-                alpha = None
-                if mask is not None:
-                    if not isinstance(mask, torch.Tensor):
-                        logger.error(f"Invalid mask type: expected torch.Tensor, got {type(mask)}")
-                        raise ValueError("Mask must be torch.Tensor")
-                    
-                    # 确保蒙版维度正确
-                    mask_dim = len(mask.shape)
-                    if mask_dim == 2:  # (H, W)
-                        mask = mask.unsqueeze(0)  # 转换为 (1, H, W)
-                    elif mask_dim == 3:  # (N, H, W)
-                        pass
-                    else:
-                        logger.error(f"Invalid mask dimensions: {mask.shape}")
-                        raise ValueError(f"Mask has invalid dimensions: {mask.shape}")
-
-                    # 获取对应批次的蒙版
-                    single_mask = mask[i] if mask.shape[0] > i else mask[0]
-                    
-                    # 检查是否为 64x64 全 0 蒙版
-                    if single_mask.shape == (64, 64) and torch.all(single_mask == 0):
-                        alpha = None  # 视为无蒙版输入
-                    else:
-                        # 确保蒙版尺寸与图像匹配（除非是 64x64 全 0）
-                        if single_mask.shape != single_img.shape[:2]:
-                            logger.error(f"Mask size {single_mask.shape} does not match image size {single_img.shape[:2]}")
-                            raise ValueError("Mask size must match image size")
-                        
-                        # 规范化蒙版为单通道
-                        alpha = single_mask.unsqueeze(-1)  # (H, W, 1)
-                        if alpha.max() > 1.0 or alpha.min() < 0.0:
-                            alpha = (alpha - alpha.min()) / (alpha.max() - alpha.min() + 1e-8)  # 归一化到 [0,1]
-                        
-                        # 如果 invert_mask 为 True，进行蒙版反转
-                        if invert_mask:
-                            alpha = 1.0 - alpha
-
-                # 处理图像通道
-                if single_img.shape[-1] == 3:  # RGB
-                    if alpha is None:
-                        alpha = torch.ones_like(single_img[..., :1])  # 默认全 1 Alpha 通道
-                    single_img = torch.cat([single_img, alpha], dim=-1)  # 转换为 RGBA
-                elif single_img.shape[-1] == 4:  # RGBA
-                    if alpha is not None:
-                        # 替换 Alpha 通道
-                        single_img = torch.cat([single_img[..., :3], alpha], dim=-1)
-                else:
-                    logger.error(f"Image has invalid channels: {single_img.shape[-1]}")
-                    raise ValueError(f"Image has invalid channels: {single_img.shape[-1]}")
-                
-                normalized_images.append(single_img)
-
-        # 如果 before_pack_images 为 True，将 pack_images 添加到末尾
-        if before_pack_images and pack_images is not None:
-            if not isinstance(pack_images, (list, tuple)):
-                logger.error(f"Invalid pack_images type: expected list or tuple, got {type(pack_images)}")
-                raise ValueError("pack_images must be a list or tuple")
-            normalized_images.extend(pack_images)
-
-        logger.info(f"Packed {len(normalized_images)} images for canvas")
-        return (normalized_images,)
-
-
-class XIS_MergePackImages:
-    """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
-
-    def __init__(self):
-        """Initialize the node instance."""
-        self.instance_id = uuid.uuid4().hex
-        logger.info(f"Instance {self.instance_id} - XIS_MergePackImages initialized")
-
-    @classmethod
-    def INPUT_TYPES(cls) -> dict:
-        """Define input types for the node, matching XIS_ImageManager's data type."""
-        return {
-            "optional": {
-                "pack_images_1": ("IMAGE", {"default": None}),
-                "pack_images_2": ("IMAGE", {"default": None}),
-                "pack_images_3": ("IMAGE", {"default": None}),
-                "pack_images_4": ("IMAGE", {"default": None}),
-                "pack_images_5": ("IMAGE", {"default": None}),
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("pack_images",)
-    FUNCTION = "merge_images"
-    CATEGORY = "XISER_Nodes/Canvas"
-    OUTPUT_NODE = True
-
-    def merge_images(
-        self,
-        pack_images_1: Optional[List[torch.Tensor]] = None,
-        pack_images_2: Optional[List[torch.Tensor]] = None,
-        pack_images_3: Optional[List[torch.Tensor]] = None,
-        pack_images_4: Optional[List[torch.Tensor]] = None,
-        pack_images_5: Optional[List[torch.Tensor]] = None,
-    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
-        """
-        Merge multiple pack_images inputs into a single pack_images output.
-
-        Args:
-            pack_images_1 to pack_images_5: Optional list of torch.Tensor, each of shape [H, W, 4] (RGBA).
-
-        Returns:
-            A tuple containing:
-            - List of merged torch.Tensor images (IMAGE).
-            - torch.Tensor of merged images (IMAGE) if all images have the same size, else empty tensor.
-        """
-        logger.debug(f"Instance {self.instance_id} - Merging pack_images inputs")
-
-        # 收集所有非空输入
-        input_packs = [
-            (i + 1, pack) for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5])
-            if pack is not None and isinstance(pack, list) and pack
-        ]
-
-        if not input_packs:
-            logger.info(f"Instance {self.instance_id} - No valid pack_images inputs provided, returning empty outputs")
-            return ([], torch.empty(0, 0, 0, 4))
-
-        # 验证输入格式并收集图像
-        merged_images = []
-        image_sizes = []
-        for port_idx, pack in input_packs:
-            if not all(isinstance(img, torch.Tensor) for img in pack):
-                logger.error(f"Instance {self.instance_id} - Invalid image type in pack_images_{port_idx}: expected list of torch.Tensor")
-                raise ValueError(f"pack_images_{port_idx} must contain torch.Tensor images")
-            for j, img in enumerate(pack):
-                if len(img.shape) != 3 or img.shape[-1] != 4:
-                    logger.error(f"Instance {self.instance_id} - Invalid shape for image {j} in pack_images_{port_idx}: expected [H, W, 4], got {img.shape}")
-                    raise ValueError(f"Image {j} in pack_images_{port_idx} must be [H, W, 4] (RGBA)")
-                merged_images.append(img)
-                image_sizes.append(img.shape[:2])  # Record [H, W]
-                logger.debug(f"Instance {self.instance_id} - Added image {j} from pack_images_{port_idx} with size {img.shape[:2]}")
-
-        if not merged_images:
-            logger.info(f"Instance {self.instance_id} - No images after validation, returning empty outputs")
-            return ([], torch.empty(0, 0, 0, 4))
-
-        return (merged_images,)
-
-    @staticmethod
-    def IS_CHANGED(
-        pack_images_1: Optional[List[torch.Tensor]] = None,
-        pack_images_2: Optional[List[torch.Tensor]] = None,
-        pack_images_3: Optional[List[torch.Tensor]] = None,
-        pack_images_4: Optional[List[torch.Tensor]] = None,
-        pack_images_5: Optional[List[torch.Tensor]] = None,
-    ) -> str:
-        """Compute a hash to detect changes in inputs."""
-        logger.debug(f"IS_CHANGED called for XIS_MergePackImages")
+        # 创建画板
         try:
-            hasher = hashlib.sha256()
-            for i, pack in enumerate([pack_images_1, pack_images_2, pack_images_3, pack_images_4, pack_images_5], 1):
-                if pack is None or not pack:
-                    hasher.update(f"pack_images_{i}_empty".encode('utf-8'))
-                    continue
-                if not isinstance(pack, list):
-                    logger.warning(f"Invalid pack_images_{i} type: {type(pack)}")
-                    hasher.update(f"pack_images_{i}_invalid_{id(pack)}".encode('utf-8'))
-                    continue
-                hasher.update(f"pack_images_{i}_len_{len(pack)}".encode('utf-8'))
-                for j, img in enumerate(pack):
-                    if isinstance(img, torch.Tensor):
-                        hasher.update(str(img.shape).encode('utf-8'))
-                        sample_data = img.cpu().numpy().flatten()[:100].tobytes()
-                        hasher.update(sample_data)
-                    else:
-                        logger.warning(f"Invalid image type at index {j} in pack_images_{i}: {type(img)}")
-                        hasher.update(f"img_{j}_invalid_{id(img)}".encode('utf-8'))
-            hash_value = hasher.hexdigest()
-            logger.debug(f"IS_CHANGED returning hash: {hash_value}")
-            return hash_value
-        except Exception as e:
-            logger.error(f"IS_CHANGED failed: {e}")
-            return str(time.time())
+            # 验证并转换 HEX 颜色值
+            bg_color = tuple(int(background_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        except ValueError:
+            bg_color = (255, 255, 255)  # 默认白色，如果 HEX 值无效
+        canvas = Image.new("RGB", (canvas_width, canvas_height), bg_color)
 
+        # 缩放目标图片
+        resized_image = pil_image.resize((width, height), Image.Resampling.LANCZOS)
+
+        # 旋转目标图片
+        rotated_image = resized_image.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC)
+
+        # 计算放置位置（x, y 是中心点）
+        rot_width, rot_height = rotated_image.size
+        paste_x = x - rot_width // 2
+        paste_y = y - rot_height // 2
+
+        # 将旋转后的图片粘贴到画板上
+        canvas.paste(rotated_image, (paste_x, paste_y), rotated_image if rotated_image.mode == "RGBA" else None)
+
+        # 将 PIL 图像转换回 ComfyUI 的 IMAGE 类型
+        output_np = np.array(canvas).astype(np.float32) / 255.0  # 转换为 0-1 范围
+        output_tensor = torch.from_numpy(output_np).unsqueeze(0)  # 添加批次维度
+
+        return (output_tensor,)
+    
 
 NODE_CLASS_MAPPINGS = {
     "XIS_LoadImage": XIS_LoadImage,
@@ -1232,6 +1035,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_MaskCompositeOperation": XIS_MaskCompositeOperation,
     "XIS_MaskBatchProcessor": XIS_MaskBatchProcessor,
     "XIS_CanvasMaskProcessor": XIS_CanvasMaskProcessor,
-    "XIS_PackImages": XIS_PackImages,
-    "XIS_MergePackImages": XIS_MergePackImages,
+    "XIS_CompositorProcessor": XIS_CompositorProcessor,
 }

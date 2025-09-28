@@ -181,12 +181,13 @@ export function setupCanvas(node) {
         const widthWidget = widgets.find(w => w.name === "width");
         const heightWidget = widgets.find(w => w.name === "height");
         const pathModeWidget = widgets.find(w => w.name === "path_mode");
-        
+        const distributionModeWidget = widgets.find(w => w.name === "distribution_mode");
+
         // Ensure control_points is always an array
-        const controlPoints = Array.isArray(node.properties.control_points) 
-          ? node.properties.control_points.slice(0, 50) 
+        const controlPoints = Array.isArray(node.properties.control_points)
+          ? node.properties.control_points.slice(0, 50)
           : [];
-        
+
         const data = {
           control_points: controlPoints.map(point => ({
             x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0.5)),
@@ -195,6 +196,7 @@ export function setupCanvas(node) {
           width: widthWidget ? Number(widthWidget.value) || 512 : (node.properties.width || 512),
           height: heightWidget ? Number(heightWidget.value) || 512 : (node.properties.height || 512),
           path_mode: pathModeWidget ? pathModeWidget.value : (node.properties.path_mode || "linear"),
+          distribution_mode: distributionModeWidget ? distributionModeWidget.value : (node.properties.distribution_mode || "uniform"),
           node_size: node.properties.node_size || [360, 510]
         };
         
@@ -245,6 +247,9 @@ export function setupCanvas(node) {
         node.properties.path_mode = value.path_mode && ["linear", "curve"].includes(value.path_mode)
           ? value.path_mode
           : "linear";
+        node.properties.distribution_mode = value.distribution_mode && ["uniform", "ease_in", "ease_out", "ease_in_out", "ease_out_in"].includes(value.distribution_mode)
+          ? value.distribution_mode
+          : "uniform";
         node.properties.node_size = value.node_size && Array.isArray(value.node_size)
           ? [Math.max(value.node_size[0], 360), Math.max(value.node_size[1], 510)]
           : [360, 510];
@@ -392,24 +397,24 @@ export function updateDisplay(node, message) {
       const y = point.y * height;
 
       // 控制点圆圈
-      ctx.fillStyle = "#FF5722";
+      ctx.fillStyle = "#0e8420ff";
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, 2 * Math.PI);
+      ctx.arc(x, y, 10, 0, 2 * Math.PI);
       ctx.fill();
 
       // 控制点边框
       ctx.strokeStyle = "#FFF";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, 2 * Math.PI);
+      ctx.arc(x, y, 10, 0, 2 * Math.PI);
       ctx.stroke();
 
       // 控制点编号
       ctx.fillStyle = "#FFF";
-      ctx.font = "12px Arial";
+      ctx.font = "13px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText((i + 1).toString(), x, y);
+      ctx.fillText((i + 1).toString(), x, y+1);
     }
   }
 
@@ -417,7 +422,18 @@ export function updateDisplay(node, message) {
   const infoDiv = node.canvas.parentElement?.parentElement?.querySelector(`.xiser-coordinate-info`);
   if (infoDiv) {
     const pathMode = node.properties?.path_mode || "linear";
-    infoDiv.textContent = `控制点: ${controlPoints.length} | 模式: ${pathMode === "curve" ? "曲线" : "线性"} | 左键添加 | 右键菜单`;
+    const distributionMode = node.properties?.distribution_mode || "uniform";
+
+    // 分布模式的中文描述
+    const distributionModeText = {
+      "uniform": "均匀",
+      "ease_in": "缓进",
+      "ease_out": "缓出",
+      "ease_in_out": "缓进缓出",
+      "ease_out_in": "缓出缓进"
+    }[distributionMode] || "均匀";
+
+    infoDiv.textContent = `控制点: ${controlPoints.length} | 路径: ${pathMode === "curve" ? "曲线" : "线性"} | 分布: ${distributionModeText} | 左键添加 | 右键菜单`;
   }
 
   log.info(`Display updated for node ${node.id}`);
@@ -483,6 +499,7 @@ export function setupInputListeners(node) {
   const widthWidget = widgets.find(w => w.name === "width");
   const heightWidget = widgets.find(w => w.name === "height");
   const pathModeWidget = widgets.find(w => w.name === "path_mode");
+  const distributionModeWidget = widgets.find(w => w.name === "distribution_mode");
 
   if (widthWidget) {
     widthWidget.callback = () => {
@@ -510,6 +527,15 @@ export function setupInputListeners(node) {
       updateDisplay(node);
       node.setDirtyCanvas(true, true);
       log.info(`Node ${node.id} path_mode updated to: ${node.properties.path_mode}`);
+    };
+  }
+
+  if (distributionModeWidget) {
+    distributionModeWidget.callback = () => {
+      node.properties.distribution_mode = distributionModeWidget.value;
+      updateDisplay(node);
+      node.setDirtyCanvas(true, true);
+      log.info(`Node ${node.id} distribution_mode updated to: ${node.properties.distribution_mode}`);
     };
   }
 
@@ -992,7 +1018,8 @@ app.registerExtension({
         node_size: [360, 510],
         width: 512,
         height: 512,
-        path_mode: "linear"
+        path_mode: "linear",
+        distribution_mode: "uniform"
       };
 
       // 延迟初始化

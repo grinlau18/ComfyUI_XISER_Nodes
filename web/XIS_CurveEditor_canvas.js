@@ -4,12 +4,15 @@
  * @author grinlau18
  */
 
-// 日志级别控制
-const LOG_LEVEL = "info"; // Options: "info", "warning", "error"
+// 导入节点最小尺寸常量
+import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT } from "./XIS_CurveEditor.js";
 
-// 节点最小尺寸配置 (与主文件保持一致，方便手动修改)
-const MIN_NODE_WIDTH = 400;   // 节点最小宽度 (px)
-const MIN_NODE_HEIGHT = 500;  // 节点最小高度 (px)
+// 日志级别控制
+const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
+
+// 画布尺寸配置
+const CANVAS_WIDTH = 600;
+const CANVAS_HEIGHT = 400;
 
 /**
  * 日志工具
@@ -22,20 +25,44 @@ const log = {
 };
 
 /**
- * 防抖函数，使用 requestAnimationFrame 优化性能
- * @param {Function} func - 要防抖的函数
+ * 创建节点专用的防抖函数，避免多节点冲突
  * @param {number} wait - 等待时间（毫秒）
  * @returns {Function} 防抖后的函数
  */
-export function debounce(func, wait) {
-  let timeout;
-  return function (...args) {
-    cancelAnimationFrame(timeout);
-    timeout = requestAnimationFrame(() => {
-      setTimeout(() => func.apply(this, args), wait);
+function createNodeDebounce(wait) {
+  const timeouts = new Map(); // 存储每个节点的防抖计时器
+
+  return function(node, ...args) {
+    const nodeId = node?.id;
+    if (nodeId === undefined || nodeId === -1) {
+      // 对于无效节点，直接执行
+      if (typeof args[0] === 'function') {
+        args[0]();
+      }
+      return;
+    }
+
+    // 取消该节点之前的防抖计时器
+    if (timeouts.has(nodeId)) {
+      cancelAnimationFrame(timeouts.get(nodeId));
+    }
+
+    // 设置新的防抖计时器
+    const timeoutId = requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (typeof args[0] === 'function') {
+          args[0]();
+        }
+        timeouts.delete(nodeId);
+      }, wait);
     });
+
+    timeouts.set(nodeId, timeoutId);
   };
 }
+
+// 创建节点专用的防抖实例
+const nodeDebounce = createNodeDebounce(16);
 
 /**
  * 清理已存在的DOM元素
@@ -85,7 +112,6 @@ function cleanupExistingWidgets(node) {
     !widget.name || !widget.name.includes('curve_editor')
   );
 
-  log.info(`Node ${node.id} existing widgets cleaned up`);
 }
 
 /**
@@ -103,15 +129,27 @@ function initializeNodeState(node) {
     ];
   }
 
-  // 临时状态（不序列化）
-  node._curveState = node._curveState || {
-    draggingPoint: null,
-    hoverPoint: null,
-    lastUpdateTime: 0,
-    initialized: false
-  };
+  // 初始化插值算法设置
+  if (node.properties.interpolation_algorithm === undefined) {
+    node.properties.interpolation_algorithm = "catmull_rom"; // 默认使用Catmull-Rom样条插值
+  }
 
-  log.info(`Node ${node.id} state initialized`);
+  // 临时状态（不序列化）- 确保每个节点有独立的状态对象
+  if (!node._curveState || typeof node._curveState !== 'object') {
+    node._curveState = {
+      draggingPoint: null,
+      hoverPoint: null,
+      lastUpdateTime: 0,
+      initialized: false
+    };
+  } else {
+    // 确保现有状态对象有所有必需的属性
+    node._curveState.draggingPoint = node._curveState.draggingPoint || null;
+    node._curveState.hoverPoint = node._curveState.hoverPoint || null;
+    node._curveState.lastUpdateTime = node._curveState.lastUpdateTime || 0;
+    node._curveState.initialized = node._curveState.initialized || false;
+  }
+
 }
 
 /**
@@ -129,7 +167,7 @@ function createUIElements(node) {
   mainContainer.style.cssText = `
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.4); #5556667e
     border-radius: 8px;
     display: flex;
     flex-direction: column;
@@ -162,12 +200,12 @@ function createUIElements(node) {
   canvas.id = `curve-canvas-${node.id}`;
 
   // 设置Canvas固定尺寸
-  canvas.width = 400;
-  canvas.height = 300;
+  canvas.width = CANVAS_WIDTH;
+  canvas.height = CANVAS_HEIGHT;
 
   canvas.style.cssText = `
-    width: 400px;
-    height: 300px;
+    width: ${CANVAS_WIDTH}px;
+    height: ${CANVAS_HEIGHT}px;
     cursor: crosshair;
     background: rgba(0, 0, 0, 0);
     border-radius: 4px;
@@ -176,7 +214,6 @@ function createUIElements(node) {
   canvasContainer.appendChild(canvas);
   mainContainer.appendChild(canvasContainer);
 
-  log.info(`Node ${node.id} UI elements created`);
   return { mainContainer, canvasContainer, canvas };
 }
 
@@ -212,10 +249,10 @@ function createControlPanel(node) {
   `;
 
   const presets = [
-    { name: "线性", type: "linear" },
-    { name: "缓入", type: "ease_in" },
-    { name: "缓出", type: "ease_out" },
-    { name: "缓入出", type: "ease_in_out" }
+    { name: "线性", type: "linear", interpolation: "linear" },
+    { name: "缓入", type: "ease_in", interpolation: "catmull_rom" },
+    { name: "缓出", type: "ease_out", interpolation: "catmull_rom" },
+    { name: "缓入出", type: "ease_in_out", interpolation: "catmull_rom" }
   ];
 
   // 创建预设按钮
@@ -250,6 +287,12 @@ function createControlPanel(node) {
 
     button.addEventListener("click", () => {
       applyPresetCurve(node, preset.type);
+      // 设置对应的插值算法
+      node.properties.interpolation_algorithm = preset.interpolation;
+
+      // 联动更新toggle开关状态
+      updateToggleState(preset.interpolation === "catmull_rom");
+
       updateDisplay(node);
       node.setDirtyCanvas(true, true);
 
@@ -262,37 +305,87 @@ function createControlPanel(node) {
     buttonContainer.appendChild(button);
   });
 
-  // 重置按钮 - 与其他按钮在同一行
-  const resetButton = document.createElement("button");
-  resetButton.textContent = "重置";
-  resetButton.style.cssText = `
-    padding: 6px 10px;
-    border: 1px solid #ababab83;
-    background: #6a6a6a87;
-    color: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-    min-width: 50px;
+  // 创建toggle开关容器
+  const toggleContainer = document.createElement("div");
+  toggleContainer.style.cssText = `
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
     flex: 1;
   `;
 
-  // 添加重置按钮悬停效果
-  resetButton.addEventListener("mouseenter", () => {
-    resetButton.style.background = "#6a6a6a87";
-    resetButton.style.borderColor = "#ababab83";
-    resetButton.style.transform = "translateY(-1px)";
-  });
-  resetButton.addEventListener("mouseleave", () => {
-    resetButton.style.background = "#6a6a6a87";
-    resetButton.style.borderColor = "#ababab83";
-    resetButton.style.transform = "translateY(0)";
-  });
+  // 创建toggle开关标签
+  const toggleLabel = document.createElement("span");
+  toggleLabel.textContent = "平滑插值";
+  toggleLabel.style.cssText = `
+    color: #ccc;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  `;
 
-  resetButton.addEventListener("click", () => {
-    resetCurve(node);
+  // 创建toggle开关容器
+  const toggleWrapper = document.createElement("div");
+  toggleWrapper.style.cssText = `
+    position: relative;
+    width: 36px;
+    height: 18px;
+    border-radius: 9px;
+    background: ${node.properties.interpolation_algorithm === "catmull_rom" ? "#4CAF50" : "#666"};
+    border: 1px solid #ababab83;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  `;
+
+  // 创建toggle开关滑块
+  const toggleThumb = document.createElement("div");
+  toggleThumb.style.cssText = `
+    position: absolute;
+    top: 1px;
+    left: ${node.properties.interpolation_algorithm === "catmull_rom" ? '19px' : '1px'};
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  `;
+
+  toggleWrapper.appendChild(toggleThumb);
+
+  // 更新toggle开关状态的函数
+  const updateToggleState = (isCatmullRom) => {
+    if (toggleWrapper && toggleThumb) {
+      if (isCatmullRom) {
+        toggleWrapper.style.background = "#4CAF50";
+        toggleThumb.style.left = "19px";
+      } else {
+        toggleWrapper.style.background = "#666";
+        toggleThumb.style.left = "1px";
+      }
+    }
+  };
+
+  // 初始化toggle开关状态
+  updateToggleState(node.properties.interpolation_algorithm === "catmull_rom");
+
+  // toggle开关点击事件
+  toggleWrapper.addEventListener("click", () => {
+    const isCurrentlyCatmullRom = node.properties.interpolation_algorithm === "catmull_rom";
+
+    // 切换插值算法
+    if (isCurrentlyCatmullRom) {
+      // 切换到线性插值
+      node.properties.interpolation_algorithm = "linear";
+    } else {
+      // 切换到Catmull-Rom样条插值
+      node.properties.interpolation_algorithm = "catmull_rom";
+    }
+
+    // 更新toggle开关状态
+    updateToggleState(!isCurrentlyCatmullRom);
+
     updateDisplay(node);
     node.setDirtyCanvas(true, true);
 
@@ -302,10 +395,11 @@ function createControlPanel(node) {
     }
   });
 
-  buttonContainer.appendChild(resetButton);
+  toggleContainer.appendChild(toggleLabel);
+  toggleContainer.appendChild(toggleWrapper);
+  buttonContainer.appendChild(toggleContainer);
   controlPanel.appendChild(buttonContainer);
 
-  log.info(`Node ${node.id} control panel created`);
   return controlPanel;
 }
 
@@ -318,7 +412,7 @@ function createControlPanel(node) {
 function registerDOMWidget(node, mainContainer, canvas) {
   if (!node || !mainContainer || !canvas) return;
 
-  // 注册DOM控件
+  // 注册DOM控件 - 使用ComfyUI标准配置
   node.addDOMWidget("curve_editor", "Curve Editor", mainContainer, {
     serialize: true,
     hideOnZoom: false,
@@ -330,31 +424,88 @@ function registerDOMWidget(node, mainContainer, canvas) {
         const endValueWidget = widgets.find(w => w.name === "end_value");
         const pointCountWidget = widgets.find(w => w.name === "point_count");
 
+        // 计算所有分布点的实际数值
+        const pointCount = pointCountWidget ? Number(pointCountWidget.value) || 10 : (node.properties.point_count || 10);
+        const dataType = dataTypeWidget ? dataTypeWidget.value : (node.properties.data_type || "FLOAT");
+        const startValue = startValueWidget ? parseFloat(startValueWidget.value || 0) : 0;
+        const endValue = endValueWidget ? parseFloat(endValueWidget.value || 1) : 1;
+
+        const distribution_values = [];
+        const distribution_t_values = [];
+
+        for (let i = 0; i < pointCount; i++) {
+          const t = (i + 1) / pointCount;
+          let transformedT = t;
+
+          if (node.properties.curve_points && node.properties.curve_points.length > 0) {
+            transformedT = applyCustomCurve(t, node.properties.curve_points, node);
+          }
+
+          // 计算实际数值
+          let value;
+          if (dataType === "HEX") {
+            value = transformedT; // HEX模式使用百分比值
+          } else {
+            value = startValue + (endValue - startValue) * transformedT;
+            if (dataType === "INT") {
+              value = Math.round(value);
+            }
+          }
+
+          distribution_values.push(value);
+          distribution_t_values.push({
+            index: i + 1,
+            t: t,
+            transformed_t: transformedT
+          });
+        }
+
         const data = {
           curve_points: (node.properties.curve_points || []).slice(0, 50).map(point => ({
             x: Math.max(0, Math.min(1, typeof point.x === "number" ? point.x : 0)),
             y: Math.max(0, Math.min(1, typeof point.y === "number" ? point.y : 0))
           })),
+          distribution_values: distribution_values,
+          distribution_t_values: distribution_t_values,
           data_type: dataTypeWidget ? dataTypeWidget.value : (node.properties.data_type || "FLOAT"),
           start_value: startValueWidget ? startValueWidget.value : (node.properties.start_value || "0"),
           end_value: endValueWidget ? endValueWidget.value : (node.properties.end_value || "1"),
-          point_count: pointCountWidget ? Number(pointCountWidget.value) || 10 : (node.properties.point_count || 10),
+          point_count: pointCount,
+          interpolation_algorithm: node.properties.interpolation_algorithm || "catmull_rom",
+          color_interpolation: node.properties.color_interpolation || "HSV",
           node_size: node.properties.node_size || [MIN_NODE_WIDTH, MIN_NODE_HEIGHT],
           node_id: node.id.toString()
         };
-        log.info(`Node ${node.id} serialized curve_editor:`, data);
         return data;
       } catch (e) {
         log.error(`Node ${node.id} error in getValue: ${e}`);
+        // 错误处理时也计算分布点数值
+        const defaultDistributionValues = [];
+        const defaultDistributionTValues = [];
+        for (let i = 0; i < 10; i++) {
+          const t = (i + 1) / 10;
+          const value = 0 + (1 - 0) * t; // 默认起始值0，结束值1
+          defaultDistributionValues.push(value);
+          defaultDistributionTValues.push({
+            index: i + 1,
+            t: t,
+            transformed_t: t
+          });
+        }
+
         return {
           curve_points: [
             { x: 0, y: 0 },
             { x: 1, y: 1 }
           ],
+          distribution_values: defaultDistributionValues,
+          distribution_t_values: defaultDistributionTValues,
           data_type: "FLOAT",
           start_value: "0",
           end_value: "1",
           point_count: 10,
+          interpolation_algorithm: "catmull_rom",
+          color_interpolation: "HSV",
           node_size: [MIN_NODE_WIDTH, MIN_NODE_HEIGHT],
           node_id: node.id.toString()
         };
@@ -384,13 +535,45 @@ function registerDOMWidget(node, mainContainer, canvas) {
         node.properties.start_value = value.start_value || "0";
         node.properties.end_value = value.end_value || "1";
         node.properties.point_count = Math.max(2, Math.min(100, Math.floor(value.point_count || 10)));
+        node.properties.interpolation_algorithm = value.interpolation_algorithm && ["linear", "catmull_rom"].includes(value.interpolation_algorithm)
+          ? value.interpolation_algorithm
+          : "catmull_rom";
+        node.properties.color_interpolation = value.color_interpolation && ["HSV", "RGB", "LAB"].includes(value.color_interpolation)
+          ? value.color_interpolation
+          : "HSV";
         node.properties.node_size = value.node_size && Array.isArray(value.node_size)
           ? [Math.max(value.node_size[0], MIN_NODE_WIDTH), Math.max(value.node_size[1], MIN_NODE_HEIGHT)]
           : [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
 
+        // 处理分布点t值（向后兼容）
+        if (value.distribution_t_values && Array.isArray(value.distribution_t_values)) {
+          node.properties.distribution_t_values = value.distribution_t_values;
+        } else {
+          // 如果没有提供，重新计算
+          const pointCount = node.properties.point_count;
+          node.properties.distribution_t_values = [];
+          for (let i = 0; i < pointCount; i++) {
+            const t = (i + 1) / pointCount;
+            let transformedT = t;
+
+            if (node.properties.curve_points && node.properties.curve_points.length > 0) {
+              transformedT = applyCustomCurve(t, node.properties.curve_points, node);
+            }
+
+            node.properties.distribution_t_values.push({
+              index: i + 1,
+              t: t,
+              transformed_t: transformedT
+            });
+          }
+        }
+
         updateDisplay(node);
         node.setDirtyCanvas(true, true);
-        log.info(`Node ${node.id} restored curve editor state`);
+
+        // 恢复toggle开关状态
+        updateToggleState(node.properties.interpolation_algorithm === "catmull_rom");
+
       } catch (e) {
         log.error(`Node ${node.id} error in setValue: ${e}`);
       }
@@ -401,7 +584,6 @@ function registerDOMWidget(node, mainContainer, canvas) {
   node.canvas = canvas;
   node.ctx = canvas.getContext('2d');
 
-  log.info(`Node ${node.id} DOM widget registered`);
 }
 
 /**
@@ -411,43 +593,62 @@ function registerDOMWidget(node, mainContainer, canvas) {
  */
 function initializeCanvas(node, canvas) {
   if (!node || !canvas || node.id === -1 || node._removed) {
-    log.warning(`Node ${node?.id || 'unknown'} is invalid or removed, skipping canvas initialization`);
     return;
   }
 
   // 检查Canvas元素是否存在且有效
   if (!canvas || !canvas.getContext) {
-    log.warning(`Node ${node.id} canvas not found or invalid, retrying...`);
     setTimeout(() => initializeCanvas(node, canvas), 100);
     return;
   }
 
   // 添加防护标志，防止重复初始化
   if (node._canvasInitialized) {
-    log.warning(`Node ${node.id} canvas already initialized, skipping`);
     return;
   }
 
   try {
     node._canvasInitialized = true;
 
-    // 等待DOM元素完全插入后再绘制
-    const waitForDOMInsertion = () => {
-      // 检查Canvas元素是否已插入到DOM中
-      const canvasInDOM = document.contains(canvas);
-      if (canvasInDOM) {
-        // DOM元素已插入，进行绘制
-        updateDisplay(node);
-        log.info(`Node ${node.id} canvas initialization completed`);
-      } else {
-        // DOM元素未插入，等待后重试
-        log.info(`Node ${node.id} canvas not in DOM yet, waiting...`);
-        setTimeout(waitForDOMInsertion, 50);
+    // 直接绘制，ComfyUI会自动处理DOM插入
+    updateDisplay(node);
+
+    // 多重强制重绘确保内容显示 - 解决多节点同时初始化时的显示问题
+    const forceRedraw = () => {
+      if (!node._removed && node.canvas) {
+        // 确保Canvas在DOM中完全可见后再绘制
+        const checkVisibility = () => {
+          if (node.canvas && node.canvas.offsetParent !== null) {
+            // Canvas已可见，执行绘制
+            updateDisplay(node);
+
+            // 触发ComfyUI重绘
+            if (node.setDirtyCanvas) {
+              node.setDirtyCanvas(true, true);
+            }
+
+            // 额外延迟重绘确保内容稳定显示
+            setTimeout(() => {
+              if (!node._removed && node.canvas) {
+                updateDisplay(node);
+              }
+            }, 100);
+          } else {
+            // Canvas尚未可见，继续等待
+            setTimeout(checkVisibility, 50);
+          }
+        };
+
+        checkVisibility();
       }
     };
 
-    // 启动DOM插入检查
-    waitForDOMInsertion();
+    // 立即重绘
+    forceRedraw();
+
+    // 延迟重绘应对DOM插入延迟
+    setTimeout(forceRedraw, 100);
+    setTimeout(forceRedraw, 300);
 
     // 标记为已初始化
     node._curveState.initialized = true;
@@ -471,7 +672,6 @@ export function setupCanvas(node) {
 
   // 添加防护标志，防止重复设置
   if (node._canvasSetupInProgress) {
-    log.warning(`Node ${node.id} canvas setup already in progress, skipping`);
     return;
   }
 
@@ -493,7 +693,7 @@ export function setupCanvas(node) {
       return;
     }
 
-    const { mainContainer, canvasContainer, canvas } = uiElements;
+    const { mainContainer, canvas } = uiElements;
 
     // 4. 创建控制面板
     const controlPanel = createControlPanel(node);
@@ -507,7 +707,6 @@ export function setupCanvas(node) {
     // 6. 初始化Canvas
     initializeCanvas(node, canvas);
 
-    log.info(`Node ${node.id} setupCanvas completed successfully`);
   } catch (error) {
     log.error(`Node ${node.id} setupCanvas error:`, error);
   } finally {
@@ -516,9 +715,9 @@ export function setupCanvas(node) {
 }
 
 /**
- * 更新画布显示（防抖优化）
+ * 实际的画布更新函数
  */
-export const updateDisplay = debounce((node) => {
+function updateDisplayInternal(node) {
   try {
     if (!node || node.id === -1 || node._removed) {
       log.warning(`Node ${node?.id || 'unknown'} is invalid or removed`);
@@ -527,7 +726,6 @@ export const updateDisplay = debounce((node) => {
 
     // 添加防护标志，防止重复绘制
     if (node._updatingDisplay) {
-      log.warning(`Node ${node.id} display update already in progress, skipping`);
       return;
     }
 
@@ -550,13 +748,6 @@ export const updateDisplay = debounce((node) => {
       }
     }
 
-    // 额外检查Canvas元素是否在DOM中
-    if (!document.contains(node.canvas)) {
-      log.warning(`Node ${node.id} canvas element not in DOM, skipping draw`);
-      node._updatingDisplay = false;
-      return;
-    }
-
     // 检查Canvas尺寸是否有效
     if (node.canvas.width <= 0 || node.canvas.height <= 0) {
       log.warning(`Node ${node.id} canvas has invalid dimensions: ${node.canvas.width}x${node.canvas.height}`);
@@ -577,7 +768,14 @@ export const updateDisplay = debounce((node) => {
   } finally {
     node._updatingDisplay = false;
   }
-}, 16);
+}
+
+/**
+ * 更新画布显示（节点专用防抖优化）
+ */
+export function updateDisplay(node) {
+  nodeDebounce(node, () => updateDisplayInternal(node));
+}
 
 /**
  * 绘制曲线和控件
@@ -636,23 +834,33 @@ function drawCurve(node) {
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
   ctx.lineWidth = 1;
 
-  // 水平网格线
+  // 水平网格线 - 保持11条不变，批量绘制
+  ctx.beginPath();
   for (let i = 0; i <= 10; i++) {
     const y = padding + i * plotHeight / 10;
-    ctx.beginPath();
     ctx.moveTo(padding, y);
     ctx.lineTo(width - padding, y);
-    ctx.stroke();
+  }
+  ctx.stroke();
+
+  // 缓存widget查找结果，避免重复查询
+  if (!node._cachedWidgets) {
+    node._cachedWidgets = {};
   }
 
-  // 垂直网格线
-  for (let i = 0; i <= 10; i++) {
-    const x = padding + i * plotWidth / 10;
-    ctx.beginPath();
+  const pointCountWidget = node._cachedWidgets.pointCount || node.widgets?.find(w => w.name === 'point_count');
+  node._cachedWidgets.pointCount = pointCountWidget;
+  const pointCount = pointCountWidget ? parseInt(pointCountWidget.value || 10) : 10;
+  const verticalLines = Math.min(pointCount, 50); // 最多50条竖线
+
+  // 优化网格绘制：批量绘制竖线
+  ctx.beginPath();
+  for (let i = 0; i <= verticalLines; i++) {
+    const x = padding + i * plotWidth / verticalLines;
     ctx.moveTo(x, padding);
     ctx.lineTo(x, height - padding);
-    ctx.stroke();
   }
+  ctx.stroke();
 
   // 绘制坐标标签
   ctx.fillStyle = '#ccc';
@@ -660,25 +868,33 @@ function drawCurve(node) {
   ctx.textAlign = 'center';
 
   // X轴标签 - 显示point_count位置 (从1开始)
-  // 直接从控件获取值，而不是从属性
-  const pointCountWidget = node.widgets?.find(w => w.name === 'point_count');
-  const pointCount = pointCountWidget ? parseInt(pointCountWidget.value || 10) : 10;
-  log.info(`Drawing X-axis labels: point_count=${pointCount}`);
-  for (let i = 0; i <= 5; i++) {
-    const x = padding + i * plotWidth / 5;
-    const value = Math.round(1 + i * (pointCount - 1) / 5); // 从1开始到point_count
+  // 根据网格线数量动态调整标签密度，最多显示10个标签
+  const maxLabels = 10;
+  const labelInterval = Math.max(1, Math.floor(verticalLines / maxLabels));
+  for (let i = 0; i <= verticalLines; i += labelInterval) {
+    const x = padding + i * plotWidth / verticalLines;
+    // 统一使用1到point_count的索引范围进行计算
+    // 标签值 = i对应的分布点索引（从1开始）
+    const value = Math.max(1, Math.min(pointCount, Math.round(i * pointCount / verticalLines)));
     ctx.fillText(value.toString(), x, height - padding + 15);
   }
 
   // Y轴标签 - 显示起始值和结束值之间的值
   ctx.textAlign = 'right';
-  const dataTypeWidget = node.widgets?.find(w => w.name === 'data_type');
+
+  // 使用缓存的widget查找结果
+  const dataTypeWidget = node._cachedWidgets.dataType || node.widgets?.find(w => w.name === 'data_type');
+  node._cachedWidgets.dataType = dataTypeWidget;
   const dataType = dataTypeWidget ? dataTypeWidget.value : "FLOAT";
-  const startValueWidget = node.widgets?.find(w => w.name === 'start_value');
-  const endValueWidget = node.widgets?.find(w => w.name === 'end_value');
+
+  const startValueWidget = node._cachedWidgets.startValue || node.widgets?.find(w => w.name === 'start_value');
+  node._cachedWidgets.startValue = startValueWidget;
   const startValue = startValueWidget ? parseFloat(startValueWidget.value || 0) : 0;
+
+  const endValueWidget = node._cachedWidgets.endValue || node.widgets?.find(w => w.name === 'end_value');
+  node._cachedWidgets.endValue = endValueWidget;
   const endValue = endValueWidget ? parseFloat(endValueWidget.value || 1) : 1;
-  log.info(`Drawing Y-axis labels: start=${startValue}, end=${endValue}, dataType=${dataType}`);
+
 
   for (let i = 0; i <= 5; i++) {
     const y = padding + i * plotHeight / 5;
@@ -696,30 +912,46 @@ function drawCurve(node) {
     ctx.fillText(labelText, padding - 10, y + 4);
   }
 
-  // 绘制曲线 - 使用Catmull-Rom样条曲线确保平滑
+  // 绘制曲线 - 根据插值算法设置选择绘制方法
   ctx.strokeStyle = '#4CAF50';
   ctx.lineWidth = 3;
 
   if (node.properties.curve_points.length >= 2) {
     ctx.beginPath();
 
-    // 绘制Catmull-Rom样条曲线
     const points = node.properties.curve_points;
+    const interpolationAlgorithm = node?.properties?.interpolation_algorithm || "catmull_rom";
 
-    // 起始点
-    const firstPoint = points[0];
-    const startX = padding + firstPoint.x * plotWidth;
-    const startY = padding + (1 - firstPoint.y) * plotHeight;
-    ctx.moveTo(startX, startY);
+    if (interpolationAlgorithm === "linear") {
+      // 线性绘制 - 直接连接控制点
+      for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        const x = padding + point.x * plotWidth;
+        const y = padding + (1 - point.y) * plotHeight;
 
-    // 绘制曲线段
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = i > 0 ? points[i - 1] : points[0];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = i < points.length - 2 ? points[i + 2] : points[points.length - 1];
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+    } else {
+      // Catmull-Rom样条曲线绘制
+      // 起始点
+      const firstPoint = points[0];
+      const startX = padding + firstPoint.x * plotWidth;
+      const startY = padding + (1 - firstPoint.y) * plotHeight;
+      ctx.moveTo(startX, startY);
 
-      drawCatmullRomSegment(ctx, p0, p1, p2, p3, padding, plotWidth, plotHeight);
+      // 绘制曲线段
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = i > 0 ? points[i - 1] : points[0];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = i < points.length - 2 ? points[i + 2] : points[points.length - 1];
+
+        drawCatmullRomSegment(ctx, p0, p1, p2, p3, padding, plotWidth, plotHeight);
+      }
     }
 
     ctx.stroke();
@@ -753,16 +985,25 @@ function drawCurve(node) {
     ctx.fillStyle = '#fff';
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
+    // 统一使用1到point_count的索引范围进行计算
+    // X轴坐标 = x * point_count，对应分布点索引从1到point_count
     const actualX = Math.round(point.x * pointCount);
 
     // 对于HEX类型，显示百分比而不是数值
     let displayText;
+    let transformedY = point.y;
+    let actualY = 0;
+
     if (dataType === "HEX") {
       const percentage = Math.round(point.y * 100);
       displayText = `(${actualX}, ${percentage}%)`;
+
     } else {
-      const actualY = startValue + (endValue - startValue) * point.y;
+      // 控制点显示原始y值，不应用曲线变换
+      transformedY = point.y;
+      actualY = startValue + (endValue - startValue) * transformedY;
       displayText = `(${actualX}, ${actualY.toFixed(2)})`;
+
     }
     ctx.fillText(displayText, x, y - 15);
   }
@@ -780,9 +1021,104 @@ function drawCurve(node) {
   }
 
   ctx.fillText(titleText, width / 2, 15);
+
   } catch (error) {
     log.error(`Node ${node.id} error in drawCurve:`, error);
   }
+}
+
+
+/**
+ * 应用自定义曲线变换（根据插值算法设置选择插值方法）
+ */
+function applyCustomCurve(t, curvePoints, node) {
+  if (!curvePoints || curvePoints.length < 2) {
+    return t;
+  }
+
+  // 按X坐标排序
+  const sortedPoints = curvePoints.slice().sort((a, b) => a.x - b.x);
+
+  // 根据插值算法设置选择插值方法
+  const interpolationAlgorithm = node?.properties?.interpolation_algorithm || "catmull_rom";
+
+  // 如果t在曲线定义范围内
+  if (t >= sortedPoints[0].x && t <= sortedPoints[sortedPoints.length - 1].x) {
+    if (interpolationAlgorithm === "linear") {
+      return applyLinearInterpolation(t, sortedPoints);
+    } else {
+      // 默认使用Catmull-Rom样条插值
+      return applyCatmullRomInterpolation(t, sortedPoints);
+    }
+  }
+
+  // 如果在定义范围外，钳制到最近的点
+  if (t <= sortedPoints[0].x) {
+    return sortedPoints[0].y;
+  } else {
+    return sortedPoints[sortedPoints.length - 1].y;
+  }
+}
+
+/**
+ * 应用Catmull-Rom样条插值（与绘制曲线使用相同的算法）
+ */
+function applyCatmullRomInterpolation(t, sortedPoints) {
+  // 找到包含t的线段
+  for (let i = 0; i < sortedPoints.length - 1; i++) {
+    const p1 = sortedPoints[i];
+    const p2 = sortedPoints[i + 1];
+
+    if (p1.x <= t && t <= p2.x) {
+      // 获取相邻控制点用于Catmull-Rom插值
+      const p0 = i > 0 ? sortedPoints[i - 1] : p1;
+      const p3 = i < sortedPoints.length - 2 ? sortedPoints[i + 2] : p2;
+
+      // 计算线段内的参数
+      const segmentT = (t - p1.x) / (p2.x - p1.x);
+
+      // Catmull-Rom样条插值
+      return catmullRomInterpolate(p0.y, p1.y, p2.y, p3.y, segmentT);
+    }
+  }
+
+  // 如果找不到包含t的线段，返回线性插值作为回退
+  return applyLinearInterpolation(t, sortedPoints);
+}
+
+/**
+ * Catmull-Rom样条插值计算
+ */
+function catmullRomInterpolate(p0, p1, p2, p3, t) {
+  // Catmull-Rom样条公式
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  return 0.5 * (
+    (2 * p1) +
+    (-p0 + p2) * t +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+  );
+}
+
+/**
+ * 线性插值（回退方法）
+ */
+function applyLinearInterpolation(t, sortedPoints) {
+  for (let i = 0; i < sortedPoints.length - 1; i++) {
+    const p1 = sortedPoints[i];
+    const p2 = sortedPoints[i + 1];
+
+    if (p1.x <= t && t <= p2.x) {
+      if (p2.x === p1.x) {
+        return p1.y;
+      }
+      const segmentT = (t - p1.x) / (p2.x - p1.x);
+      return p1.y + (p2.y - p1.y) * segmentT;
+    }
+  }
+  return t;
 }
 
 /**
@@ -800,8 +1136,6 @@ function drawCatmullRomSegment(ctx, p0, p1, p2, p3, padding, plotWidth, plotHeig
   const d2y = (p3.y - p1.y) * tension;
 
   // 将参数空间坐标转换为画布坐标
-  const x1 = padding + p1.x * plotWidth;
-  const y1 = padding + (1 - p1.y) * plotHeight;
   const x2 = padding + p2.x * plotWidth;
   const y2 = padding + (1 - p2.y) * plotHeight;
 
@@ -823,13 +1157,81 @@ export function setupInputListeners(node) {
     return;
   }
 
-  // 添加鼠标事件监听 - 使用内联处理函数避免引用冲突
-  node.canvas.addEventListener("mousedown", (e) => onCanvasMouseDown(node, e));
-  node.canvas.addEventListener("mousemove", (e) => onCanvasMouseMove(node, e));
-  node.canvas.addEventListener("mouseup", () => onCanvasMouseUp(node));
-  node.canvas.addEventListener("contextmenu", (e) => onCanvasRightClick(node, e));
+  // 创建绑定的事件处理函数，以便后续移除
+  node._eventHandlers = {
+    mousedown: (e) => onCanvasMouseDown(node, e),
+    mousemove: (e) => onCanvasMouseMove(node, e),
+    mouseup: () => onCanvasMouseUp(node),
+    contextmenu: (e) => onCanvasRightClick(node, e),
+    focus: () => {
+      if (!node._removed) {
+        updateDisplay(node);
+      }
+    },
+    mouseenter: () => {
+      if (!node._removed) {
+        updateDisplay(node);
+      }
+    }
+  };
 
-  log.info(`Node ${node.id} input listeners setup completed`);
+  // 添加鼠标事件监听
+  node.canvas.addEventListener("mousedown", node._eventHandlers.mousedown);
+  node.canvas.addEventListener("mousemove", node._eventHandlers.mousemove);
+  node.canvas.addEventListener("mouseup", node._eventHandlers.mouseup);
+  node.canvas.addEventListener("contextmenu", node._eventHandlers.contextmenu);
+
+  // 添加焦点和可见性变化监听，解决"需要点击才能显示"的问题
+  node.canvas.addEventListener("focus", node._eventHandlers.focus);
+  node.canvas.addEventListener("mouseenter", node._eventHandlers.mouseenter);
+
+  // 设置Canvas可聚焦
+  node.canvas.tabIndex = 0;
+  node.canvas.style.outline = "none";
+
+  // 使用Intersection Observer检测节点可见性变化
+  if (typeof IntersectionObserver !== 'undefined') {
+    node._intersectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !node._removed) {
+          updateDisplay(node);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    node._intersectionObserver.observe(node.canvas);
+  }
+
+}
+
+/**
+ * 移除输入监听器
+ */
+export function removeInputListeners(node) {
+  if (!node || !node.canvas || !node._eventHandlers) {
+    log.warning(`Node ${node?.id || 'unknown'} canvas not initialized or no event handlers, cannot remove listeners`);
+    return;
+  }
+
+  // 移除所有事件监听器
+  node.canvas.removeEventListener("mousedown", node._eventHandlers.mousedown);
+  node.canvas.removeEventListener("mousemove", node._eventHandlers.mousemove);
+  node.canvas.removeEventListener("mouseup", node._eventHandlers.mouseup);
+  node.canvas.removeEventListener("contextmenu", node._eventHandlers.contextmenu);
+
+  // 移除焦点和可见性监听器
+  node.canvas.removeEventListener("focus", node._eventHandlers.focus);
+  node.canvas.removeEventListener("mouseenter", node._eventHandlers.mouseenter);
+
+  // 清理Intersection Observer
+  if (node._intersectionObserver) {
+    node._intersectionObserver.disconnect();
+    node._intersectionObserver = null;
+  }
+
+  // 清理事件处理函数引用
+  node._eventHandlers = null;
+
 }
 
 /**
@@ -873,20 +1275,19 @@ export function onCanvasMouseDown(node, e) {
     const dy = point.y - y;
     if (Math.sqrt(dx * dx + dy * dy) < selectionRadius) {
       node._curveState.draggingPoint = i;
-      log.info(`Node ${node.id} started dragging point ${i + 1}`);
       break;
     }
   }
 
   // 如果没有选中现有点，在曲线上添加新点
   if (node._curveState.draggingPoint === null) {
-    // 找到最近的线段
-    const closestSegment = findClosestSegment(node.properties.curve_points, x, y);
+    // 找到最近的线段（考虑插值算法）
+    const interpolationAlgorithm = node.properties.interpolation_algorithm || "catmull_rom";
+    const closestSegment = findClosestSegment(node.properties.curve_points, x, y, interpolationAlgorithm);
     if (closestSegment.index !== -1) {
       const newPoint = { x: x, y: y };
       node.properties.curve_points.splice(closestSegment.index + 1, 0, newPoint);
       node._curveState.draggingPoint = closestSegment.index + 1;
-      log.info(`Node ${node.id} added new control point at: ${x}, ${y}`);
     }
   }
 
@@ -900,26 +1301,83 @@ export function onCanvasMouseDown(node, e) {
 }
 
 /**
- * 找到最近的线段
+ * 找到最近的线段（优化曲线检测）
  */
-function findClosestSegment(points, targetX, targetY) {
+function findClosestSegment(points, targetX, targetY, interpolationAlgorithm = "catmull_rom") {
   let closestIndex = -1;
   let minDistance = Infinity;
 
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
+  // 根据插值算法选择检测方法
+  if (interpolationAlgorithm === "linear" || points.length < 3) {
+    // 线性插值：直接检测线段
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
 
-    // 计算点到线段的距离
-    const distance = pointToSegmentDistance(targetX, targetY, p1.x, p1.y, p2.x, p2.y);
+      // 计算点到线段的距离
+      const distance = pointToSegmentDistance(targetX, targetY, p1.x, p1.y, p2.x, p2.y);
 
-    if (distance < minDistance && distance < 0.05) { // 距离阈值
-      minDistance = distance;
-      closestIndex = i;
+      if (distance < minDistance && distance < 0.05) { // 距离阈值
+        minDistance = distance;
+        closestIndex = i;
+      }
+    }
+  } else {
+    // Catmull-Rom样条插值：采样曲线上的多个点进行检测
+    const sampleCount = 20; // 每段曲线采样20个点
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = i > 0 ? points[i - 1] : points[0];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = i < points.length - 2 ? points[i + 2] : points[points.length - 1];
+
+      // 在曲线上采样多个点
+      for (let j = 0; j <= sampleCount; j++) {
+        const t = j / sampleCount;
+
+        // 计算曲线上的点坐标
+        const curvePoint = calculateCurvePoint(p0, p1, p2, p3, t);
+
+        // 计算点到采样点的距离
+        const dx = targetX - curvePoint.x;
+        const dy = targetY - curvePoint.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < minDistance && distance < 0.03) { // 更严格的阈值
+          minDistance = distance;
+          closestIndex = i;
+        }
+      }
     }
   }
 
   return { index: closestIndex, distance: minDistance };
+}
+
+/**
+ * 计算Catmull-Rom曲线上的点
+ */
+function calculateCurvePoint(p0, p1, p2, p3, t) {
+  // Catmull-Rom样条公式
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  const x = 0.5 * (
+    (2 * p1.x) +
+    (-p0.x + p2.x) * t +
+    (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+    (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+  );
+
+  const y = 0.5 * (
+    (2 * p1.y) +
+    (-p0.y + p2.y) * t +
+    (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+    (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+  );
+
+  return { x: Math.max(0, Math.min(1, x)), y: Math.max(0, Math.min(1, y)) };
 }
 
 /**
@@ -956,10 +1414,74 @@ function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
 }
 
 /**
+ * 竖线吸附功能 - 控制点自动吸附到最近的竖线位置
+ * @param {Object} node - 节点实例
+ * @param {number} x - 当前X坐标（0-1）
+ * @returns {number} 吸附后的X坐标
+ */
+function snapToVerticalGrid(node, x) {
+  // 使用缓存的widget查找结果
+  const pointCountWidget = node._cachedWidgets.pointCount || node.widgets?.find(w => w.name === 'point_count');
+  node._cachedWidgets.pointCount = pointCountWidget;
+  const pointCount = pointCountWidget ? parseInt(pointCountWidget.value || 10) : 10;
+
+  // 计算竖线数量（最多50条）
+  const verticalLines = Math.min(pointCount, 50);
+
+  // 缓存网格计算，避免重复计算
+  if (!node._cachedGrid || node._cachedGrid.verticalLines !== verticalLines) {
+    const gridSpacing = 1 / verticalLines;
+    const baseSnapDistance = 0.02;
+    const densityFactor = Math.max(0.3, Math.min(1.0, 50 / verticalLines));
+    const snapDistance = baseSnapDistance * densityFactor;
+
+    // 预计算所有网格位置
+    const gridPositions = [];
+    for (let i = 0; i <= verticalLines; i++) {
+      gridPositions.push(i * gridSpacing);
+    }
+
+    node._cachedGrid = {
+      verticalLines,
+      gridPositions,
+      snapDistance
+    };
+  }
+
+  const { gridPositions, snapDistance } = node._cachedGrid;
+
+  // 查找最近的竖线位置
+  let closestGridX = 0;
+  let minDistance = Infinity;
+
+  for (const gridX of gridPositions) {
+    const distance = Math.abs(x - gridX);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestGridX = gridX;
+    }
+  }
+
+  // 如果距离在吸附阈值内，则吸附到最近的竖线
+  if (minDistance <= snapDistance) {
+    return closestGridX;
+  }
+
+  return x;
+}
+
+/**
  * 处理画布鼠标移动事件
  */
 export function onCanvasMouseMove(node, e) {
   if (!node || node.id === -1 || node._curveState.draggingPoint === null || !node.canvas || !(e.buttons & 1)) return;
+
+  // 添加防抖机制，避免频繁重绘
+  const now = Date.now();
+  if (node._lastMouseMoveTime && now - node._lastMouseMoveTime < 16) { // 限制60fps
+    return;
+  }
+  node._lastMouseMoveTime = now;
 
   const rect = node.canvas.getBoundingClientRect();
   const padding = 30;  // 增加边界距离，避免标签被裁剪
@@ -985,6 +1507,9 @@ export function onCanvasMouseMove(node, e) {
   else if (x > 1 - snapThreshold) x = 1;
   if (y < snapThreshold) y = 0;
   else if (y > 1 - snapThreshold) y = 1;
+
+  // 竖线吸附功能
+  x = snapToVerticalGrid(node, x);
 
   x = Math.max(0, Math.min(1, x));
   y = Math.max(0, Math.min(1, y));
@@ -1027,7 +1552,6 @@ export function onCanvasMouseMove(node, e) {
  */
 export function onCanvasMouseUp(node) {
   if (node._curveState.draggingPoint !== null) {
-    log.info(`Node ${node.id} stopped dragging point ${node._curveState.draggingPoint + 1}`);
   }
   node._curveState.draggingPoint = null;
 }
@@ -1086,7 +1610,6 @@ export function onCanvasRightClick(node, e) {
       node.onWidgetChange();
     }
 
-    log.info(`Node ${node.id} deleted control point ${pointIndex + 1}`);
   }
 }
 
@@ -1128,19 +1651,8 @@ function applyPresetCurve(node, presetType) {
   points.sort((a, b) => a.x - b.x);
 
   node.properties.curve_points = points;
-  log.info(`Node ${node.id} applied ${presetType} preset`);
 }
 
-/**
- * 重置曲线
- */
-function resetCurve(node) {
-  node.properties.curve_points = [
-    { x: 0, y: 0 },
-    { x: 1, y: 1 }
-  ];
-  log.info(`Node ${node.id} curve reset`);
-}
 
 /**
  * 更新画布大小
@@ -1149,8 +1661,8 @@ export function updateCanvasSize(node) {
   if (!node.canvas) return;
 
   // 保持固定尺寸
-  node.canvas.width = 400;
-  node.canvas.height = 300;
+  node.canvas.width = CANVAS_WIDTH;
+  node.canvas.height = CANVAS_HEIGHT;
 
   // 强制重绘以确保内容显示
   updateDisplay(node);

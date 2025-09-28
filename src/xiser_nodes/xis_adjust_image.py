@@ -48,7 +48,7 @@ class XIS_ImageAdjustAndBlend:
     RETURN_TYPES = ("IMAGE", "STRING")
     RETURN_NAMES = ("adjusted_image", "image_paths")
     FUNCTION = "adjust_image"
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Image_And_Mask"
     OUTPUT_NODE = True
 
     def adjust_image(self, image, brightness=1.0, contrast=1.0, saturation=1.0, hue=0.0, r_gain=1.0, g_gain=1.0, b_gain=1.0, opacity=1.0, mask=None, background_image=None, blend_mode="normal"):

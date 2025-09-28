@@ -61,7 +61,7 @@ class XIS_ShapeData:
     RETURN_NAMES = ("shape_data",)
     FUNCTION = "execute"
     OUTPUT_IS_LIST = (False,)  # 输出单个列表（包含多个字典）
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Data_Processing"
 
     def fill_list_to_count(self, input_data: Any, count: int) -> List[Any]:
         """

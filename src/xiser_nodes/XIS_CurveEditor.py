@@ -6,6 +6,7 @@ Supports INT, FLOAT, and HEX data types with various interpolation methods.
 """
 
 import re
+import math
 from typing import List, Dict, Any, Union
 
 class XIS_CurveEditor:
@@ -27,7 +28,8 @@ class XIS_CurveEditor:
                 "data_type": (["INT", "FLOAT", "HEX"], {"default": "FLOAT"}),
                 "start_value": ("STRING", {"default": "0", "multiline": False}),
                 "end_value": ("STRING", {"default": "1", "multiline": False}),
-                "point_count": ("INT", {"default": 10, "min": 2, "max": 100, "step": 1}),
+                "point_count": ("INT", {"default": 10, "min": 2, "max": 1000, "step": 1}),
+                "color_interpolation": (["HSV", "RGB", "LAB"], {"default": "HSV"}),
                 "curve_editor": ("WIDGET", {}),
             }
         }
@@ -36,7 +38,7 @@ class XIS_CurveEditor:
     RETURN_NAMES = ("int", "float", "hex", "list")
     OUTPUT_IS_LIST = (True, True, True, False)
     FUNCTION = "execute"
-    CATEGORY = "XISER_Nodes/ListProcessing"
+    CATEGORY = "XISER_Nodes/Visual_Editing"
 
     def validate_hex_color(self, hex_color: str) -> bool:
         """
@@ -167,7 +169,7 @@ class XIS_CurveEditor:
 
     def interpolate_hsv(self, hsv1: List[float], hsv2: List[float], t: float) -> List[float]:
         """
-        Interpolate between two HSV colors.
+        Advanced HSV color interpolation for natural and perceptually smooth transitions.
 
         Args:
             hsv1 (List[float]): Start HSV color.
@@ -177,19 +179,186 @@ class XIS_CurveEditor:
         Returns:
             List[float]: Interpolated HSV color.
         """
-        # Handle hue interpolation (circular)
-        h1, h2 = hsv1[0], hsv2[0]
-        if abs(h2 - h1) > 180:
-            if h1 < h2:
+        h1, s1, v1 = hsv1[0], hsv1[1], hsv1[2]
+        h2, s2, v2 = hsv2[0], hsv2[1], hsv2[2]
+
+        # 1. 优化色调插值：选择最短路径并考虑色调感知
+        dh = h2 - h1
+        if abs(dh) > 180:
+            # 选择更短的路径
+            if dh > 0:
                 h1 += 360
             else:
                 h2 += 360
 
-        h = h1 + (h2 - h1) * t
-        s = hsv1[1] + (hsv2[1] - hsv1[1]) * t
-        v = hsv1[2] + (hsv2[2] - hsv1[2]) * t
+        # 2. 使用感知优化的缓动函数
+        # 基于感知的缓动函数，在中间阶段更平滑
+        def perceptual_ease(x):
+            # 使用正弦函数创建更自然的缓动效果
+            return 0.5 - 0.5 * math.cos(x * math.pi)
 
-        return [h % 360, max(0, min(1, s)), max(0, min(1, v))]
+        # 3. 色调插值：使用感知优化的缓动
+        eased_t = perceptual_ease(t)
+        h = h1 + (h2 - h1) * eased_t
+
+        # 4. 饱和度插值：智能处理不同饱和度情况
+        if s1 < 0.1 or s2 < 0.1:
+            # 至少一个颜色接近灰度，使用线性插值
+            s = s1 + (s2 - s1) * t
+        elif abs(s1 - s2) > 0.5:
+            # 饱和度差异很大时，使用缓动避免突变
+            s = s1 + (s2 - s1) * eased_t
+        else:
+            # 正常情况使用二次缓动
+            s = s1 + (s2 - s1) * (t * t)
+
+        # 5. 亮度插值：保持视觉一致性
+        # 使用平方根插值，使亮度变化更符合人眼感知
+        v = math.sqrt(v1 * v1 + (v2 * v2 - v1 * v1) * t)
+
+        # 6. 特殊处理：避免中间颜色过于暗淡
+        # 如果两个颜色都很亮，确保中间颜色也保持适当亮度
+        if v1 > 0.7 and v2 > 0.7 and v < 0.6:
+            v = 0.6 + (v - 0.6) * 0.5
+
+        # 确保值在有效范围内
+        h = h % 360
+        s = max(0.0, min(1.0, s))
+        v = max(0.0, min(1.0, v))
+
+        return [h, s, v]
+
+    def interpolate_rgb(self, rgb1: List[int], rgb2: List[int], t: float) -> List[int]:
+        """
+        Interpolate between two RGB colors.
+
+        Args:
+            rgb1 (List[int]): Start RGB color.
+            rgb2 (List[int]): End RGB color.
+            t (float): Interpolation factor (0-1).
+
+        Returns:
+            List[int]: Interpolated RGB color.
+        """
+        return [
+            int(rgb1[0] + (rgb2[0] - rgb1[0]) * t),
+            int(rgb1[1] + (rgb2[1] - rgb1[1]) * t),
+            int(rgb1[2] + (rgb2[2] - rgb1[2]) * t)
+        ]
+
+    def rgb_to_lab(self, rgb: List[int]) -> List[float]:
+        """
+        Convert RGB to LAB color space.
+
+        Args:
+            rgb (List[int]): RGB values [r, g, b].
+
+        Returns:
+            List[float]: LAB values [l, a, b].
+        """
+        # 首先将RGB转换为XYZ
+        r, g, b = rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0
+
+        # 应用gamma校正
+        r = r if r <= 0.04045 else ((r + 0.055) / 1.055) ** 2.4
+        g = g if g <= 0.04045 else ((g + 0.055) / 1.055) ** 2.4
+        b = b if b <= 0.04045 else ((b + 0.055) / 1.055) ** 2.4
+
+        # 转换为XYZ
+        x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+        y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+        z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+
+        # D65标准光源
+        x /= 0.95047
+        z /= 1.08883
+
+        # 转换为LAB
+        x = x if x > 0.008856 else (x * 903.3)
+        y = y if y > 0.008856 else (y * 903.3)
+        z = z if z > 0.008856 else (z * 903.3)
+
+        if x > 0.008856:
+            x = x ** (1/3)
+        else:
+            x = (7.787 * x) + (16 / 116)
+
+        if y > 0.008856:
+            y = y ** (1/3)
+        else:
+            y = (7.787 * y) + (16 / 116)
+
+        if z > 0.008856:
+            z = z ** (1/3)
+        else:
+            z = (7.787 * z) + (16 / 116)
+
+        l = max(0, min(100, (116 * y) - 16))
+        a = max(-128, min(127, 500 * (x - y)))
+        b_val = max(-128, min(127, 200 * (y - z)))
+
+        return [l, a, b_val]
+
+    def lab_to_rgb(self, lab: List[float]) -> List[int]:
+        """
+        Convert LAB to RGB color space.
+
+        Args:
+            lab (List[float]): LAB values [l, a, b].
+
+        Returns:
+            List[int]: RGB values [r, g, b].
+        """
+        l, a, b_val = lab[0], lab[1], lab[2]
+
+        # 转换为XYZ
+        y = (l + 16) / 116
+        x = a / 500 + y
+        z = y - b_val / 200
+
+        # 立方根反变换
+        x = x ** 3 if x ** 3 > 0.008856 else (x - 16/116) / 7.787
+        y = y ** 3 if y ** 3 > 0.008856 else (y - 16/116) / 7.787
+        z = z ** 3 if z ** 3 > 0.008856 else (z - 16/116) / 7.787
+
+        # D65标准光源
+        x *= 0.95047
+        z *= 1.08883
+
+        # 转换为RGB
+        r = x * 3.2404542 + y * -1.5371385 + z * -0.4985314
+        g = x * -0.9692660 + y * 1.8760108 + z * 0.0415560
+        b = x * 0.0556434 + y * -0.2040259 + z * 1.0572252
+
+        # 应用gamma校正
+        r = r if r <= 0.0031308 else (1.055 * (r ** (1/2.4)) - 0.055)
+        g = g if g <= 0.0031308 else (1.055 * (g ** (1/2.4)) - 0.055)
+        b = b if b <= 0.0031308 else (1.055 * (b ** (1/2.4)) - 0.055)
+
+        # 钳制到0-255范围
+        r = max(0, min(1, r))
+        g = max(0, min(1, g))
+        b = max(0, min(1, b))
+
+        return [int(r * 255), int(g * 255), int(b * 255)]
+
+    def interpolate_lab(self, lab1: List[float], lab2: List[float], t: float) -> List[float]:
+        """
+        Interpolate between two LAB colors.
+
+        Args:
+            lab1 (List[float]): Start LAB color.
+            lab2 (List[float]): End LAB color.
+            t (float): Interpolation factor (0-1).
+
+        Returns:
+            List[float]: Interpolated LAB color.
+        """
+        return [
+            lab1[0] + (lab2[0] - lab1[0]) * t,
+            lab1[1] + (lab2[1] - lab1[1]) * t,
+            lab1[2] + (lab2[2] - lab1[2]) * t
+        ]
 
 
     def parse_numeric_value(self, value: str, data_type: str) -> Union[int, float]:
@@ -203,13 +372,10 @@ class XIS_CurveEditor:
         Returns:
             Union[int, float]: Parsed numeric value.
         """
-        try:
-            if data_type == "INT":
-                return int(float(value))
-            else:  # FLOAT
-                return float(value)
-        except (ValueError, TypeError):
-            return 0 if data_type == "INT" else 0.0
+        if data_type == "INT":
+            return int(float(value))
+        else:  # FLOAT
+            return float(value)
 
     def execute(
         self,
@@ -217,6 +383,7 @@ class XIS_CurveEditor:
         start_value: str,
         end_value: str,
         point_count: int,
+        color_interpolation: str,
         curve_editor: Dict[str, Any]
     ) -> tuple:
         """
@@ -240,37 +407,30 @@ class XIS_CurveEditor:
         int_list = []
         float_list = []
         hex_list = []
-        rgb_list = []
 
         # Process based on data type
         if data_type in ["INT", "FLOAT"]:
-            start_num = self.parse_numeric_value(start_value, data_type)
-            end_num = self.parse_numeric_value(end_value, data_type)
-
-            for i in range(point_count):
-                t = i / (point_count - 1) if point_count > 1 else 0
-
-                # Apply custom curve if available, otherwise use linear interpolation
-                if use_custom_curve:
-                    t = self.apply_custom_curve(t, curve_points)
-                # else: use linear interpolation (t remains unchanged)
-
-                value = start_num + (end_num - start_num) * t
-
-                # Add to both int and float lists
-                int_list.append(int(value))
-                float_list.append(float(value))
-
-                # For numeric types, generate default colors
-                hex_list.append("#000000")
+            # 直接使用前端计算好的数值列表
+            if use_custom_curve and "distribution_values" in curve_editor:
+                # 前端已经计算好所有分布点的实际数值
+                distribution_values = curve_editor["distribution_values"]
+                for i in range(min(point_count, len(distribution_values))):
+                    value = distribution_values[i]
+                    int_list.append(int(value))
+                    float_list.append(float(value))
+                    hex_list.append("#000000")
+            else:
+                # 线性插值作为回退
+                start_num = self.parse_numeric_value(start_value, data_type)
+                end_num = self.parse_numeric_value(end_value, data_type)
+                for i in range(point_count):
+                    transformed_t = (i + 1) / point_count
+                    value = start_num + (end_num - start_num) * transformed_t
+                    int_list.append(int(value))
+                    float_list.append(float(value))
+                    hex_list.append("#000000")
 
         elif data_type == "HEX":
-            # Validate HEX colors
-            if not self.validate_hex_color(start_value):
-                start_value = "#000000"
-            if not self.validate_hex_color(end_value):
-                end_value = "#FFFFFF"
-
             # Normalize HEX colors
             start_hex = start_value if start_value.startswith("#") else "#" + start_value
             end_hex = end_value if end_value.startswith("#") else "#" + end_value
@@ -279,22 +439,39 @@ class XIS_CurveEditor:
             start_rgb = self.hex_to_rgb(start_hex)
             end_rgb = self.hex_to_rgb(end_hex)
 
-            # Convert to HSV for natural color interpolation
-            start_hsv = self.rgb_to_hsv(start_rgb)
-            end_hsv = self.rgb_to_hsv(end_rgb)
-
+            # 直接使用前端计算好的百分比序列值进行颜色渐变
             for i in range(point_count):
-                t = i / (point_count - 1) if point_count > 1 else 0
+                # 前端已经计算好所有分布点的变换后t值
+                if use_custom_curve and "distribution_t_values" in curve_editor:
+                    # 使用前端计算好的变换后t值
+                    if i < len(curve_editor["distribution_t_values"]):
+                        transformed_t = curve_editor["distribution_t_values"][i]["transformed_t"]
+                    else:
+                        # 如果前端数据不完整，使用线性插值作为回退
+                        transformed_t = (i + 1) / point_count
+                else:
+                    # 线性插值
+                    transformed_t = (i + 1) / point_count
 
-                # Apply custom curve if available, otherwise use linear interpolation
-                if use_custom_curve:
-                    t = self.apply_custom_curve(t, curve_points)
-                # else: use linear interpolation (t remains unchanged)
-
-                # Interpolate in HSV space
-                interp_hsv = self.interpolate_hsv(start_hsv, end_hsv, t)
-                interp_rgb = self.hsv_to_rgb(interp_hsv)
-                interp_hex = self.rgb_to_hex(interp_rgb)
+                # 根据选择的颜色过渡方法进行插值
+                if color_interpolation == "RGB":
+                    # RGB线性插值
+                    interp_rgb = self.interpolate_rgb(start_rgb, end_rgb, transformed_t)
+                    interp_hex = self.rgb_to_hex(interp_rgb)
+                elif color_interpolation == "LAB":
+                    # LAB颜色空间插值（感知均匀）
+                    start_lab = self.rgb_to_lab(start_rgb)
+                    end_lab = self.rgb_to_lab(end_rgb)
+                    interp_lab = self.interpolate_lab(start_lab, end_lab, transformed_t)
+                    interp_rgb = self.lab_to_rgb(interp_lab)
+                    interp_hex = self.rgb_to_hex(interp_rgb)
+                else:  # HSV (默认)
+                    # HSV颜色空间插值（自然的颜色过渡）
+                    start_hsv = self.rgb_to_hsv(start_rgb)
+                    end_hsv = self.rgb_to_hsv(end_rgb)
+                    interp_hsv = self.interpolate_hsv(start_hsv, end_hsv, transformed_t)
+                    interp_rgb = self.hsv_to_rgb(interp_hsv)
+                    interp_hex = self.rgb_to_hex(interp_rgb)
 
                 # Add to all lists
                 int_list.append(0)
@@ -313,41 +490,6 @@ class XIS_CurveEditor:
 
         return (int_list, float_list, hex_list, list_output)
 
-    def apply_custom_curve(self, t: float, curve_points: List[Dict[str, float]]) -> float:
-        """
-        Apply custom curve defined by control points.
-
-        Args:
-            t (float): Input factor (0-1).
-            curve_points (List[Dict[str, float]]): Curve control points.
-
-        Returns:
-            float: Modified factor based on custom curve.
-        """
-        if not curve_points or len(curve_points) < 2:
-            return t
-
-        # Sort points by x (input)
-        sorted_points = sorted(curve_points, key=lambda p: p["x"])
-
-        # Find the segment containing t
-        for i in range(len(sorted_points) - 1):
-            p1 = sorted_points[i]
-            p2 = sorted_points[i + 1]
-
-            if p1["x"] <= t <= p2["x"]:
-                # Linear interpolation between points
-                if p2["x"] == p1["x"]:
-                    return p1["y"]
-
-                segment_t = (t - p1["x"]) / (p2["x"] - p1["x"])
-                return p1["y"] + (p2["y"] - p1["y"]) * segment_t
-
-        # If t is outside the defined range, clamp to nearest point
-        if t <= sorted_points[0]["x"]:
-            return sorted_points[0]["y"]
-        else:
-            return sorted_points[-1]["y"]
 
 NODE_CLASS_MAPPINGS = {
     "XIS_CurveEditor": XIS_CurveEditor

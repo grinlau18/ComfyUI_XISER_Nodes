@@ -60,7 +60,7 @@ class XIS_CreateShape:
     RETURN_NAMES = ("shape_image", "shape_mask", "bg_image")
     FUNCTION = "execute"
     OUTPUT_IS_LIST = (True, True, True)  # 支持批量输出
-    CATEGORY = "XISER_Nodes/ImageAndMask"
+    CATEGORY = "XISER_Nodes/Visual_Editing"
 
     def apply_transform(self, coords: List[Tuple[float, float]],
                       scale: Dict[str, float], rotation: float,

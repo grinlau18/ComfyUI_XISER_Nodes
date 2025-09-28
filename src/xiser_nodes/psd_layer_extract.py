@@ -47,7 +47,7 @@ class XIS_PSDLayerExtractor:
     RETURN_TYPES = ("IMAGE", "FILE_DATA")
     RETURN_NAMES = ("pack_images", "file_data")
     FUNCTION = "extract_layers"
-    CATEGORY = "XISER_Nodes/Canvas"
+    CATEGORY = "XISER_Nodes/Import_Data"
 
     def extract_layers(self, uploaded_file, crop_by_canvas):
         """

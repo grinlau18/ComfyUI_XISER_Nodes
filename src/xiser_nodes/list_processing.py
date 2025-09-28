@@ -8,7 +8,7 @@ class GetSingleFromListMeta(type):
     def __new__(cls, name, bases, attrs):
         attrs.update({
             "RETURN_TYPES": (attrs["TYPE"].upper(),),
-            "CATEGORY": "XISER_Nodes/ListProcessing",
+            "CATEGORY": "XISER_Nodes/Data_Processing",
             "FUNCTION": "get_one",
             "INPUT_IS_LIST": True,
             "INPUT_TYPES": classmethod(lambda cls: {
@@ -49,3 +49,4 @@ NODE_CLASS_MAPPINGS = {
     "XIS_FromListGet1Int": XIS_FromListGet1Int,
     "XIS_FromListGet1Float": XIS_FromListGet1Float,
 }
+

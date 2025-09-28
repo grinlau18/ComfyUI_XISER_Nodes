@@ -28,7 +28,7 @@ class XIS_SetColor:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("hex_color",)
     FUNCTION = "execute"
-    CATEGORY = "XISER_Nodes/UI"
+    CATEGORY = "XISER_Nodes/UI_And_Control"
 
     def execute(self, color_data: Dict[str, Any]) -> tuple:
         """
