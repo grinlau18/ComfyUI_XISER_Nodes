@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
-description = "The project includes a set of efficient canvas tool nodes, which can place images in layers on the canvas for editing, and output the merged images and layer masks. It supports direct import of PSD files for picture elements and composition. The project also includes some nodes for improving efficiency in image and mask processing, prompt editing, logic processing, user interface control, dynamic sampling, etc."
-version = "1.2.0"
+description = "A feature-rich ComfyUI extension offering comprehensive visual editing capabilities: interactive multi-layer canvas with real-time transformations, professional PSD file import with layer extraction, versatile geometric shape generation with anti-aliased rendering, and advanced image processing tools. Includes batch shape creation, mask manipulation, prompt management, data flow optimization, and workflow enhancement utilities for efficient AI image generation and editing."
+version = "1.2.2"
 license = {file = "LICENSE"}
 
 [project.urls]

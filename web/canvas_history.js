@@ -30,6 +30,8 @@ export function updateHistory(nodeState, force = false) {
     scaleX: state.scaleX || 1,
     scaleY: state.scaleY || 1,
     rotation: state.rotation || 0,
+    skewX: state.skewX || 0,
+    skewY: state.skewY || 0,
   }));
 
   // Only push to history if the state has changed
@@ -67,6 +69,8 @@ export function undo(node, nodeState) {
       scaleX: state.scaleX || 1,
       scaleY: state.scaleY || 1,
       rotation: state.rotation || 0,
+      skewX: state.skewX || 0,
+      skewY: state.skewY || 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;
@@ -100,6 +104,8 @@ export function redo(node, nodeState) {
       scaleX: state.scaleX || 1,
       scaleY: state.scaleY || 1,
       rotation: state.rotation || 0,
+      skewX: state.skewX || 0,
+      skewY: state.skewY || 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;
@@ -125,7 +131,7 @@ export function redo(node, nodeState) {
 export function resetCanvas(node, nodeState, imagePaths, updateSize) {
   try {
     const boardWidth = node.properties.ui_config.board_width || 1024;
-    const borderWidth = node.properties.ui_config.border_width || 40;
+    const borderWidth = node.properties.ui_config.border_width || 80;
     const boardHeight = node.properties.ui_config.board_height || 1024;
 
     nodeState.initialStates = imagePaths.map(() => ({
@@ -134,6 +140,8 @@ export function resetCanvas(node, nodeState, imagePaths, updateSize) {
       scaleX: 1,
       scaleY: 1,
       rotation: 0,
+      skewX: 0,
+      skewY: 0,
     }));
     applyStates(nodeState);
     node.properties.image_states = nodeState.initialStates;

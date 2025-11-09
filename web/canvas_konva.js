@@ -19,12 +19,12 @@ import { updateHistory } from './canvas_history.js';
  * @returns {Object} Konva stage and layer objects.
  * @throws {Error} If Konva.js is not loaded.
  */
-// Define step constants for wheel interactions
-const ROTATION_STEP = 1; // Rotation step size (1 degree)
-const SCALE_STEP = 0.01; // Scaling step size (1%)
-
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
+
+  // Define step constants for wheel interactions
+  const ROTATION_STEP = 1; // Rotation step size (1 degree)
+  const SCALE_STEP = 0.01; // Scaling step size (1%)
 
   if (!window.Konva) {
     log.error(`Konva.js not available for node ${node.id}`);
@@ -83,12 +83,27 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   canvasLayer.add(canvasRect);
   borderLayer.add(borderFrame);
 
-  // Initialize transformer
+  // Initialize transformer with scaling and rotation capabilities
   nodeState.transformer = new Konva.Transformer({
     nodes: [],
-    keepRatio: true,
-    enabledAnchors: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
+    keepRatio: false, // Allow independent scaling
+    enabledAnchors: [
+      'top-left', 'top-center', 'top-right',
+      'middle-left', 'middle-right',
+      'bottom-left', 'bottom-center', 'bottom-right'
+    ],
     rotateEnabled: true,
+    rotateAnchorOffset: 40,
+    borderEnabled: true,
+    borderStroke: '#0099ff',
+    borderStrokeWidth: 2,
+    anchorStroke: '#0099ff',
+    anchorStrokeWidth: 2,
+    anchorFill: '#ffffff',
+    anchorSize: 8,
+    anchorCornerRadius: 2,
+    // Enable scaling and rotation only (disable skew)
+    transform: 'scale-rotate', // Enable scaling and rotation only
     boundBoxFunc: (oldBox, newBox) => {
       if (newBox.width < 10 || newBox.height < 10) {
         return oldBox;
@@ -418,7 +433,9 @@ function debounce(func, delay) {
 export function setupWheelEvents(node, nodeState) {
   const log = nodeState.log || console;
 
-  // Use the global constants for consistent transformation steps
+  // Define constants for consistent transformation steps
+  const ROTATION_STEP = 1; // 1 degree per wheel tick
+  const SCALE_STEP = 0.01; // 1% scaling per wheel tick
 
   // Remove existing wheel event listeners to prevent duplicates
   nodeState.stage.off('wheel');
@@ -487,11 +504,14 @@ export function setupWheelEvents(node, nodeState) {
       const delta = e.evt.deltaY > 0 ? -ROTATION_STEP : ROTATION_STEP;
       target.rotation(currentRotation + delta);
     } else {
-      const oldScale = target.scaleX();
-      const newScale = e.evt.deltaY > 0 ? oldScale * (1 - SCALE_STEP) : oldScale * (1 + SCALE_STEP);
-      const clampedScale = Math.min(Math.max(newScale, 0.1), 10);
-      target.scaleX(clampedScale);
-      target.scaleY(clampedScale);
+      // Preserve independent scaling ratios
+      const oldScaleX = target.scaleX();
+      const oldScaleY = target.scaleY();
+      const scaleFactor = e.evt.deltaY > 0 ? (1 - SCALE_STEP) : (1 + SCALE_STEP);
+      const newScaleX = Math.min(Math.max(oldScaleX * scaleFactor, 0.1), 10);
+      const newScaleY = Math.min(Math.max(oldScaleY * scaleFactor, 0.1), 10);
+      target.scaleX(newScaleX);
+      target.scaleY(newScaleY);
     }
 
     updateState(target, index, false); // Update state without history
