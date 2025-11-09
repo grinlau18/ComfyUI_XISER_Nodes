@@ -1,6 +1,32 @@
 # ComfyUI_XISER_Nodes
 
-Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This package provides a comprehensive set of tools for image composition, visual editing, data processing, and workflow optimization.
+<div align="center">
+
+🌐 **Language Selection / 语言选择**
+
+[**English Documentation**](README.md) • [**中文文档**](README_CN.md)
+
+</div>
+
+Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This extension provides advanced visual editing capabilities including interactive multi-layer canvas with real-time transformations, professional PSD file import with layer extraction, versatile geometric shape generation with anti-aliased rendering, and sophisticated image processing tools. Features batch shape creation, mask manipulation, prompt management, data flow optimization, and workflow enhancement utilities for efficient AI image generation and editing workflows.
+
+---
+
+## Quick Start
+
+### Getting Started with XIS_Canvas
+1. **Add XIS_Canvas Node**: Find it under `XISER_Nodes/Visual_Editing` category
+2. **Connect Images**: Connect your image inputs to the `pack_images` port
+3. **Configure Canvas**: Set dimensions, border, and background color
+4. **Interactive Editing**: Use the canvas interface to position, scale, and rotate layers
+5. **Generate Output**: Connect the output to your workflow for further processing
+
+### Getting Started with XIS_CreateShape
+1. **Add XIS_CreateShape Node**: Located in `XISER_Nodes/Visual_Editing`
+2. **Choose Shape Type**: Select from circle, polygon, star, heart, etc.
+3. **Customize Appearance**: Set colors, stroke, and transparency
+4. **Apply Transformations**: Use the interactive canvas for positioning and scaling
+5. **Batch Processing**: Connect shape data for multiple shape generation
 
 ---
 
@@ -28,57 +54,85 @@ Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://
 
 ---
 
+## Key Features
+
+### 🎨 Advanced Visual Editing
+- **Interactive Canvas**: Multi-layer image editing with real-time transformations
+- **Shape Generation**: Create geometric shapes with advanced transformations
+- **Gradient Tools**: Multi-point gradient generation with various interpolation methods
+
+### 🔧 Professional Workflow Tools
+- **PSD Import**: Professional PSD file import with layer extraction
+- **Image Processing**: Advanced image adjustment, cropping, and resizing
+- **Data Management**: Efficient data flow optimization and list processing
+
+### 🎛️ User Experience
+- **Intuitive UI**: Collapsible panels, real-time previews, and interactive controls
+- **Customization**: Node color customization and HTML text labels
+- **History Management**: 20-step undo/redo functionality
+
+---
+
 ## Node Categories Overview
 
 ### 🎨 Visual Editing Nodes
 
 #### XIS_Canvas (Canvas System)
-- **功能**: 交互式画布系统，支持多图层图像管理和编辑
-- **特性**:
-  - 自定义画布尺寸、边框和背景颜色
-  - 支持拖拽、缩放、旋转图像操作
-  - 图层管理和蒙版生成
-  - 撤销/重做功能
-  - PSD文件导入支持
+- **Function**: Interactive canvas system supporting multi-layer image management and editing
+- **Features**:
+  - Customizable canvas dimensions, borders, and background colors
+  - Drag, scale, and rotate image operations with real-time preview
+  - Layer management with automatic top positioning and stacking order
+  - Mask generation for precise image compositing
+  - Undo/Redo functionality with 20-step history
+  - Auto-size feature to match canvas dimensions to first image
+  - Display scaling for better workflow visibility
+  - PSD file import support with layer extraction
+  - Real-time transformation controls with independent scaling
+  - Mouse wheel scaling and Alt+wheel rotation for precise control
 
 ![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
 ![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
 ![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
 
 #### XIS_CoordinatePath
-- **功能**: 基于控制点生成坐标路径
-- **特性**:
-  - 支持线性和曲线路径模式
-  - 可配置路径段数和分布模式
-  - 输出坐标列表和百分比值
+- **Function**: Generate coordinate paths based on control points
+- **Features**:
+  - Support for linear and curve path modes
+  - Configurable path segments and distribution patterns
+  - Output coordinate lists and percentage values
 
 ![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
 
 #### XIS_CurveEditor
-- **功能**: 可视化曲线编辑器，生成分布值
-- **特性**:
-  - 支持INT、FLOAT、HEX数据类型
-  - 多种插值方法
-  - 颜色插值支持HSV、RGB、LAB模式
+- **Function**: Visual curve editor for generating distribution values
+- **Features**:
+  - Support for INT, FLOAT, HEX data types
+  - Multiple interpolation methods
+  - Color interpolation with HSV, RGB, LAB modes
 
 ![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)
 ![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
 
 #### XIS_MultiPointGradient
-- **功能**: 基于控制点生成渐变图像
-- **特性**:
-  - 多种插值方法（IDW、径向、Voronoi等）
-  - 线性模式支持固定首尾点
-  - 可自定义渐变颜色和位置
+- **Function**: Generate gradient images based on control points
+- **Features**:
+  - Multiple interpolation methods (IDW, radial, Voronoi, etc.)
+  - Linear mode with fixed start and end points
+  - Customizable gradient colors and positions
 
 ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
 #### XIS_CreateShape
-- **功能**: 生成几何形状
-- **特性**:
-  - 支持圆形、多边形、星形、心形等多种形状
-  - 可配置颜色、描边、透明度
-  - 支持形状变换（旋转、缩放、倾斜）
+- **Function**: Generate geometric shapes with interactive controls
+- **Features**:
+  - Multiple shape types: circle, polygon, star, heart, flower, spiral, sunburst, square
+  - Configurable colors, stroke, transparency, and background
+  - Advanced transformations: rotation, scaling, skewing, positioning
+  - Batch shape creation with shape data input
+  - Anti-aliased rendering for smooth edges
+  - Separate shape image, mask, and background outputs
+  - Real-time preview with interactive canvas widget
 
 ![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
 ![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
@@ -86,146 +140,194 @@ Welcome to **ComfyUI_XISER_Nodes**, a custom node package for [ComfyUI](https://
 ### 🖼️ Image Processing Nodes
 
 #### XIS_ImageManager
-- **功能**: 图像管理器，处理图像输入、上传和预览
-- **特性**:
-  - 图像预览生成和路径管理
-  - 支持多图像输入和输出
-  - 自动缓存管理
+- **Function**: Image manager for handling image input, upload, and preview
+- **Features**:
+  - Image preview generation and path management
+  - Support for multiple image inputs and outputs
+  - Automatic cache management
 
 ![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
 
 #### XIS_ImageAdjustAndBlend
-- **功能**: 图像调整和混合
-- **特性**:
-  - 亮度、对比度、饱和度、色相调整
-  - RGB通道增益控制
-  - 支持蒙版和背景图像
-  - 多种混合模式
+- **Function**: Image adjustment and blending
+- **Features**:
+  - Brightness, contrast, saturation, hue adjustments
+  - RGB channel gain control
+  - Support for masks and background images
+  - Multiple blending modes
 
 #### XIS_CropImage
-- **功能**: 使用蒙版裁剪图像
-- **特性**:
-  - 支持蒙版反转
-  - 背景颜色填充
-  - 可配置边距
+- **Function**: Crop images using masks
+- **Features**:
+  - Support for mask inversion
+  - Background color filling
+  - Configurable padding margins
 
 #### XIS_ResizeImageOrMask
-- **功能**: 灵活缩放图像和蒙版
-- **特性**:
-  - 多种缩放模式（强制缩放、等比缩放、画布限制等）
-  - 支持多种插值算法
-  - 可配置缩放条件（仅缩小、仅放大、始终缩放）
+- **Function**: Flexible image and mask resizing
+- **Features**:
+  - Multiple resize modes (force resize, aspect ratio, canvas limit, etc.)
+  - Support for various interpolation algorithms
+  - Configurable resize conditions (only shrink, only enlarge, always resize)
 
 #### XIS_ReorderImageMaskGroups
-- **功能**: 重新排序图像和蒙版组
-- **特性**:
-  - 支持插入和重新排列
-  - 最多处理5组图像蒙版对
+- **Function**: Reorder image and mask groups
+- **Features**:
+  - Support for insertion and reordering
+  - Handles up to 5 image-mask pairs
 
 ### 📊 Data Processing Nodes
 
 #### XIS_ShapeData
-- **功能**: 聚合形状属性数据
-- **特性**:
-  - 支持位置、旋转、缩放、倾斜、颜色等属性
-  - 多输入端口数据合并
-  - 属性计数处理
+- **Function**: Aggregate shape property data
+- **Features**:
+  - Support for position, rotation, scaling, skewing, color properties
+  - Multi-input port data merging
+  - Property counting and processing
 
 #### XIS_IsThereAnyData
-- **功能**: 数据存在性检查
-- **特性**:
-  - 检查输入信号是否存在
-  - 支持整数、浮点数、布尔值
-  - 无输入时返回默认值
+- **Function**: Data existence checking
+- **Features**:
+  - Check if input signals exist
+  - Support for integers, floats, boolean values
+  - Return default values when no input is provided
 
 #### XIS_FromListGet1* Series
-- **功能**: 从列表中提取单个元素
-- **支持类型**: Mask, Image, Latent, Conditioning, Model, Color, String, Int, Float
+- **Function**: Extract single elements from lists
+- **Supported Types**: Mask, Image, Latent, Conditioning, Model, Color, String, Int, Float
 
 ### 🎛️ UI Control Nodes
 
 #### XIS_PromptsWithSwitches
-- **功能**: 带开关控制的提示词输入
-- **特性**:
-  - 最多支持5个提示词
-  - 每个提示词独立开关控制
-  - 输出启用的提示词列表
+- **Function**: Prompt input with switch controls
+- **Features**:
+  - Support for up to 5 prompts
+  - Independent switch control for each prompt
+  - Output enabled prompt lists
 
 #### XIS_Float_Slider / XIS_INT_Slider
-- **功能**: 滑块数值输入
-- **特性**:
-  - 浮点数和整数滑块
-  - 可配置范围和步长
+- **Function**: Slider numerical input
+- **Features**:
+  - Float and integer sliders
+  - Configurable ranges and step sizes
 
 ### 🔧 Utility Nodes
 
 #### XIS_ResizeToDivisible
-- **功能**: 缩放到可整除尺寸
-- **特性**:
-  - 自动计算最接近的可整除尺寸
-  - 支持图像和蒙版
+- **Function**: Resize to divisible dimensions
+- **Features**:
+  - Automatically calculate closest divisible dimensions
+  - Support for images and masks
 
 #### XIS_InvertMask
-- **功能**: 蒙版反转
-- **特性**:
-  - 支持布尔开关控制
-  - 自动处理值域范围
+- **Function**: Mask inversion
+- **Features**:
+  - Boolean switch control support
+  - Automatic value range handling
 
 #### XIS_ImageMaskMirror
-- **功能**: 图像和蒙版镜像翻转
-- **特性**:
-  - 支持X轴和Y轴翻转
-  - 可启用/禁用翻转操作
+- **Function**: Image and mask mirror flipping
+- **Features**:
+  - Support for X-axis and Y-axis flipping
+  - Enable/disable flip operations
 
 ### 📁 File Processing Nodes
 
 #### PSD Layer Extract
-- **功能**: PSD图层提取
-- **特性**:
-  - 从PSD文件中提取图层
-  - 支持图层蒙版和透明度
+- **Function**: PSD layer extraction
+- **Features**:
+  - Extract layers from PSD files
+  - Support for layer masks and transparency
 
 #### XIS_ReorderImages
-- **功能**: 图像重新排序
-- **特性**:
-  - 基于指定顺序重新排列图像
-  - 支持批量图像处理
+- **Function**: Image reordering
+- **Features**:
+  - Rearrange images based on specified order
+  - Support for batch image processing
 
 ---
 
 ## Special Features
 
 ### Node Color Customization
-- **功能**: 节点颜色自定义
-- **使用方法**: 右键点击节点，选择"Change Node Color"
-- **特性**: 可分别修改节点标题和内容区域的背景颜色
+- **Function**: Node color customization
+- **Usage**: Right-click on node, select "Change Node Color"
+- **Features**: Modify background colors for node title and content areas separately
 
-![节点颜色自定义](img/changeNodeColor.jpeg)
+![Node Color Customization](img/changeNodeColor.jpeg)
 
 ### Text Label with HTML Support
-- **功能**: 支持HTML的文本标签
-- **使用方法**: 右键点击节点上方，选择"Edit Text"
-- **特性**: 使用HTML语言输入文字和设置样式
+- **Function**: Text labels with HTML support
+- **Usage**: Right-click above node, select "Edit Text"
+- **Features**: Input text and set styles using HTML language
 
-![文本标签功能](img/XIS_Label.jpeg)
+![Text Label Feature](img/XIS_Label.jpeg)
+
+---
+
+## Usage Guide
+
+### XIS_Canvas Operation Guide
+
+**Layer Selection & Transformation:**
+- **Select Layer**: Click on any image layer to select it
+- **Move**: Drag selected layers to reposition
+- **Scale**: Use control box handles or mouse wheel for precise scaling
+- **Rotate**: Use Alt + mouse wheel or control box rotation handle
+- **Independent Scaling**: Scale X and Y axes independently using corner handles
+
+**Layer Management:**
+- **Layer Panel**: Use the collapsible layer panel in top-left for layer selection
+- **Auto Top**: Selected layers are automatically brought to top
+- **Deselect**: Click on canvas background to deselect and restore original order
+
+**Canvas Controls:**
+- **Auto Size**: Enable to automatically adjust canvas to first image dimensions
+- **Display Scale**: Adjust canvas display size without affecting output
+- **Border Width**: Configure border size around canvas (default: 80px)
+- **Canvas Color**: Choose canvas background color (black, white, transparent)
+
+**Advanced Features:**
+- **Undo/Redo**: 20-step history for all transformations
+- **Reset Canvas**: Center all images and restore default states
+- **PSD Import**: Import PSD files with layer extraction
+- **Real-time Preview**: See transformations immediately
+
+### XIS_CreateShape Operation Guide
+
+**Shape Creation:**
+- **Shape Types**: Circle, polygon, star, heart, flower, spiral, sunburst, square
+- **Interactive Canvas**: Real-time preview with interactive widget
+- **Batch Processing**: Create multiple shapes with shape data input
+
+**Transformations:**
+- **Position**: Normalized positioning relative to canvas center
+- **Rotation**: Angle rotation in degrees
+- **Scaling**: Independent X and Y axis scaling
+- **Skewing**: Horizontal and vertical skew transformations
+
+**Styling:**
+- **Colors**: Configurable shape and background colors
+- **Stroke**: Customizable stroke width, color, and join style
+- **Transparency**: Transparent background options
 
 ---
 
 ## Workflow Examples
 
 ### Image Composition Workflow
-使用XIS_Canvas和相关节点进行图像合成：
-1. 使用XIS_ImageManager加载图像
-2. 通过XIS_Canvas进行布局和编辑
-3. 使用XIS_CanvasMaskProcessor处理蒙版
-4. 输出合成结果
+Using XIS_Canvas and related nodes for image composition:
+1. Load images using XIS_ImageManager
+2. Layout and edit through XIS_Canvas
+3. Process masks with XIS_CanvasMaskProcessor
+4. Output composite results
 
 ### Visual Editing Workflow
-使用可视化编辑节点：
-1. XIS_CoordinatePath生成坐标路径
-2. XIS_CurveEditor创建分布曲线
-3. XIS_MultiPointGradient生成渐变
-4. XIS_CreateShape创建几何形状
+Using visual editing nodes:
+1. Generate coordinate paths with XIS_CoordinatePath
+2. Create distribution curves with XIS_CurveEditor
+3. Generate gradients with XIS_MultiPointGradient
+4. Create geometric shapes with XIS_CreateShape
 
 ---
 
@@ -252,3 +354,5 @@ Contributions are welcome! Feel free to:
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+---

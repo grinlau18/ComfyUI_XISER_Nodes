@@ -40,7 +40,9 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   // Validate inputs
   if (!node || !nodeState || !nodeId || !statusText || !uiElements) {
     log.error(`Invalid parameters for loadImages: node=${!!node}, nodeState=${!!nodeState}, nodeId=${nodeId}, statusText=${!!statusText}, uiElements=${!!uiElements}`);
-    if (statusText) {
+    if (statusText && uiElements && uiElements.updateStatusText) {
+      uiElements.updateStatusText("Invalid node configuration", "#f00");
+    } else if (statusText) {
       statusText.innerText = "Invalid node configuration";
       statusText.style.color = "#f00";
     }
@@ -57,8 +59,12 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   // Validate imagePaths
   if (!Array.isArray(imagePaths) || !imagePaths.length || imagePaths.every(path => !path || typeof path !== 'string')) {
     log.info(`No valid image paths provided for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
-    statusText.innerText = "No valid image data";
-    statusText.style.color = "#f00";
+    if (uiElements && uiElements.updateStatusText) {
+      uiElements.updateStatusText("No valid image data", "#f00");
+    } else {
+      statusText.innerText = "No valid image data";
+      statusText.style.color = "#f00";
+    }
     nodeState.isLoading = false;
     return;
   }
@@ -67,8 +73,12 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   const validImagePaths = imagePaths.filter(path => typeof path === 'string' && path.trim().length > 0);
   if (validImagePaths.length === 0) {
     log.info(`No valid image paths after filtering for node ${nodeId}: ${JSON.stringify(imagePaths)}`);
-    statusText.innerText = "No valid image paths";
-    statusText.style.color = "#f00";
+    if (uiElements && uiElements.updateStatusText) {
+      uiElements.updateStatusText("No valid image paths", "#f00");
+    } else {
+      statusText.innerText = "No valid image paths";
+      statusText.style.color = "#f00";
+    }
     nodeState.isLoading = false;
     return;
   }
@@ -128,7 +138,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     nodeState.transformer = null;
   }
 
-  const borderWidth = node.properties?.ui_config?.border_width || 40;
+  const borderWidth = node.properties?.ui_config?.border_width || 80;
   let boardWidth = node.properties?.ui_config?.board_width || 1024;
   let boardHeight = node.properties?.ui_config?.board_height || 1024;
 
@@ -144,11 +154,17 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     scaleX: states[i]?.scaleX || 1,
     scaleY: states[i]?.scaleY || 1,
     rotation: states[i]?.rotation || 0,
+    skewX: states[i]?.skewX || 0,
+    skewY: states[i]?.skewY || 0,
   }));
 
   const images = validImagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
-  statusText.innerText = `Loading images... 0/${images.length}`;
-  statusText.style.color = "#fff";
+  if (uiElements && uiElements.updateStatusText) {
+    uiElements.updateStatusText(`Loading images... 0/${images.length}`, "#fff");
+  } else {
+    statusText.innerText = `Loading images... 0/${images.length}`;
+    statusText.style.color = "#fff";
+  }
 
   let loadedCount = 0;
 
@@ -215,7 +231,11 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
             boardHeight = newBoardHeight;
             node.widgets.find(w => w.name === "board_width").value = boardWidth;
             node.widgets.find(w => w.name === "board_height").value = boardHeight;
-            statusText.innerText = `Canvas resized to ${boardWidth}x${boardHeight}`;
+            if (uiElements && uiElements.updateStatusText) {
+              uiElements.updateStatusText(`Canvas resized to ${boardWidth}x${boardHeight}`, "#fff");
+            } else {
+              statusText.innerText = `Canvas resized to ${boardWidth}x${boardHeight}`;
+            }
             statusText.style.color = "#0f0";
             log.info(`Auto-size enabled, adjusted canvas to ${boardWidth}x${newBoardHeight} for node ${nodeId}`);
 
@@ -226,6 +246,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
               scaleX: states[i]?.scaleX || 1,
               scaleY: states[i]?.scaleY || 1,
               rotation: states[i]?.rotation || 0,
+              skewX: states[i]?.skewX || 0,
+              skewY: states[i]?.skewY || 0,
             }));
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
@@ -249,6 +271,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           scaleX: state.scaleX || 1,
           scaleY: state.scaleY || 1,
           rotation: state.rotation || 0,
+          skewX: state.skewX || 0,
+          skewY: state.skewY || 0,
           draggable: true,
           offsetX: img.width / 2,
           offsetY: img.height / 2,
@@ -262,6 +286,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           scaleX: konvaImg.scaleX(),
           scaleY: konvaImg.scaleY(),
           rotation: konvaImg.rotation(),
+          skewX: konvaImg.skewX(),
+          skewY: konvaImg.skewY(),
         };
 
         // Debounced state update
@@ -272,6 +298,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
             scaleX: konvaImg.scaleX(),
             scaleY: konvaImg.scaleY(),
             rotation: konvaImg.rotation(),
+            skewX: konvaImg.skewX ? konvaImg.skewX() : 0,
+            skewY: konvaImg.skewY ? konvaImg.skewY() : 0,
           };
           log.debug(`Updating state for node ${nodeId}, layer ${index}: ${JSON.stringify(newState)}`);
           nodeState.initialStates[index] = newState;
@@ -288,11 +316,19 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         });
 
         loadedCount++;
-        statusText.innerText = `Loading images... ${loadedCount}/${images.length}`;
+        if (uiElements && uiElements.updateStatusText) {
+          uiElements.updateStatusText(`Loading images... ${loadedCount}/${images.length}`, "#fff");
+        } else {
+          statusText.innerText = `Loading images... ${loadedCount}/${images.length}`;
+        }
       } catch (e) {
         log.error(`Error processing image ${index + 1} for node ${nodeId}: ${e.message}, path: ${images[index]?.filename || 'unknown'}`);
-        statusText.innerText = `Load failed: ${e.message}`;
-        statusText.style.color = "#f00";
+        if (uiElements && uiElements.updateStatusText) {
+          uiElements.updateStatusText(`Load failed: ${e.message}`, "#f00");
+        } else {
+          statusText.innerText = `Load failed: ${e.message}`;
+          statusText.style.color = "#f00";
+        }
         nodeState.imageNodes[index] = null;
       }
     }
@@ -302,16 +338,31 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     if (validNodes.length !== nodeState.imageNodes.length) {
       log.warn(`Filtered ${nodeState.imageNodes.length - validNodes.length} null imageNodes for node ${nodeId}`);
     }
-    nodeState.initialStates = validNodes.map((node, i) => nodeState.initialStates[nodeState.imageNodes.indexOf(node)]);
+    nodeState.initialStates = validNodes.map(node => nodeState.initialStates[nodeState.imageNodes.indexOf(node)]);
     nodeState.imageNodes = validNodes;
     nodeState.defaultLayerOrder = [...nodeState.imageNodes];
 
-    // Initialize transformer
+    // Initialize transformer with scaling and rotation capabilities
     nodeState.transformer = new Konva.Transformer({
       nodes: [],
-      keepRatio: true,
-      enabledAnchors: ["top-left", "top-right", "bottom-left", "bottom-right"],
+      keepRatio: false, // Allow independent scaling
+      enabledAnchors: [
+        "top-left", "top-center", "top-right",
+        "middle-left", "middle-right",
+        "bottom-left", "bottom-center", "bottom-right"
+      ],
       rotateEnabled: true,
+      rotateAnchorOffset: 40,
+      borderEnabled: true,
+      borderStroke: "#0099ff",
+      borderStrokeWidth: 2,
+      anchorStroke: "#0099ff",
+      anchorStrokeWidth: 2,
+      anchorFill: "#ffffff",
+      anchorSize: 8,
+      anchorCornerRadius: 2,
+      // Enable scaling and rotation only (disable skew)
+      transform: "scale-rotate", // Enable scaling and rotation only
     });
     nodeState.imageLayer.add(nodeState.transformer);
     nodeState.imageLayer.batchDraw();
@@ -320,17 +371,29 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     // Update UI and history
     uiElements.updateLayerPanel(selectLayer, deselectLayer);
     if (loadedCount === 0) {
-      statusText.innerText = "Unable to load any images, please check upstream nodes";
-      statusText.style.color = "#f00";
+      if (uiElements && uiElements.updateStatusText) {
+        uiElements.updateStatusText("Unable to load any images, please check upstream nodes", "#f00");
+      } else {
+        statusText.innerText = "Unable to load any images, please check upstream nodes";
+        statusText.style.color = "#f00";
+      }
     } else {
-      statusText.innerText = `Loaded ${loadedCount} images`;
-      statusText.style.color = "#0f0";
+      if (uiElements && uiElements.updateStatusText) {
+        uiElements.updateStatusText(`Loaded ${loadedCount} images`, "#0f0");
+      } else {
+        statusText.innerText = `Loaded ${loadedCount} images`;
+        statusText.style.color = "#0f0";
+      }
     }
     saveHistory(nodeState);
   } catch (e) {
     log.error(`Critical error in loadImages for node ${nodeId}: ${e.message}`);
-    statusText.innerText = `Critical error: ${e.message}`;
-    statusText.style.color = "#f00";
+    if (uiElements && uiElements.updateStatusText) {
+      uiElements.updateStatusText(`Critical error: ${e.message}`, "#f00");
+    } else {
+      statusText.innerText = `Critical error: ${e.message}`;
+      statusText.style.color = "#f00";
+    }
   } finally {
     nodeState.isLoading = false;
     log.info(`Finished loadImages for node ${nodeId}, imageNodes: ${nodeState.imageNodes.length}, initialStates: ${nodeState.initialStates.length}`);

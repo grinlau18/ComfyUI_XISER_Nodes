@@ -604,6 +604,11 @@ class XIS_CreateShape:
         Returns:
             Tuple of (r, g, b) values
         """
+        # 处理None值或空字符串
+        if hex_color is None or hex_color == "":
+            logger.warning("Received None or empty hex color, using default #FF0000")
+            return (255, 0, 0)
+
         hex_color = hex_color.lstrip('#')
         if not re.match(r'^[0-9a-fA-F]{3,6}$', hex_color):
             logger.warning(f"Invalid hex color: {hex_color}, using default #FF0000")

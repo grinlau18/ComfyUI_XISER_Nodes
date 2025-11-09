@@ -2,13 +2,13 @@
  * @fileoverview Utility functions for XISER nodes, including logging, debouncing, DOM helpers, and UI styles.
  * @module xis_utils
  */
-
+ 
 /**
  * Logging utility for controlled output based on log level.
  * @type {Object}
  */
 const log = {
-  level: "warning",
+  level: "info",
   /**
    * Logs a debug message if the log level is 'debug' or 'info'.
    * @param {...any} args - Arguments to log.
@@ -76,15 +76,49 @@ function getNodeClass(nodeId) {
 function validateImageOrder(order, previews, nodeId = null) {
   const numPreviews = previews.length;
   const logPrefix = nodeId ? `Node ${nodeId}: ` : "";
-  if (!Array.isArray(order) || order.length !== numPreviews || new Set(order).size !== numPreviews) {
+
+  // Handle case where order array length doesn't match preview count
+  // This can happen when image count changes but we want to preserve existing order structure
+  if (!Array.isArray(order)) {
     log.warning(`${logPrefix}Invalid imageOrder: ${JSON.stringify(order)}, resetting to [0...${numPreviews - 1}]`);
     return Array.from({ length: numPreviews }, (_, i) => i);
   }
+
+  // If order length doesn't match preview count, adjust it intelligently
+  if (order.length !== numPreviews) {
+    log.info(`${logPrefix}Image order length mismatch: order=${order.length}, previews=${numPreviews}, adjusting order`);
+
+    // Start with existing valid indices
+    const validOrder = order.filter(idx => Number.isInteger(idx) && idx >= 0 && idx < numPreviews);
+
+    // Add missing indices (new images)
+    const missingIndices = [];
+    for (let i = 0; i < numPreviews; i++) {
+      if (!validOrder.includes(i)) {
+        missingIndices.push(i);
+      }
+    }
+
+    // Combine existing valid order with missing indices
+    const adjustedOrder = [...validOrder, ...missingIndices];
+
+    // Ensure we have exactly numPreviews unique indices
+    if (adjustedOrder.length === numPreviews && new Set(adjustedOrder).size === numPreviews) {
+      log.info(`${logPrefix}Adjusted image order: ${JSON.stringify(adjustedOrder)}`);
+      return adjustedOrder;
+    } else {
+      log.warning(`${logPrefix}Failed to adjust image order, resetting to [0...${numPreviews - 1}]`);
+      return Array.from({ length: numPreviews }, (_, i) => i);
+    }
+  }
+
+  // Normal validation for matching lengths
   const validOrder = order.filter(idx => Number.isInteger(idx) && idx >= 0 && idx < numPreviews);
-  if (validOrder.length !== numPreviews) {
-    log.warning(`${logPrefix}Incomplete imageOrder: ${JSON.stringify(order)}, resetting to [0...${numPreviews - 1}]`);
+  if (validOrder.length !== numPreviews || new Set(validOrder).size !== numPreviews) {
+    log.warning(`${logPrefix}Invalid imageOrder: ${JSON.stringify(order)}, resetting to [0...${numPreviews - 1}]`);
     return Array.from({ length: numPreviews }, (_, i) => i);
   }
+
   return validOrder;
 }
 

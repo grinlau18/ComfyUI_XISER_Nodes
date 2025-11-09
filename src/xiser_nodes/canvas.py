@@ -51,7 +51,7 @@ class XISER_Canvas:
                 "pack_images": ("IMAGE", {"default": None}),
                 "board_width": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
                 "board_height": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
-                "border_width": ("INT", {"default": 40, "min": 10, "max": 200, "step": 1}),
+                "border_width": ("INT", {"default": 80, "min": 10, "max": 200, "step": 1}),
                 "canvas_color": (["black", "white", "transparent"], {"default": "black"}),
                 "auto_size": (["off", "on"], {"default": "off"}),
                 "image_states": ("STRING", {"default": "[]", "multiline": False}),
@@ -532,7 +532,7 @@ class XISER_Canvas:
             }[canvas_color],
             "auto_size": auto_size,
             "image_paths": image_paths,
-            "display_scale": 1.0,  # Default value for consistency with frontend
+            "display_scale": 0.75,  # Default value for consistency with frontend
             "height_adjustment": 130,  # Default value for consistency with frontend
         }
         self.properties["image_states"] = image_states

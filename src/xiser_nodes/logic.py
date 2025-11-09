@@ -102,7 +102,147 @@ class XIS_IfDataIsNone:
     def to_string(self, value):
         return str(value)
 
+
+# 特定类型的开关节点（提供更好的类型安全）
+class XIS_ImageSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "image_input": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "switch_image"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_image(self, enable, image_input=None):
+        if enable:
+            return (image_input,)
+        else:
+            return (None,)
+
+class XIS_MaskSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "mask_input": ("MASK",),
+            }
+        }
+
+    RETURN_TYPES = ("MASK",)
+    FUNCTION = "switch_mask"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_mask(self, enable, mask_input=None):
+        if enable:
+            return (mask_input,)
+        else:
+            return (None,)
+
+class XIS_StringSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "string_input": ("STRING",),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "switch_string"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_string(self, enable, string_input=None):
+        if enable:
+            return (string_input,)
+        else:
+            return (None,)
+
+class XIS_IntSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "int_input": ("INT",),
+            }
+        }
+
+    RETURN_TYPES = ("INT",)
+    FUNCTION = "switch_int"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_int(self, enable, int_input=None):
+        if enable:
+            return (int_input,)
+        else:
+            return (None,)
+
+class XIS_FloatSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "float_input": ("FLOAT",),
+            }
+        }
+
+    RETURN_TYPES = ("FLOAT",)
+    FUNCTION = "switch_float"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_float(self, enable, float_input=None):
+        if enable:
+            return (float_input,)
+        else:
+            return (None,)
+
+class XIS_BooleanSwitch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "enable": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "boolean_input": ("BOOLEAN",),
+            }
+        }
+
+    RETURN_TYPES = ("BOOLEAN",)
+    FUNCTION = "switch_boolean"
+    CATEGORY = "XISER_Nodes/Logic"
+
+    def switch_boolean(self, enable, boolean_input=None):
+        if enable:
+            return (boolean_input,)
+        else:
+            return (None,)
+
 NODE_CLASS_MAPPINGS = {
     "XIS_IsThereAnyData": XIS_IsThereAnyData,
     "XIS_IfDataIsNone": XIS_IfDataIsNone,
+    "XIS_ImageSwitch": XIS_ImageSwitch,
+    "XIS_MaskSwitch": XIS_MaskSwitch,
+    "XIS_StringSwitch": XIS_StringSwitch,
+    "XIS_IntSwitch": XIS_IntSwitch,
+    "XIS_FloatSwitch": XIS_FloatSwitch,
+    "XIS_BooleanSwitch": XIS_BooleanSwitch,
 }

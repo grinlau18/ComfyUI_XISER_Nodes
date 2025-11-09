@@ -1,11 +1,3 @@
-torch
-numpy
-Pillow
 opencv-python
-scipy
-tqdm
-torchvision
-uuid
-aiohttp>=3.8.0
 psd-tools
 shapely

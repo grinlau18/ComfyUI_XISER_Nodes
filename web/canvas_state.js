@@ -149,7 +149,7 @@ export function initializeCanvasProperties(node, nodeState) {
 
   let boardWidth = uiConfig.board_width || 1024;
   let boardHeight = uiConfig.board_height || 1024;
-  let borderWidth = uiConfig.border_width || 40;
+  let borderWidth = uiConfig.border_width || 80;
   let canvasColor = uiConfig.canvas_color || 'rgb(0, 0, 0)';
   let borderColor = uiConfig.border_color || 'rgb(25, 25, 25)';
   let autoSize = uiConfig.auto_size || 'off';

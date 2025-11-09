@@ -108,10 +108,10 @@ app.registerExtension({
       // Sanitize uiConfig
       uiConfig.board_width = Math.min(Math.max(parseInt(uiConfig.board_width) || 1024, 256), 8192);
       uiConfig.board_height = Math.min(Math.max(parseInt(uiConfig.board_height) || 1024, 256), 8192);
-      uiConfig.border_width = Math.min(Math.max(parseInt(uiConfig.border_width) || 40, 10), 200);
+      uiConfig.border_width = Math.min(Math.max(parseInt(uiConfig.border_width) || 80, 10), 200);
       uiConfig.canvas_color = ['black', 'white', 'transparent'].includes(uiConfig.canvas_color) ? uiConfig.canvas_color : 'black';
       uiConfig.auto_size = ['off', 'on'].includes(uiConfig.auto_size) ? uiConfig.auto_size : 'off';
-      uiConfig.display_scale = Math.min(Math.max(parseFloat(uiConfig.display_scale) || 1, 0.1), 2);
+      uiConfig.display_scale = Math.min(Math.max(parseFloat(uiConfig.display_scale) || 0.75, 0.1), 2);
       uiConfig.height_adjustment = Math.min(Math.max(parseInt(uiConfig.height_adjustment) || 0, -100), 100);
       node.setProperty('ui_config', uiConfig);
       nodeState.lastAutoSize = uiConfig.auto_size;
@@ -202,12 +202,12 @@ app.registerExtension({
         try {
           let boardWidth = Math.min(Math.max(parseInt(node.widgets.find((w) => w.name === 'board_width')?.value) || 1024, 256), 8192);
           let boardHeight = Math.min(Math.max(parseInt(node.widgets.find((w) => w.name === 'board_height')?.value) || 1024, 256), 8192);
-          let borderWidth = Math.min(Math.max(parseInt(node.widgets.find((w) => w.name === 'border_width')?.value) || 40, 10), 200);
+          let borderWidth = Math.min(Math.max(parseInt(node.widgets.find((w) => w.name === 'border_width')?.value) || 80, 10), 200);
           let canvasColorValue = node.widgets.find((w) => w.name === 'canvas_color')?.value || 'black';
           let canvasColor = { black: 'rgb(0, 0, 0)', white: 'rgb(255, 255, 255)', transparent: 'rgba(0, 0, 0, 0)' }[canvasColorValue] || 'rgb(0, 0, 0)';
           let borderColor = { black: 'rgb(25, 25, 25)', white: 'rgb(230, 230, 230)', transparent: 'rgba(0, 0, 0, 0)' }[canvasColorValue] || 'rgb(25, 25, 25)';
           let autoSize = node.widgets.find((w) => w.name === 'auto_size')?.value || 'off';
-          let displayScale = Math.min(Math.max(parseFloat(node.widgets.find((w) => w.name === 'display_scale')?.value) || 1, 0.1), 2);
+          let displayScale = Math.min(Math.max(parseFloat(node.widgets.find((w) => w.name === 'display_scale')?.value) || 0.75, 0.1), 2);
           let heightAdjustment = node.widgets.find((w) => w.name === 'height_adjustment')?.value || HEIGHT_ADJUSTMENT;
 
           // Update node properties
@@ -313,12 +313,60 @@ app.registerExtension({
           log.debug(`Main container visibility for node ${node.id}: display=${mainContainer.style.display}, dimensions=${scaledWidth}x${scaledHeight}, stage=${nodeState.stage?.width() || 'undefined'}x${nodeState.stage?.height() || 'undefined'}`);
         } catch (e) {
           log.error(`Error updating size for node ${node.id}:`, e);
-          statusText.innerText = `更新画板失败: ${e.message}`;
-          statusText.style.color = '#f00';
+          uiElements.updateStatusText(`更新画板失败: ${e.message}`, '#f00');
+        }
+      }
+
+      /**
+       * Triggers the ComfyUI prompt with updated states.
+       * @async
+       */
+      async function triggerPrompt() {
+        try {
+          let newImagePaths = (node.properties?.ui_config?.image_paths || []).filter(p => typeof p === 'string' && p.trim().length > 0);
+
+          if (JSON.stringify(newImagePaths) !== JSON.stringify(imagePaths)) {
+            imagePaths = newImagePaths;
+            nodeState.imageNodes = new Array(imagePaths.length).fill(null);
+            node.properties.ui_config.image_paths = imagePaths;
+            nodeState.lastImagePaths = imagePaths.slice();
+            log.debug(`Image paths updated for node ${node.id}: ${JSON.stringify(imagePaths)}`);
+          }
+
+          if (autoSize === 'on' && imagePaths.length) {
+            uiElements.updateStatusText('正在调整画板并重置...', '#fff');
+            await debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
+            boardWidth = node.properties.ui_config.board_width || 1024;
+            boardHeight = node.properties.ui_config.board_height || 1024;
+            borderWidth = node.properties.ui_config.border_width || 80;
+            nodeState.initialStates = imagePaths.map(() => ({
+              x: borderWidth + boardWidth / 2,
+              y: borderWidth + boardHeight / 2,
+              scaleX: 1,
+              scaleY: 1,
+              rotation: 0,
+            }));
+            applyStates(nodeState);
+            updateSize();
+            uiElements.updateStatusText('调整完成，准备渲染...', '#fff');
+          }
+
+          nodeState.initialStates = nodeState.initialStates.slice(0, imagePaths.length);
+          node.properties.image_states = nodeState.initialStates;
+          node.widgets.find((w) => w.name === 'image_states').value = JSON.stringify(nodeState.initialStates);
+          node.setProperty('image_states', nodeState.initialStates);
+          node.widgets_values = [boardWidth, boardHeight, borderWidth, canvasColorValue, autoSize, node.widgets.find((w) => w.name === 'display_scale')?.value || 0.75, node.widgets.find((w) => w.name === 'height_adjustment')?.value || HEIGHT_ADJUSTMENT, JSON.stringify(nodeState.initialStates)];
+
+          app.queuePrompt?.();
+          uiElements.updateStatusText('渲染中...', '#fff');
+        } catch (e) {
+          log.error(`Failed to queue prompt for node ${node.id}:`, e);
+          uiElements.updateStatusText('触发队列失败', '#f00');
         }
       }
 
       // Bind methods to nodeState
+      nodeState.triggerPrompt = triggerPrompt;
       nodeState.resetCanvas = () => resetCanvas(node, nodeState, imagePaths, updateSize);
       nodeState.undo = () => undo(node, nodeState);
       nodeState.redo = () => redo(node, nodeState);
@@ -545,8 +593,7 @@ app.registerExtension({
           debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
           updateHistory(nodeState);
         } else {
-          statusText.innerText = '无有效图像数据，请检查上游节点';
-          statusText.style.color = '#f00';
+          uiElements.updateStatusText('无有效图像数据，请检查上游节点', '#f00');
           log.error(`No valid image paths in onNodeExecuted for node ${node.id}`);
         }
       };
@@ -667,8 +714,7 @@ app.registerExtension({
             setupWheelEvents(node, nodeState);
           } catch (e) {
             log.error(`Failed to load images in onExecuted for node ${node.id}: ${e.message}`);
-            statusText.innerText = '图像加载失败';
-            statusText.style.color = '#f00';
+            uiElements.updateStatusText('图像加载失败', '#f00');
             return;
           }
 
@@ -715,8 +761,7 @@ app.registerExtension({
             log.debug(`Output set for node ${node.id} with dimensions: ${boardWidth}x${boardHeight}, layers: ${layers.length}`);
           }
         } else {
-          statusText.innerText = '无有效图像数据，请检查上游节点';
-          statusText.style.color = '#f00';
+          uiElements.updateStatusText('无有效图像数据，请检查上游节点', '#f00');
           log.error(`No valid image paths in onExecuted for node ${node.id}`);
         }
       };
@@ -790,7 +835,7 @@ app.registerExtension({
         debouncedLoadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
       } else {
         log.info(`No initial image paths, waiting for images`);
-        statusText.innerText = '等待图片数据...';
+        uiElements.updateStatusText('等待图片数据...', '');
         statusText.style.color = '';
       }
 
