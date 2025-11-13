@@ -380,7 +380,8 @@ export function updateKonvaShape(node, value = null) {
     textShape ||
     !state.shape ||
     state.shape.shapeType !== shapeType ||
-    state.shape.shapeParamsHash !== shapeParamsStr;
+    state.shape.shapeParamsHash !== shapeParamsStr ||
+    (state.shape.lastStrokeWidth !== undefined && state.shape.lastStrokeWidth !== strokeWidth);
   const baseSize = Math.min(state.stage.width(), state.stage.height()) * 0.25;
 
   let shape = state.shape;
@@ -401,6 +402,7 @@ export function updateKonvaShape(node, value = null) {
     );
     newShape.shapeType = shapeType;
     newShape.shapeParamsHash = shapeParamsStr;
+    newShape.lastStrokeWidth = strokeWidth; // 存储当前描边宽度
     state.layer.add(newShape);
     state.shape = newShape;
     shape = newShape;
@@ -428,6 +430,8 @@ export function updateKonvaShape(node, value = null) {
         if (applyStrokeWidth) child.strokeWidth(strokeWidth * STROKE_WIDTH_COMPENSATION);
       }
     });
+    // 更新存储的描边宽度
+    shape.lastStrokeWidth = strokeWidth;
   }
 
   if (shape) {
