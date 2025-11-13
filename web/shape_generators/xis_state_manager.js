@@ -45,6 +45,14 @@ export function saveShapeState(node) {
       height: canvasHeight
     }
   });
+  node.properties.shape_state = node.properties.shapeState;
+  if (node.graph?.setDirtyCanvas) {
+    node.graph.setDirtyCanvas(true, true);
+  }
+  if (node.graph?.setDirty) {
+    node.graph.setDirty(true, false);
+  }
+  node.setDirtyCanvas?.(true, true);
 
   log.info(`Node ${node.id} shape state saved with rotation ${shape.rotation()}°, scale (${shape.scaleX()}, ${shape.scaleY()}), skew (${shape.skewX()}, ${shape.skewY()}), position (${shape.x()}, ${shape.y()}), logical canvas: ${outputWidth}x${outputHeight}, stage: ${stage.width()}x${stage.height()}`);
 }
@@ -144,8 +152,24 @@ export function centerAlignShape(node) {
   const shape = node.konvaState.shape;
   const stage = node.konvaState.stage;
 
-  // 仅居中位置，保持其他变换状态不变
   shape.x(stage.width() / 2);
+  if (node.konvaState.transformer) {
+    node.konvaState.transformer.nodes([shape]);
+  }
+
+  saveShapeState(node);
+  node.konvaState.layer.batchDraw();
+  node.setDirtyCanvas(true, true);
+
+  log.info(`Node ${node.id} shape horizontally centered`);
+}
+
+export function verticalAlignShape(node) {
+  if (!node.konvaState?.shape || !node.konvaState?.stage) return;
+
+  const shape = node.konvaState.shape;
+  const stage = node.konvaState.stage;
+
   shape.y(stage.height() / 2);
 
   // 更新变换器
@@ -158,7 +182,7 @@ export function centerAlignShape(node) {
   node.konvaState.layer.batchDraw();
   node.setDirtyCanvas(true, true);
 
-  log.info(`Node ${node.id} shape centered`);
+  log.info(`Node ${node.id} shape vertically centered`);
 }
 
 /**

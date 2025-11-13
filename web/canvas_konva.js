@@ -3,7 +3,7 @@
  * @module canvas_konva
  */
 
-import { log } from './canvas_state.js';
+import { log, mergeStateWithAdjustments } from './canvas_state.js';
 import { updateHistory } from './canvas_history.js';
 
 /**
@@ -31,9 +31,19 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     throw new Error('Konva.js not loaded');
   }
 
+  const stageWrapper = document.createElement('div');
+  stageWrapper.className = `xiser-canvas-wrapper-${node.id}`;
+  stageWrapper.style.position = 'relative';
+  stageWrapper.style.overflow = 'hidden';
+  stageWrapper.style.pointerEvents = 'auto';
+  boardContainer.appendChild(stageWrapper);
+
   const stageContainer = document.createElement('div');
   stageContainer.className = `xiser-canvas-stage-${node.id}`;
-  boardContainer.appendChild(stageContainer);
+  stageContainer.style.position = 'absolute';
+  stageContainer.style.top = '0';
+  stageContainer.style.left = '0';
+  stageWrapper.appendChild(stageContainer);
 
   const stage = new Konva.Stage({
     container: stageContainer,
@@ -136,6 +146,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
 
   log.info(`Konva stage initialized for node ${node.id} with size ${boardWidth}x${boardHeight}`);
   return {
+    stageWrapper,
     stage,
     canvasLayer,
     imageLayer,
@@ -170,7 +181,6 @@ export function resizeStage(nodeState, boardWidth, boardHeight, borderWidth, can
   const containerWidth = boardWidth + 2 * borderWidth;
   const containerHeight = boardHeight + 2 * borderWidth;
 
-  log.debug(`Resizing stage for node ${nodeState.nodeId}: board=${boardWidth}x${boardHeight}, container=${containerWidth}x${containerHeight}`);
 
   nodeState.stage.width(containerWidth);
   nodeState.stage.height(containerHeight);
@@ -235,7 +245,6 @@ export function destroyKonva(nodeState) {
   const log = nodeState.log || console;
   try {
     if (!nodeState.stage) {
-      log.debug(`No Konva stage to destroy for node ${nodeState.nodeId}`);
       return;
     }
 
@@ -317,6 +326,9 @@ export function selectLayer(nodeState, index) {
   nodeState.selectedLayer = node;
   node.moveToTop();
   nodeState.transformer.nodes([node]);
+  if (nodeState.adjustments && typeof nodeState.adjustments.onLayerSelected === 'function') {
+    nodeState.adjustments.onLayerSelected(index);
+  }
   nodeState.imageLayer.batchDraw();
 
   // Update layer panel selection
@@ -325,7 +337,6 @@ export function selectLayer(nodeState, index) {
     const listItemIndex = nodeState.imageNodes.length - 1 - index; // Map imageNodes index to layerItems index
     if (nodeState.layerItems[listItemIndex]) {
       nodeState.layerItems[listItemIndex].classList.add('selected');
-      log.debug(`Selected layer item at listItemIndex ${listItemIndex} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
     } else {
       log.warn(`Layer item at listItemIndex ${listItemIndex} not found for node ${nodeState.nodeId}`);
     }
@@ -333,14 +344,14 @@ export function selectLayer(nodeState, index) {
     log.warn(`No valid layerItems array for node ${nodeState.nodeId}`);
   }
 
-  // Sync state
-  nodeState.initialStates[index] = {
+  // Sync state while preserving adjustments
+  nodeState.initialStates[index] = mergeStateWithAdjustments(nodeState.initialStates[index], {
     x: node.x(),
     y: node.y(),
     scaleX: node.scaleX(),
     scaleY: node.scaleY(),
     rotation: node.rotation(),
-  };
+  });
   log.info(`Selected layer index ${index} (Layer ${index + 1}) for node ${nodeState.nodeId}`);
 }
 
@@ -351,7 +362,6 @@ export function selectLayer(nodeState, index) {
 export function deselectLayer(nodeState) {
   const log = nodeState.log || console;
   if (!nodeState.selectedLayer) {
-    log.debug(`No layer selected to deselect for node ${nodeState.nodeId}`);
     return;
   }
   nodeState.defaultLayerOrder.forEach((node, index) => {
@@ -363,6 +373,9 @@ export function deselectLayer(nodeState) {
   });
   nodeState.selectedLayer = null;
   nodeState.transformer.nodes([]);
+  if (nodeState.adjustments && typeof nodeState.adjustments.onLayerDeselected === 'function') {
+    nodeState.adjustments.onLayerDeselected();
+  }
   nodeState.imageLayer.batchDraw();
   if (Array.isArray(nodeState.layerItems)) {
     nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
@@ -370,7 +383,6 @@ export function deselectLayer(nodeState) {
   // Clear transformation state
   nodeState.isTransforming = false;
   nodeState.transformStartState = null;
-  log.debug(`Deselected layer for node ${nodeState.nodeId}`);
 }
 
 /**
@@ -397,13 +409,19 @@ export function applyStates(nodeState) {
       node.scaleX(scaleX);
       node.scaleY(scaleY);
       node.rotation(rotation);
-      nodeState.initialStates[i] = { x, y, scaleX, scaleY, rotation };
+      nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation });
+      if (typeof nodeState.applyLayerAdjustments === 'function') {
+        try {
+          nodeState.applyLayerAdjustments(i);
+        } catch (error) {
+          log.error(`Failed to apply adjustments for node ${nodeState.nodeId}, layer ${i}: ${error.message}`);
+        }
+      }
     } catch (e) {
       log.error(`Failed to apply state to image node ${i} for node ${nodeState.nodeId}: ${e.message}`);
     }
   });
   nodeState.imageLayer.batchDraw();
-  log.debug(`Applied states to ${validNodes.length} valid image nodes for node ${nodeState.nodeId}`);
 }
 
 /**
@@ -419,7 +437,6 @@ function debounce(func, delay) {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       func.apply(this, args);
-      log.debug(`Debounced function executed`);
     }, delay);
   };
 }
@@ -439,18 +456,17 @@ export function setupWheelEvents(node, nodeState) {
 
   // Remove existing wheel event listeners to prevent duplicates
   nodeState.stage.off('wheel');
-  log.debug(`Removed existing wheel event listeners for node ${node.id}`);
 
   // Update state function
   const updateState = (target, index, updateHistoryFlag = true) => {
     if (!target || !nodeState.imageNodes.includes(target)) return;
-    nodeState.initialStates[index] = {
+    nodeState.initialStates[index] = mergeStateWithAdjustments(nodeState.initialStates[index], {
       x: target.x(),
       y: target.y(),
       scaleX: target.scaleX(),
       scaleY: target.scaleY(),
       rotation: target.rotation(),
-    };
+    });
     node.properties.image_states = nodeState.initialStates;
     const imageStatesWidget = node.widgets.find((w) => w.name === 'image_states');
     if (imageStatesWidget) {
@@ -461,7 +477,6 @@ export function setupWheelEvents(node, nodeState) {
     if (updateHistoryFlag) {
       updateHistory(nodeState, true); // Force history update
     }
-    log.debug(`Wheel update for layer ${index} in node ${node.id}, states: ${JSON.stringify(nodeState.initialStates[index])}`);
   };
 
   // Debounced history update
@@ -469,7 +484,6 @@ export function setupWheelEvents(node, nodeState) {
     nodeState.isTransforming = false;
     updateHistory(nodeState, true);
     nodeState.transformStartState = null;
-    log.debug(`Debounced history update for wheel interaction in node ${node.id}`);
   }, 300);
 
   // Wheel event handler for zooming and rotating
@@ -495,7 +509,6 @@ export function setupWheelEvents(node, nodeState) {
         scaleY: target.scaleY(),
         rotation: target.rotation(),
       };
-      log.debug(`Wheel transform started for layer ${index} in node ${node.id}, initial state: ${JSON.stringify(nodeState.transformStartState)}`);
     }
 
     const isAltPressed = e.evt.altKey;

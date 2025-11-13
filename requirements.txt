@@ -1,3 +1,4 @@
 opencv-python
 psd-tools
 shapely
+fonttools

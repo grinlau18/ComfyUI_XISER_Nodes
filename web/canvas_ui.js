@@ -37,7 +37,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       .xiser-canvas-container-${nodeState.nodeId} {
         position: relative;
         box-sizing: border-box;
-        overflow: hidden;
+        overflow: visible;
         z-index: 10;
         pointer-events: none;
         display: block;
@@ -68,46 +68,56 @@ export function initializeUI(node, nodeState, widgetContainer) {
         opacity: 0;
         pointer-events: none;
       }
-      .xiser-button-${nodeState.nodeId} {
+      .xiser-button-group-${nodeState.nodeId} {
         position: absolute;
-        top: 10px;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 6px;
+        pointer-events: auto;
+        z-index: 15;
+      }
+      .xiser-button-${nodeState.nodeId} {
         color: #fff;
-        padding: 6px 10px;
-        font-size: 20px;
+        width: 34px;
+        height: 34px;
         border: none;
         cursor: pointer;
-        z-index: 10;
-        background-color: rgba(0, 0, 0, 0.75);
-        border-radius: 5px;
-        pointer-events: auto;
+        background-color: rgba(0, 0, 0, 0.78);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      .xiser-button-${nodeState.nodeId} svg {
+        width: 20px;
+        height: 20px;
       }
       .xiser-button-${nodeState.nodeId}:hover {
         background-color: rgb(30, 121, 195);
       }
-      .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction}px; }
-      .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset}px; }
-      .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo}px; }
-      .xiser-redo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.redo}px; }
       .xiser-layer-panel-${nodeState.nodeId} {
         position: absolute;
-        top: 10px;
-        left: 10px;
-        background-color: rgba(0, 0, 0, 0.75);
+        top: 12px;
+        left: 12px;
+        background-color: rgba(0, 0, 0, 0.78);
         color: #fff;
-        padding: 8px;
-        font-size: 20px;
+        padding: 0px;
+        font-size: 16px;
         z-index: 10;
         max-height: 320px;
-        overflow-y: auto;
-        border-radius: 5px;
+        overflow: hidden;
+        border-radius: 8px;
         pointer-events: auto;
         transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+        display: flex;
+        flex-direction: column;
       }
       .xiser-layer-panel-${nodeState.nodeId}.collapsed {
-        padding: 0px !important; 
+        padding: 0px;
         overflow: hidden;
-        background-color: rgba(0, 0, 0, 0.75); /* 与按钮一致的背景色 */
-        border-radius: 3px; /* 与按钮一致的圆角 */
+        max-height: 34px;
       }
       .xiser-layer-panel-header-${nodeState.nodeId} {
         display: flex;
@@ -116,10 +126,17 @@ export function initializeUI(node, nodeState, widgetContainer) {
         cursor: pointer;
         font-weight: normal;
         margin: 0;
-        padding: 6px 10px;
-        font-size: 20px; /* 与按钮一致的字体大小 */
+        padding: 0px 12px;
+        font-size: 16px;
         line-height: 1;
-        color: #fff; /* 与按钮一致的文字颜色 */
+        color: #fff;
+        height: 34px;
+        box-sizing: border-box;
+        flex-shrink: 0;
+        position: sticky;
+        top: 0;
+        background-color: rgba(0, 0, 0, 0.78);
+        z-index: 1;
       }
       .xiser-layer-panel-header-${nodeState.nodeId}:hover {
         background-color: rgb(30, 121, 195); /* 与按钮一致的悬停颜色 */
@@ -127,7 +144,10 @@ export function initializeUI(node, nodeState, widgetContainer) {
       }
       .xiser-layer-panel-content-${nodeState.nodeId} {
         transition: opacity 0.3s ease;
-        margin-top: 8px; /* 增加内容与边框的间隙 */
+        margin-top: 0px;
+        overflow-y: auto;
+        flex: 1;
+        max-height: calc(320px - 34px);
       }
       .xiser-layer-panel-${nodeState.nodeId}.collapsed .xiser-layer-panel-content-${nodeState.nodeId} {
         opacity: 0;
@@ -138,6 +158,30 @@ export function initializeUI(node, nodeState, widgetContainer) {
         cursor: pointer;
         border-bottom: 1px solid #444;
         pointer-events: auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-adjust-icon {
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        border-radius: 3px;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-adjust-icon:hover {
+        opacity: 1;
+        background-color: rgba(255, 255, 255, 0.1);
       }
       .xiser-layer-item-${nodeState.nodeId}:hover {
         background-color: #555;
@@ -165,10 +209,13 @@ export function initializeUI(node, nodeState, widgetContainer) {
         border-radius: 5px;
         max-width: 500px;
         width: 90%;
+        max-height: 50vh;
+        overflow-y: auto;
         font-size: 14px;
         line-height: 1.5;
         color: #aaa;
         pointer-events: auto;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
       }
       .xiser-modal-content-${nodeState.nodeId} h3 {
         margin-top: 0;
@@ -183,8 +230,9 @@ export function initializeUI(node, nodeState, widgetContainer) {
         margin-bottom: 10px;
       }
     `;
-    document.head.appendChild(style);
-    log.debug(`UI styles initialized for node ${nodeState.nodeId}`);
+    if (!document.head.contains(style)) {
+      document.head.appendChild(style);
+    }
     return style;
   }
 
@@ -201,7 +249,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
     statusText.className = `xiser-status-text-${nodeState.nodeId}`;
     statusText.innerText = "等待图像...";
     container.appendChild(statusText);
-    log.debug(`Board container created for node ${nodeState.nodeId}, display: ${container.style.display}`);
     return { boardContainer: container, statusText };
   }
 
@@ -232,40 +279,52 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @returns {Object} Button elements.
    */
   function createButtons() {
-    const instructionButton = document.createElement("button");
-    instructionButton.className = `xiser-button-${nodeState.nodeId} xiser-instruction-button-${nodeState.nodeId}`;
-    instructionButton.innerText = "ℹ️ Tips";
+    const createIconButton = (className, svgMarkup, label) => {
+      const button = document.createElement('button');
+      button.className = className;
+      button.innerHTML = svgMarkup;
+      button.setAttribute('aria-label', label);
+      button.style.display = 'flex';
+      button.style.alignItems = 'center';
+      button.style.justifyContent = 'center';
+      return button;
+    };
+
+    const instructionIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#clip0_info)"><circle cx="12" cy="12" r="9" stroke="#fdfdfd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></circle><rect x="12" y="8" width="0.01" height="0.01" stroke="#fdfdfd" stroke-width="3.75" stroke-linejoin="round"></rect><path d="M12 12V16" stroke="#fdfdfd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></g><defs><clipPath id="clip0_info"><rect width="24" height="24" fill="white"></rect></clipPath></defs></svg>`;
+    const resetIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11 2L13 3.99545L12.9408 4.05474M13 18.0001L11 19.9108L11.0297 19.9417M12.9408 4.05474L11 6M12.9408 4.05474C12.6323 4.01859 12.3183 4 12 4C7.58172 4 4 7.58172 4 12C4 14.5264 5.17107 16.7793 7 18.2454M17 5.75463C18.8289 7.22075 20 9.47362 20 12C20 16.4183 16.4183 20 12 20C11.6716 20 11.3477 19.9802 11.0297 19.9417M13 22.0001L11.0297 19.9417" stroke="#fdfdfd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+    const undoIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="scale(-1,1) translate(-24,0)"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.2929 4.29289C13.6834 3.90237 14.3166 3.90237 14.7071 4.29289L18.7071 8.29289C19.0976 8.68342 19.0976 9.31658 18.7071 9.70711L14.7071 13.7071C14.3166 14.0976 13.6834 14.0976 13.2929 13.7071C12.9024 13.3166 12.9024 12.6834 13.2929 12.2929L15.5858 10H10.5C8.567 10 7 11.567 7 13.5C7 15.433 8.567 17 10.5 17H13C13.5523 17 14 17.4477 14 18C14 18.5523 13.5523 19 13 19H10.5C7.46243 19 5 16.5376 5 13.5C5 10.4624 7.46243 8 10.5 8H15.5858L13.2929 5.70711C12.9024 5.31658 12.9024 4.68342 13.2929 4.29289Z" fill="#fdfdfd"></path></g></svg>`;
+    const redoIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.2929 4.29289C13.6834 3.90237 14.3166 3.90237 14.7071 4.29289L18.7071 8.29289C19.0976 8.68342 19.0976 9.31658 18.7071 9.70711L14.7071 13.7071C14.3166 14.0976 13.6834 14.0976 13.2929 13.7071C12.9024 13.3166 12.9024 12.6834 13.2929 12.2929L15.5858 10H10.5C8.567 10 7 11.567 7 13.5C7 15.433 8.567 17 10.5 17H13C13.5523 17 14 17.4477 14 18C14 18.5523 13.5523 19 13 19H10.5C7.46243 19 5 16.5376 5 13.5C5 10.4624 7.46243 8 10.5 8H15.5858L13.2929 5.70711C12.9024 5.31658 12.9024 4.68342 13.2929 4.29289Z" fill="#fdfdfd"></path></svg>`;
+
+    const instructionButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-instruction-button-${nodeState.nodeId}`, instructionIcon, 'Tips');
     instructionButton.onclick = () => {
       log.info(`Tips button clicked for node ${nodeState.nodeId}`);
       nodeState.modalVisible = true;
       modal.style.display = "flex";
     };
 
-    const resetButton = document.createElement("button");
-    resetButton.className = `xiser-button-${nodeState.nodeId} xiser-reset-button-${nodeState.nodeId}`;
-    resetButton.innerText = "🔁 Reset";
+    const resetButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-reset-button-${nodeState.nodeId}`, resetIcon, 'Reset');
     resetButton.onclick = () => {
       log.info(`Reset button clicked for node ${nodeState.nodeId}`);
       nodeState.resetCanvas();
     };
 
-    const undoButton = document.createElement("button");
-    undoButton.className = `xiser-button-${nodeState.nodeId} xiser-undo-button-${nodeState.nodeId}`;
-    undoButton.innerText = "↩️ Undo";
+    const undoButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-undo-button-${nodeState.nodeId}`, undoIcon, 'Undo');
     undoButton.onclick = () => {
       log.info(`Undo button clicked for node ${nodeState.nodeId}`);
       nodeState.undo();
     };
 
-    const redoButton = document.createElement("button");
-    redoButton.className = `xiser-button-${nodeState.nodeId} xiser-redo-button-${nodeState.nodeId}`;
-    redoButton.innerText = "↪️ Redo";
+    const redoButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-redo-button-${nodeState.nodeId}`, redoIcon, 'Redo');
     redoButton.onclick = () => {
       log.info(`Redo button clicked for node ${nodeState.nodeId}`);
       nodeState.redo();
     };
 
-    return { instructionButton, resetButton, undoButton, redoButton };
+    const group = document.createElement('div');
+    group.className = `xiser-button-group-${nodeState.nodeId}`;
+    group.append(undoButton, redoButton, resetButton, instructionButton);
+
+    return { instructionButton, resetButton, undoButton, redoButton, buttonGroup: group };
   }
 
   /**
@@ -299,6 +358,14 @@ export function initializeUI(node, nodeState, widgetContainer) {
         </li>
         <li><strong>Auto Size Feature:</strong> Enable "auto_size" to automatically adjust canvas dimensions to match the first image's size.</li>
         <li><strong>Display Scaling:</strong> Adjust "display_scale" to change canvas display size without affecting the actual output dimensions.</li>
+        <li><strong>Image Adjustments:</strong>
+          <ul>
+            <li>Select a layer and click the floating adjustment icon at its center to open the panel.</li>
+            <li>Brightness (-100% to +100%) shifts exposure; Contrast (-100 to +100) compresses or expands tones.</li>
+            <li>Saturation (-100 to +100) matches backend output: -100 yields monochrome, 0 restores original color, +100 doubles color intensity.</li>
+            <li>Reset button restores all three sliders to their defaults for the active layer.</li>
+          </ul>
+        </li>
         <li><strong>History & Undo:</strong> Use undo/redo buttons to navigate through layer transformation history.</li>
         <li><strong>Canvas Reset:</strong> Use the reset button to center all images and restore default states.</li>
       </ul>
@@ -357,8 +424,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @param {Function} deselectLayer - Callback to deselect a layer.
    */
   function updateLayerPanel(selectLayer, deselectLayer) {
-    log.debug(`Updating layer panel for node ${nodeState.nodeId}, imageNodes: ${nodeState.imageNodes?.length || 0}`);
-    log.debug(`file_data: ${JSON.stringify(nodeState.file_data)}`);
 
     // Find the content container
     const content = layerPanel.querySelector(`.xiser-layer-panel-content-${nodeState.nodeId}`);
@@ -371,7 +436,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
     nodeState.layerItems = [];
 
     const layers = nodeState.file_data?.layers || [];
-    log.debug(`Layers from file_data: ${JSON.stringify(layers)}`);
 
     for (let index = 0; index < nodeState.imageNodes.length; index++) {
       const item = document.createElement("div");
@@ -389,21 +453,33 @@ export function initializeUI(node, nodeState, widgetContainer) {
           }
           const chars = [...decodedName];
           layerName = chars.length > 8 ? chars.slice(0, 8).join('') + '...' : decodedName;
-          log.debug(`Layer ${layerIndex} name: ${layerName} (original: ${layerData.name})`);
         } catch (e) {
           log.warn(`Failed to decode layer name at index ${layerIndex}: ${e.message}`);
           layerName = `Layer ${layerIndex + 1}`;
         }
       } else {
-        log.debug(`No name for layer at index ${layerIndex}, using default: ${layerName}`);
       }
 
-      item.innerText = layerName;
+      // 创建图层列表项内容
+      item.innerHTML = `
+        <span class="layer-name">${layerName}</span>
+        <span class="layer-adjust-icon" data-index="${layerIndex}">
+          <svg viewBox="0 0 48 48" width="14" height="14" fill="#ffffff">
+            <path d="M44,14H23.65c-0.826-2.327-3.043-4-5.65-4s-4.824,1.673-5.65,4H4v4h8.35c0.826,2.327,3.043,4,5.65,4s4.824-1.673,5.65-4H44 V14z"/>
+            <path d="M44,30h-8.35c-0.826-2.327-3.043-4-5.65-4s-4.824,1.673-5.65,4H4v4h20.35c0.826,2.327,3.043,4,5.65,4s4.824-1.673,5.65-4 H44V30z"/>
+          </svg>
+        </span>
+      `;
       item.dataset.index = layerIndex.toString();
       content.appendChild(item);
       nodeState.layerItems.push(item);
 
-      item.addEventListener("click", () => {
+      // 图层名称点击事件 - 选择图层
+      item.addEventListener("click", (event) => {
+        // 如果点击的是调整图标，则不触发图层选择
+        if (event.target.closest('.layer-adjust-icon')) {
+          return;
+        }
         log.info(`Layer item ${layerIndex} (${layerName}) clicked for node ${nodeState.nodeId}`);
         const currentIndex = parseInt(item.dataset.index);
         if (currentIndex >= 0 && currentIndex < nodeState.imageNodes.length && nodeState.imageNodes[currentIndex]) {
@@ -413,8 +489,53 @@ export function initializeUI(node, nodeState, widgetContainer) {
           deselectLayer(nodeState);
         }
       });
+
+      // 调整图标点击事件 - 弹出调节面板
+      const adjustIcon = item.querySelector('.layer-adjust-icon');
+      adjustIcon.addEventListener("click", (event) => {
+        event.stopPropagation(); // 阻止事件冒泡到图层项
+        log.info(`Adjust icon clicked for layer ${layerIndex} (${layerName}) for node ${nodeState.nodeId}`);
+        const currentIndex = parseInt(adjustIcon.dataset.index);
+
+        // 首先选择该图层
+        if (currentIndex >= 0 && currentIndex < nodeState.imageNodes.length && nodeState.imageNodes[currentIndex]) {
+          selectLayer(nodeState, currentIndex);
+
+          // 然后触发调节面板显示
+          if (nodeState.adjustments && nodeState.adjustments.onLayerSelected) {
+            nodeState.adjustments.onLayerSelected(currentIndex);
+            // 手动触发调节面板显示
+            if (nodeState.adjustments.showPanel) {
+              nodeState.adjustments.showPanel();
+            }
+          }
+        } else {
+          log.warn(`Invalid layer index ${currentIndex} for adjustment panel`);
+        }
+      });
     }
-    log.debug(`Layer panel updated for node ${nodeState.nodeId}, items: ${nodeState.layerItems.length}`);
+  }
+
+  /**
+   * Maps display_scale from [0.1, 1.0] to [0.5, 0.9] range for UI elements.
+   * This prevents UI elements from becoming too small or too large.
+   * @param {number} displayScale - The original display scale factor.
+   * @returns {number} The mapped scale factor for UI elements.
+   */
+  function mapDisplayScaleForUI(displayScale) {
+    // Map from [0.1, 1.0] to [0.5, 0.9]
+    const inputMin = 0.1;
+    const inputMax = 1.0;
+    const outputMin = 0.4;
+    const outputMax = 0.7;
+
+    // Clamp input to valid range
+    const clampedScale = Math.max(inputMin, Math.min(inputMax, displayScale));
+
+    // Linear mapping
+    const mappedScale = outputMin + (clampedScale - inputMin) * (outputMax - outputMin) / (inputMax - inputMin);
+
+    return mappedScale;
   }
 
   /**
@@ -422,54 +543,26 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @param {number} displayScale - The display scale factor (e.g., 1.5 for 150%).
    */
   function updateUIScale(displayScale) {
+    // Use mapped scale for UI elements to prevent extreme sizes
+    const uiScale = mapDisplayScaleForUI(displayScale);
     document.querySelectorAll(`style#xiser-styles-scale-${nodeState.nodeId}`).forEach(s => s.remove());
     const style = document.createElement("style");
     style.id = `xiser-styles-scale-${nodeState.nodeId}`;
     style.dataset.nodeId = nodeState.nodeId;
     style.textContent = `
       .xiser-status-text-${nodeState.nodeId} {
-        bottom: ${10 * displayScale}px;
-        border-radius: ${5 * displayScale}px;
-        padding: ${5 * displayScale}px;
-        font-size: ${20 * displayScale}px;
-      }
-      .xiser-button-${nodeState.nodeId} {
-        top: ${10 * displayScale}px;
-        padding: ${6 * displayScale}px ${10 * displayScale}px;
-        font-size: ${20 * displayScale}px;
-        border-radius: ${5 * displayScale}px;
-      }
-      .xiser-instruction-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.instruction * displayScale}px; }
-      .xiser-reset-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.reset * displayScale}px; }
-      .xiser-undo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.undo * displayScale}px; }
-      .xiser-redo-button-${nodeState.nodeId} { right: ${BUTTON_POSITIONS.redo * displayScale}px; }
-      .xiser-layer-panel-${nodeState.nodeId} {
-        top: ${10 * displayScale}px;
-        left: ${10 * displayScale}px;
-        padding: ${0 * displayScale}px;
-        font-size: ${20 * displayScale}px;
-        max-height: ${320 * displayScale}px;
-        border-radius: ${5 * displayScale}px;
-      }
-      .xiser-layer-panel-${nodeState.nodeId}.collapsed {
-        max-height: ${44 * displayScale}px;
-        border-radius: ${5 * displayScale}px; /* 与按钮一致的圆角 */
-      }
-      .xiser-layer-panel-header-${nodeState.nodeId} {
-        font-size: ${20 * displayScale}px; /* 与按钮一致的字体大小 */
-        height: ${44 * displayScale}px;
-      }
-      .xiser-layer-panel-content-${nodeState.nodeId} {
-        margin-top: ${8 * displayScale}px;
+        bottom: ${10 * uiScale}px;
+        border-radius: ${5 * uiScale}px;
+        padding: ${5 * uiScale}px;
+        font-size: ${20 * uiScale}px;
       }
       .xiser-layer-item-${nodeState.nodeId} {
-        padding: ${8 * displayScale}px;
-        margin-left: ${8 * displayScale}px;
-        border-bottom: ${1 * displayScale}px solid #444;
+        padding: 8px;
+        margin-left: 8px;
+        border-bottom: 1px solid #444;
       }
     `;
     document.head.appendChild(style);
-    log.debug(`UI elements scaled for node ${nodeState.nodeId} with displayScale: ${displayScale}`);
   }
 
   // Initialize UI components
@@ -480,16 +573,12 @@ export function initializeUI(node, nodeState, widgetContainer) {
   const buttons = createButtons();
 
   // Append UI elements
-  boardContainer.appendChild(buttons.instructionButton);
-  boardContainer.appendChild(buttons.resetButton);
-  boardContainer.appendChild(buttons.undoButton);
-  boardContainer.appendChild(buttons.redoButton);
+  boardContainer.appendChild(buttons.buttonGroup);
   boardContainer.appendChild(layerPanel);
 
   // Modal close event
   modal.addEventListener("click", (e) => {
     if (e.target === modal) {
-      log.debug(`Modal closed for node ${nodeState.nodeId}`);
       nodeState.modalVisible = false;
       modal.style.display = "none";
     }
@@ -501,7 +590,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
   // Initialize scaling
   updateUIScale(node.properties?.ui_config?.display_scale || 0.75);
 
-  log.debug(`UI initialized for node ${nodeState.nodeId}, widgetContainer display: ${widgetContainer.style.display}`);
 
   return {
     widgetContainer,

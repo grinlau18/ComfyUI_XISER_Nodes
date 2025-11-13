@@ -8,13 +8,17 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 from server import PromptServer
 import json
 import aiohttp.web
 import traceback
-from .server_extension import list_psd_files  # 导入处理函数
+from .server_extension import (
+    list_psd_files,
+    get_available_fonts,
+    serve_font_file,
+)  # 导入处理函数
 
 # 导入节点映射
 from .src.xiser_nodes import NODE_CLASS_MAPPINGS
@@ -77,7 +81,9 @@ async def handle_color_change(request):
 try:
     PromptServer.instance.app.router.add_post("/xiser_color", handle_color_change)
     PromptServer.instance.app.router.add_get("/custom/list_psd_files", list_psd_files)
-    print("[XISER] Successfully registered routes: /xiser_color, /custom/list_psd_files")
+    PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
+    PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
+    print("[XISER] Successfully registered routes: /xiser_color, /custom/list_psd_files, /xiser/fonts")
 except Exception as e:
     print("[XISER] Failed to register routes:", str(e))
 

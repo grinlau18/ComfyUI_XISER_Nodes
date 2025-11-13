@@ -11,17 +11,21 @@ import KonvaWheelInteraction from "./shape_generators/konva_wheel_interaction.js
 // 导入模块化组件
 import { log, normalizeColor } from "./shape_generators/xis_shape_utils.js";
 import { createKonvaShape, updateKonvaShape, setStateManagementFunctions } from "./shape_generators/xis_shape_creator.js";
-import { createResetButton, createCenterAlignButton, updateButtonPositions } from "./shape_generators/xis_button_manager.js";
+import { createResetButton, createCenterAlignButton, createVerticalAlignButton, createSettingsButton, updateButtonPositions } from "./shape_generators/xis_button_manager.js";
 import { createGridSystem, updateGridColor } from "./shape_generators/xis_grid_system.js";
-import { saveShapeState, restoreShapeState, resetShapeState, centerAlignShape, updateCanvasBackground } from "./shape_generators/xis_state_manager.js";
+import { saveShapeState, restoreShapeState, resetShapeState, centerAlignShape, verticalAlignShape, updateCanvasBackground } from "./shape_generators/xis_state_manager.js";
 import { setupInputListeners, setupParametricControls, initializeWidgetsFromProperties, setControlDependencies } from "./shape_generators/xis_control_manager.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
 // 固定节点尺寸配置
-const MIN_NODE_WIDTH = 360;  // 节点最小宽度 (px)
-const MIN_NODE_HEIGHT = 510; // 节点最小高度 (px)
+const MIN_NODE_WIDTH = 280;  // 节点最小宽度 (px)
+const MIN_NODE_HEIGHT = 280; // 节点最小高度 (px)
+const NODE_WIDTH_PADDING = 0;   // xiser-shape-node 宽度补偿
+const NODE_HEIGHT_PADDING = 0;  // xiser-shape-node 高度补偿
+const DOM_WIDGET_WIDTH_PADDING = 20;  // dom-widget 宽度补偿
+const DOM_WIDGET_HEIGHT_PADDING = 280; // dom-widget 高度补偿
 
 // 画布缩放因子 - 画布大小为输出尺寸的75%
 const CANVAS_SCALE_FACTOR = 0.75;
@@ -88,28 +92,55 @@ export function setupKonvaCanvas(node) {
     background: null,
     resetButton: null,
     centerAlignButton: null,
+    verticalAlignButton: null,
+    settingsButton: null,
+    paramsContainer: null,
+    paramsBody: null,
+    paramsTitle: null,
     initialized: false,
-    isSettingValue: false // 防止setValue和widget回调冲突
+    isSettingValue: false,
+    settingsVisible: false,
+    settingsPosition: { left: 64, top: 64 }
   };
+  node.konvaState.saveShapeState = saveShapeState;
+  node.konvaState.restoreShapeState = restoreShapeState;
 
   // 重置按钮配置
   node.konvaState.resetButtonConfig = {
     xOffset: 32,    // 距离右侧的偏移量
-    yOffset: 28,    // 距离顶部的偏移量
-    width: 32,      // 按钮宽度
-    height: 32,     // 按钮高度
-    bgRadius: 16,   // 背景圆形半径
-    iconScale: 0.045 // 图标缩放比例
+    yOffset: 32,    // 距离顶部的偏移量
+    width: 28,      // 按钮宽度
+    height: 28,     // 按钮高度
+    bgRadius: 20,   // 背景圆形半径
+    iconScale: 0.9 // 图标缩放比例
   };
 
   // 居中对齐按钮配置
   node.konvaState.centerAlignButtonConfig = {
-    xOffset: 72,    // 距离右侧的偏移量（在重置按钮左侧）
-    yOffset: 28,    // 距离顶部的偏移量
-    width: 32,      // 按钮宽度
-    height: 32,     // 按钮高度
-    bgRadius: 16,   // 背景圆形半径
+    xOffset: 82,    // 距离右侧的偏移量（在重置按钮左侧）
+    yOffset: 32,    // 距离顶部的偏移量
+    width: 28,      // 按钮宽度
+    height: 28,     // 按钮高度
+    bgRadius: 20,   // 背景圆形半径
     iconScale: 0.7  // 图标缩放比例（新图标需要更大缩放）
+  };
+
+  node.konvaState.settingsButtonConfig = {
+    xOffset: 32,    // 距离左侧偏移
+    yOffset: 32,
+    width: 28,
+    height: 28,
+    bgRadius: 20,
+    iconScale: 0.8
+  };
+
+  node.konvaState.verticalAlignButtonConfig = {
+    xOffset: 132,
+    yOffset: 32,
+    width: 28,
+    height: 28,
+    bgRadius: 20,
+    iconScale: 0.7
   };
 
   // 创建主容器
@@ -122,13 +153,14 @@ export function setupKonvaCanvas(node) {
     background: rgba(0, 0, 0, 0.4);
     border-radius: 8px;
     display: flex;
-    gap: 8px;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 8px;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 0;
     box-sizing: border-box;
-    overflow: hidden; /* 防止子元素溢出 */
+    position: relative;
+    overflow: visible;
   `;
 
   // 创建画布容器
@@ -137,30 +169,171 @@ export function setupKonvaCanvas(node) {
   canvasContainer.style.cssText = `
     background: rgba(0,0,0,0);
     border-radius: 6px;
-    flex: 1; /* 占用剩余空间 */
-    max-width: 100%;
-    max-height: 100%;
+    flex: 0 0 auto;
+    min-height: 260px;
+    width: auto;
     display: flex;
     justify-content: center;
     align-items: center;
     overflow: visible;
+    position: relative;
   `;
 
   // 创建参数容器
   const paramsContainer = document.createElement("div");
   paramsContainer.className = `xiser-params-container-${node.id}`;
   paramsContainer.style.cssText = `
-    width: 100%;
-    padding: 12px;
+    position: fixed;
+    top: 64px;
+    left: 64px;
+    min-width: 300px;
+    max-width: 360px;
+    max-height: 80%;
+    padding: 0;
     box-sizing: border-box;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 6px;
-    display: none; /* 默认隐藏，动态显示 */
-    transition: height 0.3s ease, opacity 0.3s ease; /* 添加平滑过渡 */
+    background: rgba(8, 8, 12, 0.95);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55);
+    display: none;
+    flex-direction: column;
+    z-index: 20;
+    cursor: default;
   `;
+  const paramsHeader = document.createElement("div");
+  paramsHeader.style.cssText = `
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: move;
+    user-select: none;
+  `;
+  const paramsTitle = document.createElement("span");
+  paramsTitle.style.cssText = `
+    font-size: 13px;
+    color: #f5f5f5;
+    letter-spacing: 0.5px;
+  `;
+  paramsTitle.textContent = "图形设置";
+  const paramsClose = document.createElement("button");
+  paramsClose.textContent = "×";
+  paramsClose.style.cssText = `
+    background: transparent;
+    border: none;
+    color: #ccc;
+    font-size: 14px;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+  `;
+  paramsHeader.appendChild(paramsTitle);
+  paramsHeader.appendChild(paramsClose);
+
+  const paramsBody = document.createElement("div");
+  paramsBody.className = `xiser-params-body-${node.id}`;
+  paramsBody.style.cssText = `
+    padding: 12px;
+    overflow-y: auto;
+    max-height: calc(80vh - 80px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  `;
+  paramsContainer.appendChild(paramsHeader);
+  paramsContainer.appendChild(paramsBody);
 
   mainContainer.appendChild(canvasContainer);
-  mainContainer.appendChild(paramsContainer);
+  document.body.appendChild(paramsContainer);
+  node.konvaState.mainContainer = mainContainer;
+  node.konvaState.paramsContainer = paramsContainer;
+  node.konvaState.paramsBody = paramsBody;
+  node.konvaState.paramsTitle = paramsTitle;
+
+  const clampPanelPosition = (overrideLeft, overrideTop) => {
+    const panel = node.konvaState.paramsContainer;
+    if (!panel) return;
+    const panelWidth = panel.offsetWidth || 320;
+    const panelHeight = panel.offsetHeight || 200;
+    let currentLeft = overrideLeft !== undefined ? overrideLeft : parseFloat(panel.style.left || node.konvaState.settingsPosition.left || 64);
+    let currentTop = overrideTop !== undefined ? overrideTop : parseFloat(panel.style.top || node.konvaState.settingsPosition.top || 64);
+    const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
+    const maxTop = Math.max(16, window.innerHeight - panelHeight - 16);
+    currentLeft = Math.min(Math.max(16, currentLeft), maxLeft);
+    currentTop = Math.min(Math.max(16, currentTop), maxTop);
+    node.konvaState.settingsPosition = { left: currentLeft, top: currentTop };
+    panel.style.left = `${currentLeft}px`;
+    panel.style.top = `${currentTop}px`;
+  };
+
+  const setSettingsVisibility = (visible, position) => {
+    node.konvaState.settingsVisible = visible;
+    if (visible) {
+      paramsContainer.style.display = "flex";
+      if (position) {
+        clampPanelPosition(position.left, position.top);
+      } else {
+        clampPanelPosition();
+      }
+      if (node.konvaState?.refreshParams) {
+        node.konvaState.refreshParams();
+      }
+    } else {
+      paramsContainer.style.display = "none";
+    }
+  };
+  node.konvaState.setSettingsVisibility = setSettingsVisibility;
+  node.konvaState.ensureSettingsBounds = clampPanelPosition;
+
+  paramsClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    setSettingsVisibility(false);
+  });
+
+  let panelDrag = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  const handlePanelDrag = (event) => {
+    if (!panelDrag) return;
+    const pointer = event.touches ? event.touches[0] : event;
+    let left = pointer.clientX - dragOffsetX;
+    let top = pointer.clientY - dragOffsetY;
+    const panelWidth = paramsContainer.offsetWidth || 320;
+    const panelHeight = paramsContainer.offsetHeight || 200;
+    const maxLeft = Math.max(16, window.innerWidth - panelWidth - 16);
+    const maxTop = Math.max(16, window.innerHeight - panelHeight - 16);
+    left = Math.min(Math.max(16, left), maxLeft);
+    top = Math.min(Math.max(16, top), maxTop);
+    paramsContainer.style.left = `${left}px`;
+    paramsContainer.style.top = `${top}px`;
+    event.preventDefault();
+  };
+
+  const stopPanelDrag = () => {
+    panelDrag = false;
+    window.removeEventListener("mousemove", handlePanelDrag);
+    window.removeEventListener("mouseup", stopPanelDrag);
+    window.removeEventListener("touchmove", handlePanelDrag);
+    window.removeEventListener("touchend", stopPanelDrag);
+  };
+
+  const startPanelDrag = (event) => {
+    const pointer = event.touches ? event.touches[0] : event;
+    dragOffsetX = pointer.clientX - parseFloat(paramsContainer.style.left || 0);
+    dragOffsetY = pointer.clientY - parseFloat(paramsContainer.style.top || 0);
+    panelDrag = true;
+    window.addEventListener("mousemove", handlePanelDrag);
+    window.addEventListener("mouseup", stopPanelDrag);
+    window.addEventListener("touchmove", handlePanelDrag, { passive: false });
+    window.addEventListener("touchend", stopPanelDrag);
+    event.preventDefault();
+  };
+
+  paramsHeader.addEventListener("mousedown", startPanelDrag);
+  paramsHeader.addEventListener("touchstart", startPanelDrag, { passive: false });
 
   // 加载 Konva
   let retryCount = 0;
@@ -212,11 +385,30 @@ export function setupKonvaCanvas(node) {
     stage.add(layer);
     layer.add(background);
 
+    const overlayLayer = new Konva.Layer();
+    stage.add(overlayLayer);
+
     // 创建重置按钮
-    const resetButton = createResetButton(node, stage, layer, resetShapeState);
+    const resetButton = createResetButton(node, stage, overlayLayer, resetShapeState);
 
     // 创建居中对齐按钮
-    const centerAlignButton = createCenterAlignButton(node, stage, layer, centerAlignShape);
+    const centerAlignButton = createCenterAlignButton(node, stage, overlayLayer, centerAlignShape);
+    const verticalAlignButton = createVerticalAlignButton(node, stage, overlayLayer, verticalAlignShape);
+
+    const settingsButton = createSettingsButton(node, stage, overlayLayer, (pos) => {
+      if (node.konvaState.settingsVisible) {
+        setSettingsVisibility(false);
+      } else {
+        const offsetY = 18;
+        const desiredLeft = pos?.clientX ? pos.clientX + 12 : undefined;
+        const desiredTop = pos?.clientY ? pos.clientY + offsetY : undefined;
+        setSettingsVisibility(true, {
+          left: desiredLeft,
+          top: desiredTop
+        });
+      }
+    });
+    setSettingsVisibility(false);
 
     // 创建变换器，支持更多锚点和剪切
     const transformer = new Konva.Transformer({
@@ -239,8 +431,21 @@ export function setupKonvaCanvas(node) {
     stage.on('click tap', (e) => {
       // 检查点击目标是否是按钮，如果是则忽略
       const target = e.target;
-      if (target && (target.getName() === 'resetButton' || target.getName() === 'centerAlignButton' ||
-          target.parent && (target.parent.getName() === 'resetButton' || target.parent.getName() === 'centerAlignButton'))) {
+      if (
+        target &&
+        (
+          target.getName() === 'resetButton' ||
+          target.getName() === 'centerAlignButton' ||
+          target.getName() === 'verticalAlignButton' ||
+          target.getName() === 'settingsButton' ||
+          (target.parent && (
+            target.parent.getName() === 'resetButton' ||
+            target.parent.getName() === 'centerAlignButton' ||
+            target.parent.getName() === 'verticalAlignButton' ||
+            target.parent.getName() === 'settingsButton'
+          ))
+        )
+      ) {
         return; // 忽略按钮点击，让按钮自己的事件处理器处理
       }
 
@@ -255,6 +460,7 @@ export function setupKonvaCanvas(node) {
 
     node.konvaState.stage = stage;
     node.konvaState.layer = layer;
+    node.konvaState.overlayLayer = overlayLayer;
     node.konvaState.transformer = transformer;
     node.konvaState.background = background;
     node.konvaState.drawGrid = drawGrid;
@@ -339,6 +545,7 @@ export function setupKonvaCanvas(node) {
           rotation: shapeState.rotation || 0,
           scale: shapeState.scale || { x: 1, y: 1 },
           skew: shapeState.skew || { x: 0, y: 0 },
+          shape_state: node.properties.shapeState || node.properties.shape_state || JSON.stringify(shapeState || {}),
           // 标记是否有shape_data输入
           has_shape_data_input: hasShapeData
         };
@@ -381,6 +588,11 @@ export function setupKonvaCanvas(node) {
 
         // 只更新实际提供的且发生变化的属性，避免不必要的更新
         const propertiesToUpdate = {};
+        const colorPropKeys = new Set(['shape_color', 'bg_color', 'transparent_bg', 'stroke_color', 'stroke_width']);
+
+        if (safeValue.shape_state !== undefined && safeValue.shapeState === undefined) {
+          safeValue.shapeState = safeValue.shape_state;
+        }
 
         if (safeValue.shape_type !== undefined && safeValue.shape_type !== node.properties.shape_type) propertiesToUpdate.shape_type = safeValue.shape_type;
         if (safeValue.shape_params !== undefined && safeValue.shape_params !== node.properties.shape_params) propertiesToUpdate.shape_params = safeValue.shape_params;
@@ -414,12 +626,7 @@ export function setupKonvaCanvas(node) {
         // 如果Konva已经初始化，更新画布和形状
         if (node.konvaState?.initialized) {
           // 检查颜色相关属性是否实际发生变化，如果是则更新画布
-          const colorPropsChanged =
-            (safeValue.shape_color !== undefined && normalizeColor(safeValue.shape_color) !== normalizeColor(node.properties.shape_color)) ||
-            (safeValue.bg_color !== undefined && normalizeColor(safeValue.bg_color) !== normalizeColor(node.properties.bg_color)) ||
-            (safeValue.transparent_bg !== undefined && Boolean(safeValue.transparent_bg) !== Boolean(node.properties.transparent_bg)) ||
-            (safeValue.stroke_color !== undefined && normalizeColor(safeValue.stroke_color) !== normalizeColor(node.properties.stroke_color)) ||
-            (safeValue.stroke_width !== undefined && parseInt(safeValue.stroke_width) !== parseInt(node.properties.stroke_width));
+          const colorPropsChanged = Object.keys(propertiesToUpdate).some(key => colorPropKeys.has(key));
 
           if (colorPropsChanged) {
             updateCanvasBackground(node);
@@ -454,7 +661,7 @@ export function setupKonvaCanvas(node) {
   });
 
   setupInputListeners(node);
-  setupParametricControls(node, paramsContainer);
+  setupParametricControls(node, paramsBody);
 }
 
 /**
@@ -488,8 +695,8 @@ export function updateCanvasSize(node) {
   node.konvaState.stage.width(stageWidth);
   node.konvaState.stage.height(stageHeight);
 
-  // 设置参数容器宽度，匹配画布宽度
-  paramsContainerEl.style.maxWidth = `${stageWidth}px`;
+  // 设置参数容器宽度
+  paramsContainerEl.style.maxWidth = `${Math.min(stageWidth, 420)}px`;
 
   // 更新背景大小
   if (node.konvaState.background) {
@@ -505,6 +712,10 @@ export function updateCanvasSize(node) {
   // 更新按钮位置
   updateButtonPositions(node, stageWidth);
 
+  if (node.konvaState?.ensureSettingsBounds) {
+    node.konvaState.ensureSettingsBounds();
+  }
+
   // 使用固定高度估算控件高度（因为控件可能尚未渲染）
   const widgets = node.widgets || [];
   const widgetCount = widgets.filter(w =>
@@ -512,19 +723,16 @@ export function updateCanvasSize(node) {
   ).length;
 
   // 每个控件大约40px高度，加上间距
-  const widgetHeight = widgetCount * 44;
+  const widgetHeight = 0;
 
-  // 计算参数控件高度
-  let paramsHeight = 0;
-  if (paramsContainerEl.children.length > 0) {
-    // 使用固定估算值，因为元素可能尚未完全渲染
-    paramsHeight = 120; // 参数控件的大致高度
-  }
+  const domContentWidth = stageWidth + NODE_WIDTH_PADDING;
+  const domContentHeight = stageHeight + NODE_HEIGHT_PADDING;
 
-  // 自动调整节点尺寸以适应固定画布大小和控件
-  const containerPadding = 8;
-  const targetWidth = Math.max(MIN_NODE_WIDTH, stageWidth + 2 * containerPadding + 20); // 额外宽度边距
-  const targetHeight = Math.max(MIN_NODE_HEIGHT, stageHeight + widgetHeight + paramsHeight + 2 * containerPadding + 130); // 增加额外高度确保完全显示
+  const targetWidth = Math.max(MIN_NODE_WIDTH, Math.ceil(domContentWidth + DOM_WIDGET_WIDTH_PADDING));
+  const targetHeight = Math.max(MIN_NODE_HEIGHT, Math.ceil(domContentHeight + DOM_WIDGET_HEIGHT_PADDING));
+
+  mainContainerEl.style.width = `${stageWidth + NODE_WIDTH_PADDING}px`;
+  mainContainerEl.style.height = `${stageHeight + NODE_HEIGHT_PADDING}px`;
 
   if (node.size[0] !== targetWidth || node.size[1] !== targetHeight) {
     node.size = [targetWidth, targetHeight];
@@ -533,9 +741,10 @@ export function updateCanvasSize(node) {
     node.setDirtyCanvas(true, true);
   }
 
-  // 确保参数容器可见
   if (paramsContainerEl.children.length > 0) {
-    paramsContainerEl.style.display = "block";
+    paramsContainerEl.style.display = node.konvaState.settingsVisible ? "flex" : "none";
+  } else {
+    paramsContainerEl.style.display = "none";
   }
 
   // 验证容器和画布尺寸

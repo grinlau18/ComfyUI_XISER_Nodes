@@ -160,6 +160,7 @@ export function setupInputListeners(node) {
  */
 export function setupParametricControls(node, container) {
   const updateParametricControls = () => {
+    if (!container) return;
     container.innerHTML = '';
     const shapeType = node.properties.shape_type || "circle";
     let shapeParams = {};
@@ -167,6 +168,10 @@ export function setupParametricControls(node, container) {
       shapeParams = JSON.parse(node.properties.shape_params || "{}");
     } catch (e) {
       log.error(`Error parsing shape_params: ${e}`);
+    }
+
+    if (node.konvaState?.paramsTitle) {
+      node.konvaState.paramsTitle.textContent = shapeType === "text" ? "文字设置" : "图形设置";
     }
 
     // 使用模块化参数控件
@@ -178,18 +183,11 @@ export function setupParametricControls(node, container) {
     };
 
     ShapeRegistry.getParameterControls(shapeType, container, shapeParams, onParamChange);
-
-    // 立即更新尺寸以确保参数控件可见
-    setTimeout(() => {
-      updateCanvasSize(node);
-      // 确保参数容器完全显示
-      if (container.children.length > 0) {
-        container.style.display = "block";
-      } else {
-        container.style.display = "none";
-      }
-    }, 50);
   };
+
+  if (node.konvaState) {
+    node.konvaState.refreshParams = updateParametricControls;
+  }
 
   const shapeTypeWidget = node.widgets.find(w => w.name === "shape_type");
   if (shapeTypeWidget) {

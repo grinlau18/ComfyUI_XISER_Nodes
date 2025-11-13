@@ -360,6 +360,39 @@ class XIS_ResolutionSelector:
     def __init__(self):
         pass
 
+# 画布配置节点 - 输出 CANVAS_CONFIG 类型
+class XIS_CanvasConfig:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "board_width": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
+                "board_height": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
+                "canvas_color": (["black", "white", "transparent"], {"default": "black"}),
+                "auto_size": (["off", "on"], {"default": "off"}),
+            }
+        }
+
+    RETURN_TYPES = ("CANVAS_CONFIG",)
+    RETURN_NAMES = ("canvas_config",)
+    FUNCTION = "create_config"
+    CATEGORY = "XISER_Nodes/UI_And_Control"
+
+    def create_config(self, board_width, board_height, canvas_color, auto_size):
+        """
+        创建画布配置字典，用于传递给 XISER_Canvas 节点的 canvas_config 输入
+
+        注意：border_width 参数已移除，因为前端画板大小无法同步更新
+        """
+        config = {
+            "board_width": board_width,
+            "board_height": board_height,
+            "canvas_color": canvas_color,
+            "auto_size": auto_size
+        }
+        logger.info(f"Canvas config created: {config}")
+        return (config,)
+
 # 节点映射
 NODE_CLASS_MAPPINGS = {
     "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
@@ -370,4 +403,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_PromptProcessor": XIS_PromptProcessor,
     "XIS_MultiPromptSwitch": XIS_MultiPromptSwitch,
     "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
+    "XIS_CanvasConfig": XIS_CanvasConfig,
 }

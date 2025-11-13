@@ -44,12 +44,14 @@ class XIS_PackImages:
         # 收集当前节点的图像和蒙版输入
         input_images = [image1, image2, image3, image4, image5]
         input_masks = [mask1, mask2, mask3, mask4, mask5]
-        
-        # 过滤掉 None 的图像输入
-        images = [img for img in input_images if img is not None]
+        image_mask_pairs = [
+            (img, input_masks[idx])
+            for idx, img in enumerate(input_images)
+            if img is not None
+        ]
         
         # 检查是否有有效的图像输入
-        if not images and (pack_images is None or not pack_images):
+        if not image_mask_pairs and (pack_images is None or not pack_images):
             logger.error("No valid images provided (all image inputs and pack_images are None)")
             raise ValueError("At least one valid image must be provided")
 
@@ -66,7 +68,7 @@ class XIS_PackImages:
                 normalized_images.extend(pack_images)
         
         # 规范化当前节点的图像和蒙版
-        for idx, img in enumerate(images):
+        for img, mask in image_mask_pairs:
             if not isinstance(img, torch.Tensor):
                 logger.error(f"Invalid image type: expected torch.Tensor, got {type(img)}")
                 raise ValueError("All images must be torch.Tensor")
@@ -77,9 +79,6 @@ class XIS_PackImages:
             elif len(img.shape) != 4:  # (N, H, W, C)
                 logger.error(f"Invalid image dimensions: {img.shape}")
                 raise ValueError(f"Image has invalid dimensions: {img.shape}")
-
-            # 获取对应蒙版
-            mask = input_masks[idx]
 
             # 处理每个批次中的图像
             for i in range(img.shape[0]):

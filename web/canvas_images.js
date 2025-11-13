@@ -7,6 +7,8 @@
  * Global caches for images and URLs, isolated by nodeId.
  * @type {Map<string, Map<string, HTMLImageElement>>}
  */
+import { mergeStateWithAdjustments, withAdjustmentDefaults } from './canvas_state.js';
+
 const globalImageCache = new Map();
 
 /**
@@ -92,7 +94,6 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   // Clean up stale cache entries
   for (const path of imageCache.keys()) {
     if (!validImagePaths.includes(path)) {
-      log.debug(`Removing stale cache entry for path ${path} in node ${nodeId}`);
       imageCache.delete(path);
       loadedImageUrls.delete(path);
     }
@@ -104,7 +105,6 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
 
   // Skip loading if no changes and not forced
   if (!forceReload && nodeState.lastImagePathsHash === pathsHash) {
-    log.debug(`Skipping loadImages for node ${nodeId}: identical imagePaths, auto_size, and retry state`);
     nodeState.isLoading = false;
     return;
   }
@@ -129,6 +129,13 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
   });
   nodeState.imageNodes = new Array(validImagePaths.length).fill(null);
   if (nodeState.imageLayer) {
+    if (nodeState.adjustments?.detachIcon) {
+      try {
+        nodeState.adjustments.detachIcon();
+      } catch (error) {
+        log.warn(`Failed to detach edit icon for node ${nodeId}: ${error.message}`);
+      }
+    }
     nodeState.imageLayer.destroyChildren();
     nodeState.imageLayer.batchDraw();
   }
@@ -138,17 +145,16 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     nodeState.transformer = null;
   }
 
-  const borderWidth = node.properties?.ui_config?.border_width || 80;
+  const borderWidth = node.properties?.ui_config?.border_width || 120;
   let boardWidth = node.properties?.ui_config?.board_width || 1024;
   let boardHeight = node.properties?.ui_config?.board_height || 1024;
 
   // Handle auto_size
   if (autoSize === "on" && validImagePaths.length) {
-    log.debug(`Auto_size enabled for node ${nodeId}, will adjust based on first image`);
   }
 
   // Initialize states
-  nodeState.initialStates = validImagePaths.map((_, i) => ({
+  nodeState.initialStates = validImagePaths.map((_, i) => withAdjustmentDefaults({
     x: states[i]?.x || borderWidth + boardWidth / 2,
     y: states[i]?.y || borderWidth + boardHeight / 2,
     scaleX: states[i]?.scaleX || 1,
@@ -156,6 +162,9 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     rotation: states[i]?.rotation || 0,
     skewX: states[i]?.skewX || 0,
     skewY: states[i]?.skewY || 0,
+    brightness: states[i]?.brightness,
+    contrast: states[i]?.contrast,
+    saturation: states[i]?.saturation,
   }));
 
   const images = validImagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
@@ -240,7 +249,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
             log.info(`Auto-size enabled, adjusted canvas to ${boardWidth}x${newBoardHeight} for node ${nodeId}`);
 
             // Update initial states
-            nodeState.initialStates = validImagePaths.map((_, i) => ({
+            nodeState.initialStates = validImagePaths.map((_, i) => withAdjustmentDefaults({
               x: states[i]?.x || borderWidth + boardWidth / 2,
               y: states[i]?.y || borderWidth + boardHeight / 2,
               scaleX: states[i]?.scaleX || 1,
@@ -248,6 +257,9 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
               rotation: states[i]?.rotation || 0,
               skewX: states[i]?.skewX || 0,
               skewY: states[i]?.skewY || 0,
+              brightness: states[i]?.brightness,
+              contrast: states[i]?.contrast,
+              saturation: states[i]?.saturation,
             }));
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
@@ -256,14 +268,13 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
             if (typeof updateSize === 'function') {
               updateSize();
               nodeState.stage.draw();
-              log.debug(`updateSize called for auto_size in node ${nodeId}: ${boardWidth}x${boardHeight}`);
             } else {
               log.warn(`updateSize is not a function for node ${nodeId}, skipping canvas size update`);
             }
           }
         }
 
-        const state = nodeState.initialStates[index] || {};
+        const state = withAdjustmentDefaults(nodeState.initialStates[index] || {});
         const konvaImg = new Konva.Image({
           image: img,
           x: state.x || borderWidth + boardWidth / 2,
@@ -280,7 +291,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         });
         nodeState.imageLayer.add(konvaImg);
         nodeState.imageNodes[index] = konvaImg;
-        nodeState.initialStates[index] = {
+        nodeState.initialStates[index] = withAdjustmentDefaults({
+          ...nodeState.initialStates[index],
           x: konvaImg.x(),
           y: konvaImg.y(),
           scaleX: konvaImg.scaleX(),
@@ -288,11 +300,19 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           rotation: konvaImg.rotation(),
           skewX: konvaImg.skewX(),
           skewY: konvaImg.skewY(),
-        };
+        });
+
+        if (typeof nodeState.applyLayerAdjustments === 'function') {
+          try {
+            nodeState.applyLayerAdjustments(index);
+          } catch (error) {
+            log.warn(`applyLayerAdjustments failed for node ${nodeId}, layer ${index}: ${error.message}`);
+          }
+        }
 
         // Debounced state update
         const debouncedUpdateState = debounce((index, konvaImg) => {
-          const newState = {
+          const newState = mergeStateWithAdjustments(nodeState.initialStates[index], {
             x: konvaImg.x(),
             y: konvaImg.y(),
             scaleX: konvaImg.scaleX(),
@@ -300,8 +320,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
             rotation: konvaImg.rotation(),
             skewX: konvaImg.skewX ? konvaImg.skewX() : 0,
             skewY: konvaImg.skewY ? konvaImg.skewY() : 0,
-          };
-          log.debug(`Updating state for node ${nodeId}, layer ${index}: ${JSON.stringify(newState)}`);
+          });
           nodeState.initialStates[index] = newState;
           node.properties.image_states = nodeState.initialStates;
           node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
@@ -367,6 +386,13 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     nodeState.imageLayer.add(nodeState.transformer);
     nodeState.imageLayer.batchDraw();
     nodeState.stage.batchDraw();
+    if (nodeState.adjustments?.reattachIcon) {
+      try {
+        nodeState.adjustments.reattachIcon();
+      } catch (error) {
+        log.warn(`Failed to reattach edit icon for node ${nodeId}: ${error.message}`);
+      }
+    }
 
     // Update UI and history
     uiElements.updateLayerPanel(selectLayer, deselectLayer);
@@ -409,12 +435,10 @@ export function clearNodeCache(nodeId) {
   if (globalImageCache.has(nodeId)) {
     globalImageCache.get(nodeId).clear();
     globalImageCache.delete(nodeId);
-    log.debug(`Cleared image cache for node ${nodeId}`);
   }
   if (globalLoadedImageUrls.has(nodeId)) {
     globalLoadedImageUrls.get(nodeId).clear();
     globalLoadedImageUrls.delete(nodeId);
-    log.debug(`Cleared loaded URLs cache for node ${nodeId}`);
   }
 }
 

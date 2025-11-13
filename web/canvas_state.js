@@ -35,6 +35,34 @@ export const log = {
  * @param {Object} app - The ComfyUI app instance.
  * @returns {Object|null} The initialized node state, or null if initialization fails.
  */
+export const BRIGHTNESS_RANGE = { min: -1, max: 1 };
+export const CONTRAST_RANGE = { min: -100, max: 100 };
+export const SATURATION_RANGE = { min: -100, max: 100 };
+
+const clampValue = (value, min, max, fallback = 0) => {
+  const number = Number(value);
+  if (Number.isNaN(number) || !Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(Math.max(number, min), max);
+};
+
+export function withAdjustmentDefaults(state = {}) {
+  return {
+    ...state,
+    brightness: clampValue(state?.brightness ?? 0, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, 0),
+    contrast: clampValue(state?.contrast ?? 0, CONTRAST_RANGE.min, CONTRAST_RANGE.max, 0),
+    saturation: clampValue(state?.saturation ?? 0, SATURATION_RANGE.min, SATURATION_RANGE.max, 0),
+  };
+}
+
+export function mergeStateWithAdjustments(existingState = {}, overrides = {}) {
+  return withAdjustmentDefaults({
+    ...existingState,
+    ...overrides,
+  });
+}
+
 export function createNodeState(nodeId, app) {
   if (!app || !app.graph || !nodeId) {
     log.error(`Invalid parameters for createNodeState: nodeId=${nodeId}, app=${!!app}`);
@@ -54,18 +82,22 @@ export function createNodeState(nodeId, app) {
   const imagePaths = Array.isArray(node.properties.ui_config.image_paths) 
     ? node.properties.ui_config.image_paths.slice() : [];
 
-  log.debug(`Creating node state for node ${nodeId}, imagePaths: ${JSON.stringify(imagePaths)}`);
 
   return {
     nodeId,
     imageNodes: new Array(imagePaths.length).fill(null), // Initialize with nulls
     defaultLayerOrder: [],
-    initialStates: imagePaths.map(() => ({
+    initialStates: imagePaths.map(() => withAdjustmentDefaults({
       x: 0,
       y: 0,
       scaleX: 1,
       scaleY: 1,
       rotation: 0,
+      skewX: 0,
+      skewY: 0,
+      brightness: 0,
+      contrast: 0,
+      saturation: 0,
     })), // Default states
     transformer: null,
     lastImagePaths: imagePaths.slice(),
@@ -78,7 +110,7 @@ export function createNodeState(nodeId, app) {
     lastNodeSize: [0, 0],
     lastScale: app.canvas?.ds?.scale || 1,
     lastOffset: app.canvas?.ds?.offset ? [...app.canvas.ds.offset] : [0, 0],
-    pollInterval: null, // Used for polling node updates in xiser_canvas.js
+    pollInterval: null, // Used for polling node updates in canvas.js
     animationFrameId: null,
     stage: null,
     canvasLayer: null,
@@ -91,6 +123,8 @@ export function createNodeState(nodeId, app) {
     isTransforming: false, // Tracks ongoing rotation/scaling operations
     transformStartState: null, // Stores initial state at transform start
     historyDebounceTimeout: null,
+    adjustments: null,
+    applyLayerAdjustments: null,
     log,
   };
 }
@@ -109,17 +143,14 @@ export function cleanupNodeState(nodeState) {
   if (nodeState.pollInterval) {
     clearInterval(nodeState.pollInterval);
     nodeState.pollInterval = null;
-    log.debug(`Cleared pollInterval for node ${nodeState.nodeId}`);
   }
   if (nodeState.animationFrameId) {
     cancelAnimationFrame(nodeState.animationFrameId);
     nodeState.animationFrameId = null;
-    log.debug(`Cleared animationFrameId for node ${nodeState.nodeId}`);
   }
   if (nodeState.historyDebounceTimeout) {
     clearTimeout(nodeState.historyDebounceTimeout);
     nodeState.historyDebounceTimeout = null;
-    log.debug(`Cleared historyDebounceTimeout for node ${nodeState.nodeId}`);
   }
 
   // Clear arrays and references
@@ -132,6 +163,11 @@ export function cleanupNodeState(nodeState) {
   nodeState.selectedLayer = null;
   nodeState.isTransforming = false;
   nodeState.transformStartState = null;
+  if (nodeState.adjustments && typeof nodeState.adjustments.destroy === 'function') {
+    nodeState.adjustments.destroy();
+  }
+  nodeState.adjustments = null;
+  nodeState.applyLayerAdjustments = null;
 
   log.info(`Node state cleaned up for node ${nodeState.nodeId}`);
 }
@@ -149,10 +185,14 @@ export function initializeCanvasProperties(node, nodeState) {
 
   let boardWidth = uiConfig.board_width || 1024;
   let boardHeight = uiConfig.board_height || 1024;
-  let borderWidth = uiConfig.border_width || 80;
+  let borderWidth = uiConfig.border_width || 120;
   let canvasColor = uiConfig.canvas_color || 'rgb(0, 0, 0)';
   let borderColor = uiConfig.border_color || 'rgb(25, 25, 25)';
   let autoSize = uiConfig.auto_size || 'off';
+  let displayScale = typeof uiConfig.display_scale === 'number'
+    ? uiConfig.display_scale
+    : parseFloat(uiConfig.display_scale) || 0.5;
+  displayScale = Math.min(Math.max(displayScale, 0.1), 1);
   let imagePaths = Array.isArray(uiConfig.image_paths) 
     ? uiConfig.image_paths.filter(p => typeof p === 'string' && p.trim().length > 0) 
     : [];
@@ -167,49 +207,49 @@ export function initializeCanvasProperties(node, nodeState) {
       ? 'transparent'
       : 'black');
 
-  log.debug(`Canvas dimensions initialized for node ${nodeState.nodeId}: boardWidth=${boardWidth}, boardHeight=${boardHeight}`);
 
   // Update properties from widgets
-  const widgetNames = ['board_width', 'board_height', 'border_width', 'canvas_color', 'auto_size', '', '', 'image_states'];
   if (Array.isArray(node.widgets)) {
-    for (let i = 0; i < node.widgets.length && i < widgetNames.length; i++) {
-      if (node.widgets[i]?.name === widgetNames[i]) {
-        switch (widgetNames[i]) {
-          case 'board_width':
-            boardWidth = parseInt(node.widgets[i].value) || boardWidth;
-            break;
-          case 'board_height':
-            boardHeight = parseInt(node.widgets[i].value) || boardHeight;
-            break;
-          case 'border_width':
-            borderWidth = parseInt(node.widgets[i].value) || borderWidth;
-            break;
-          case 'canvas_color':
-            canvasColorValue = node.widgets[i].value || canvasColorValue;
-            break;
-          case 'auto_size':
-            autoSize = node.widgets[i].value || autoSize;
-            break;
-          case 'image_states':
-            try {
-              nodeState.initialStates = JSON.parse(node.widgets[i].value) || nodeState.initialStates;
-            } catch (e) {
-              log.error(`Failed to parse image_states for node ${nodeState.nodeId}: ${e.message}`);
-            }
-            break;
-        }
+    for (const widget of node.widgets) {
+      switch (widget?.name) {
+        case 'board_width':
+          boardWidth = parseInt(widget.value) || boardWidth;
+          break;
+        case 'board_height':
+          boardHeight = parseInt(widget.value) || boardHeight;
+          break;
+        case 'border_width':
+          borderWidth = parseInt(widget.value) || borderWidth;
+          break;
+        case 'canvas_color':
+          canvasColorValue = widget.value || canvasColorValue;
+          break;
+        case 'display_scale':
+          displayScale = Math.min(Math.max(parseFloat(widget.value) || displayScale, 0.1), 2);
+          break;
+        case 'auto_size':
+          autoSize = widget.value || autoSize;
+          break;
+        case 'image_states':
+          try {
+            nodeState.initialStates = JSON.parse(widget.value) || nodeState.initialStates;
+          } catch (e) {
+            log.error(`Failed to parse image_states for node ${nodeState.nodeId}: ${e.message}`);
+          }
+          break;
       }
     }
-    uiConfig.board_width = boardWidth;
-    uiConfig.board_height = boardHeight;
-    uiConfig.border_width = borderWidth;
-    uiConfig.canvas_color = canvasColorValue;
-    uiConfig.border_color = borderColor;
-    uiConfig.auto_size = autoSize;
-    uiConfig.image_paths = imagePaths;
   }
 
-  log.debug(`Canvas properties initialized for node ${nodeState.nodeId}: boardWidth=${boardWidth}, boardHeight=${boardHeight}, autoSize=${autoSize}`);
+  uiConfig.board_width = boardWidth;
+  uiConfig.board_height = boardHeight;
+  uiConfig.border_width = borderWidth;
+  uiConfig.canvas_color = canvasColorValue;
+  uiConfig.border_color = borderColor;
+  uiConfig.auto_size = autoSize;
+  uiConfig.display_scale = displayScale;
+  uiConfig.image_paths = imagePaths;
+
 
   return {
     boardWidth,
@@ -218,6 +258,7 @@ export function initializeCanvasProperties(node, nodeState) {
     canvasColor,
     borderColor,
     canvasColorValue,
+    displayScale,
     autoSize,
     imagePaths,
     uiConfig
@@ -236,7 +277,6 @@ export function debounce(func, delay) {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       func.apply(this, args);
-      log.debug(`Debounced function executed`);
     }, delay);
   };
 }
@@ -254,7 +294,6 @@ export function throttle(func, limit) {
       func.apply(this, args);
       inThrottle = true;
       setTimeout(() => (inThrottle = false), limit);
-      log.debug(`Throttled function executed`);
     }
   };
 }

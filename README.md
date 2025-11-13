@@ -94,6 +94,7 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 ![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
 ![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
 ![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
+![XIS_Canvas图像合成](img/XIS_Canvas_4.jpeg)
 
 #### XIS_CoordinatePath
 - **Function**: Generate coordinate paths based on control points
@@ -127,6 +128,7 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 - **Function**: Generate geometric shapes with interactive controls
 - **Features**:
   - Multiple shape types: circle, polygon, star, heart, flower, spiral, sunburst, square
+  - **Text mode**: convert custom text into vector shapes using fonts from `custom_nodes/ComfyUI_XISER_Nodes/fonts`, with controls for content, font, spacing, weight, italic, and underline
   - Configurable colors, stroke, transparency, and background
   - Advanced transformations: rotation, scaling, skewing, positioning
   - Batch shape creation with shape data input
@@ -136,6 +138,11 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 ![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
 ![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
+
+##### Text Mode & Fonts
+- Switch the shape type to **Text** to unlock a dedicated control panel with content input, font selection, letter/line spacing, bold, italic, underline and uppercase toggles.
+- Place `.ttf/.otf/.ttc` files in `custom_nodes/ComfyUI_XISER_Nodes/fonts`, then click **刷新字体** / **Refresh Fonts** in the panel to load them. Fonts are mapped to in-browser `@font-face` rules automatically.
+- All text settings are serialized through `shape_params` and honoured in both the interactive preview and backend rendering, including batch mode via the `shape_data` input.
 
 ### 🖼️ Image Processing Nodes
 
@@ -254,7 +261,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 - **Usage**: Right-click on node, select "Change Node Color"
 - **Features**: Modify background colors for node title and content areas separately
 
-![Node Color Customization](img/changeNodeColor.jpeg)
+![Node Color Customization](img/changeNodeColor_1.jpeg)
+![Node Color Customization](img/changeNodeColor_2.jpeg)
 
 ### Text Label with HTML Support
 - **Function**: Text labels with HTML support
