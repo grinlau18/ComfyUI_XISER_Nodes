@@ -35,6 +35,9 @@ export function updateHistory(nodeState, force = false) {
     contrast: state?.contrast,
     saturation: state?.saturation,
     order: Number.isFinite(state?.order) ? state.order : idx,
+    visible: state?.visible !== false,
+    layer_id: state?.layer_id,
+    filename: state?.filename,
   }));
 
   // Only push to history if the state has changed
@@ -76,6 +79,9 @@ export function undo(node, nodeState) {
       contrast: state.contrast,
       saturation: state.saturation,
       order: Number.isFinite(state.order) ? state.order : idx,
+      visible: state.visible !== false,
+      layer_id: state.layer_id,
+      filename: state.filename,
     }));
     applyStates(nodeState);
     if (typeof nodeState.applyLayerOrder === 'function') {
@@ -117,6 +123,9 @@ export function redo(node, nodeState) {
       contrast: state.contrast,
       saturation: state.saturation,
       order: Number.isFinite(state.order) ? state.order : idx,
+      visible: state.visible !== false,
+      layer_id: state.layer_id,
+      filename: state.filename,
     }));
     applyStates(nodeState);
     if (typeof nodeState.applyLayerOrder === 'function') {

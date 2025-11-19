@@ -1,5 +1,27 @@
 import { withAdjustmentDefaults } from './canvas_state.js';
 
+export const normalizeLayerState = (state = {}, layerId, filename, fallbackOrder = 0) => {
+  return withAdjustmentDefaults({
+    ...state,
+    layer_id: state?.layer_id || layerId,
+    filename: state?.filename || filename,
+    order: Number.isFinite(state?.order) ? state.order : fallbackOrder,
+    visible: typeof state?.visible === 'boolean' ? state.visible : true,
+  });
+};
+
+export const mergeLayerState = (base = {}, incoming = {}, layerId, filename, fallbackOrder = 0) => {
+  return normalizeLayerState(
+    {
+      ...base,
+      ...incoming,
+    },
+    layerId,
+    filename,
+    fallbackOrder,
+  );
+};
+
 export const layerIdOf = (node, idx) => {
   const ids = node?.properties?.ui_config?.layer_ids;
   return Array.isArray(ids) && ids[idx] ? ids[idx] : `layer_${idx}`;
@@ -47,7 +69,7 @@ export const mergeIncomingStates = (node, nodeState, incomingStates, paths) => {
     node.properties.image_states.forEach((s, idx) => {
       const lid = s?.layer_id || layerIdOf(node, idx);
       if (!lid) return;
-      byLayerId.set(lid, withAdjustmentDefaults(s));
+      byLayerId.set(lid, normalizeLayerState(s, lid, paths[idx], idx));
     });
   }
   // Overlay current initialStates for transforms while keeping persisted visible/order
@@ -100,14 +122,17 @@ export const mergeIncomingStates = (node, nodeState, incomingStates, paths) => {
         ? incoming.visible
         : (typeof base.visible === 'boolean' ? base.visible : true);
 
-    return withAdjustmentDefaults({
-      ...base,
-      ...incoming,
-      layer_id: layerId,
-      filename: path,
-      order: resolvedOrder,
-      visible,
-    });
+    return normalizeLayerState(
+      {
+        ...base,
+        ...incoming,
+        order: resolvedOrder,
+        visible,
+      },
+      layerId,
+      path,
+      resolvedOrder,
+    );
   });
 };
 

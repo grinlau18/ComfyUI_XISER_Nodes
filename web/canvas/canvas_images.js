@@ -4,7 +4,7 @@
  */
 
 import { mergeStateWithAdjustments, withAdjustmentDefaults } from './canvas_state.js';
-import { ensureLayerIds, applyLayerOrder, persistImageStates } from './layer_store.js';
+import { ensureLayerIds, applyLayerOrder, persistImageStates, normalizeLayerState } from './layer_store.js';
 
 /**
  * Global caches for images and URLs, isolated by nodeId.
@@ -381,16 +381,19 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
       const layerId = s?.layer_id || node.properties?.ui_config?.layer_ids?.[idx] || `layer_${idx}`;
       const orderFromPersisted = Array.isArray(persistedLayerOrder) ? persistedLayerOrder.indexOf(layerId) : -1;
       const persistedState = persistedStateMap.get(layerId);
-      return {
-        ...s,
-        layer_id: layerId,
-        filename: s?.filename || validImagePaths[idx],
-        order: orderFromPersisted >= 0 ? orderFromPersisted : (Number.isFinite(s?.order) ? s.order : idx),
-        // Prefer persisted visible if available; only use current value when explicitly boolean
-        visible: typeof persistedState?.visible === 'boolean'
-          ? persistedState.visible
-          : (typeof s?.visible === 'boolean' ? s.visible : true),
-      };
+      const mergedVisible = typeof persistedState?.visible === 'boolean'
+        ? persistedState.visible
+        : (typeof s?.visible === 'boolean' ? s.visible : true);
+      return normalizeLayerState(
+        {
+          ...s,
+          visible: mergedVisible,
+          order: orderFromPersisted >= 0 ? orderFromPersisted : (Number.isFinite(s?.order) ? s.order : idx),
+        },
+        layerId,
+        s?.filename || validImagePaths[idx],
+        orderFromPersisted >= 0 ? orderFromPersisted : idx,
+      );
     });
 
     // Apply stacking by order without reordering arrays
