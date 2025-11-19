@@ -41,8 +41,10 @@ class XIS_CanvasMaskProcessor:
         if self.DEBUG:
             print(f"Input masks shape: {masks.shape}, min: {masks.min().item()}, max: {masks.max().item()}")
 
+        # 始终使用固定的50个开关，避免索引漂移
+        enables = [kwargs.get(f"Layer_Mask_{i+1}", False) for i in range(MAX_LAYER_COUNT)]
+        # 只使用前 batch_size 个开关，但保持所有开关状态的稳定性
         enabled_slots = min(batch_size, MAX_LAYER_COUNT)
-        enables = [kwargs.get(f"Layer_Mask_{i+1}", False) for i in range(enabled_slots)]
         if self.DEBUG:
             print(f"Received kwargs: {list(kwargs.keys())}")
             print(f"Switches: {enables}")
@@ -64,7 +66,7 @@ class XIS_CanvasMaskProcessor:
                 output_mask = torch.ones_like(output_mask)
             return (output_mask,)
 
-        for i, (mask, enable) in enumerate(zip(masks, enables)):
+        for i, (mask, enable) in enumerate(zip(masks, enables[:enabled_slots])):
             if enable:
                 upper_opacity = torch.zeros_like(mask)
                 for j in range(i + 1, batch_size):

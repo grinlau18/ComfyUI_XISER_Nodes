@@ -93,13 +93,46 @@ app.registerExtension({
             return [width, height];
         };
 
-        // 保证按钮在最上方，spacer 在最下方，其余保持相对顺序
+        // 保证按钮在最上方，spacer 在最下方，其余按名称排序
         function reorderWidgets(node) {
             if (!node.widgets) return;
             const buttons = node.widgets.filter(w => w.name === "buttons");
             const spacer = node.widgets.filter(w => w.name === "__bottom_padding");
             const others = node.widgets.filter(w => w.name !== "buttons" && w.name !== "__bottom_padding");
-            node.widgets = [...buttons, ...others, ...spacer];
+
+            // 对 Layer_Mask 控件按数字排序
+            const layerWidgets = others.filter(w => w.name?.startsWith("Layer_Mask_"));
+            const otherWidgets = others.filter(w => !w.name?.startsWith("Layer_Mask_"));
+
+            layerWidgets.sort((a, b) => {
+                const numA = parseInt(a.name.replace("Layer_Mask_", ""));
+                const numB = parseInt(b.name.replace("Layer_Mask_", ""));
+                return numA - numB;
+            });
+
+            node.widgets = [...buttons, ...otherWidgets, ...layerWidgets, ...spacer];
+        }
+
+        // 状态修正机制
+        function correctWidgetStates(node) {
+            if (!node.widgets || !node.properties.correctWidgetStates) return;
+
+            const correctStates = node.properties.correctWidgetStates;
+
+            // 应用正确的状态到控件
+            for (const widget of node.widgets) {
+                if ((widget.name === "invert_output" || widget.name?.startsWith("Layer_Mask_")) &&
+                    correctStates[widget.name] !== undefined) {
+                    const correctValue = correctStates[widget.name];
+                    if (widget.value !== correctValue) {
+                        if (DEBUG) console.log(`Node ${node.id}: Correcting ${widget.name} from ${widget.value} to ${correctValue}`);
+                        widget.value = correctValue;
+                    }
+                }
+            }
+
+            // 清除修正状态，避免重复修正
+            delete node.properties.correctWidgetStates;
         }
 
         // 确保节点 ID 有效
@@ -217,15 +250,7 @@ app.registerExtension({
                 this.properties = this.properties || {};
                 this.layerCount = Math.min(Math.max(1, this.layerCount || 1), MAX_LAYER_COUNT);
 
-                // 1. 保存当前所有控件的实时状态
-                const currentStates = {};
-                this.widgets?.forEach(w => {
-                    if (w.name?.startsWith("Layer_Mask_")) {
-                        currentStates[w.name] = w.value;
-                    }
-                });
-
-                // 2. 计算需要添加和删除的控件
+                // 1. 计算需要添加和删除的控件
                 const existingNumbers = this.widgets
                     ?.filter(w => w.name?.startsWith("Layer_Mask_"))
                     .map(w => parseInt(w.name.replace("Layer_Mask_", "")))
@@ -233,13 +258,14 @@ app.registerExtension({
 
                 const toRemove = existingNumbers.filter(num => num > this.layerCount);
                 const toAdd = Array.from({length: this.layerCount}, (_, i) => i + 1)
-                    .filter(num => !existingNumbers.includes(num));
+                    .filter(num => !existingNumbers.includes(num))
+                    .sort((a, b) => a - b); // 确保按数字顺序添加
 
                 if (DEBUG) {
                     console.log(`Node ${this.id}: Layer count: ${this.layerCount}, Existing: ${existingNumbers}, To remove: ${toRemove}, To add: ${toAdd}`);
                 }
 
-                // 3. 批量删除不需要的控件（带清理）- 使用requestAnimationFrame减少闪烁
+                // 2. 批量删除不需要的控件（带清理）- 使用requestAnimationFrame减少闪烁
                 if (toRemove.length > 0) {
                     requestAnimationFrame(() => {
                         toRemove.forEach(num => {
@@ -265,7 +291,7 @@ app.registerExtension({
                     });
                 }
 
-                // 4. 批量添加新控件 - 使用requestAnimationFrame减少闪烁
+                // 3. 批量添加新控件 - 使用requestAnimationFrame减少闪烁
                 if (toAdd.length > 0) {
                     requestAnimationFrame(() => {
                         // 新增前移除 spacer，防止新控件被插到 spacer 下方
@@ -273,30 +299,21 @@ app.registerExtension({
                         toAdd.forEach(num => {
                             const widgetName = `Layer_Mask_${num}`;
                             const widget = ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app).widget;
-                            // 恢复状态：优先使用当前状态，其次使用保存的状态
-                            widget.value = currentStates[widgetName] ?? this.properties.widgetValues?.[widgetName] ?? false;
-                            if (DEBUG) console.log(`Node ${this.id}: Added widget ${widgetName} with value ${widget.value}`);
+                            // 状态将由状态修正机制恢复
+                            if (DEBUG) console.log(`Node ${this.id}: Added widget ${widgetName}`);
                         });
                         ensureBottomSpacer(this);
                         reorderWidgets(this);
                     });
                 }
 
-                // 5. 确保底部占位 spacer 存在
+                // 4. 确保底部占位 spacer 存在
                 ensureBottomSpacer(this);
 
-                // 6. 更新保存的状态
-                this.properties.widgetValues = this.widgets.reduce((acc, w) => {
-                    if (w.name?.startsWith("Layer_Mask_")) {
-                        acc[w.name] = !!w.value;
-                    }
-                    return acc;
-                }, {});
-
-                // 7. 重新排列widgets数组，确保按钮在上、spacer在下
+                // 5. 重新排列widgets数组，确保按钮在上、spacer在下
                 reorderWidgets(this);
 
-                // 8. 调整节点大小 - 使用requestAnimationFrame减少闪烁
+                // 6. 调整节点大小 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
                     this.setSize(this.computeSize());
                     this.onResize?.();
@@ -304,7 +321,6 @@ app.registerExtension({
 
                     if (DEBUG) {
                         console.log(`Node ${this.id}: Incremental rebuild completed - Added: ${toAdd.length}, Removed: ${toRemove.length}`);
-                        console.log(`Node ${this.id}: Current widgets:`, this.widgets?.map(w => `${w.name}: ${w.value}`));
                     }
                 });
 
@@ -323,30 +339,16 @@ app.registerExtension({
                 if (DEBUG) console.log(`Node ${this.id}: Using fallback rebuild`);
                 this.properties = this.properties || {};
 
-                // 验证和清理状态
-                const currentValues = this._validateAndCleanState(this.properties.widgetValues || {});
-
                 // 清理所有Layer_Mask控件 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
                     removeBottomSpacer(this);
                     this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
 
-                    // 重新创建所有控件
+                    // 重新创建所有控件 - 按数字顺序
                     for (let i = 1; i <= this.layerCount; i++) {
                         const widgetName = `Layer_Mask_${i}`;
-                        const widget = ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app).widget;
-                        widget.value = currentValues[widgetName] === true;
+                        ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app);
                     }
-
-                    // 更新保存的状态
-                    this.properties.widgetValues = this._validateAndCleanState(
-                        this.widgets.reduce((acc, w) => {
-                            if (w.name?.startsWith("Layer_Mask_")) {
-                                acc[w.name] = !!w.value;
-                            }
-                            return acc;
-                        }, {})
-                    );
 
                     ensureBottomSpacer(this);
                     reorderWidgets(this);
@@ -374,10 +376,9 @@ app.registerExtension({
                 requestAnimationFrame(() => {
                     this.layerCount = 8;
                     this.properties = this.properties || {};
-                    this.properties.widgetValues = {};
                     this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
 
-                    // 创建默认控件
+                    // 创建默认控件 - 按数字顺序
                     for (let i = 1; i <= this.layerCount; i++) {
                         ComfyWidgets.BOOLEAN(this, `Layer_Mask_${i}`, ["BOOLEAN", { default: false }], app);
                     }
@@ -397,22 +398,6 @@ app.registerExtension({
             }
         };
 
-        // 状态验证和清理方法
-        nodeType.prototype._validateAndCleanState = function (state) {
-            const cleanedState = {};
-
-            if (typeof state !== 'object' || state === null) {
-                return cleanedState;
-            }
-
-            Object.keys(state).forEach(key => {
-                if (key.startsWith("Layer_Mask_") && typeof state[key] === 'boolean') {
-                    cleanedState[key] = state[key];
-                }
-            });
-
-            return cleanedState;
-        };
 
         // 序列化节点状态
         const origSerialize = nodeType.prototype.serialize;
@@ -426,21 +411,35 @@ app.registerExtension({
                 data.properties.fixedWidth = this.properties?.fixedWidth || this.size[0];
                 data.properties.spacerHeight = this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT;
 
-                // 使用验证后的状态进行序列化
-                data.properties.widgetValues = this._validateAndCleanState(
-                    this.widgets.reduce((acc, w) => {
-                        if (w.name?.startsWith("Layer_Mask_")) {
-                            acc[w.name] = !!w.value;
-                        }
-                        return acc;
-                    }, {})
-                );
+                // 记录正确的控件状态用于修正
+                const correctStates = {};
 
-                data.widgets_values = this.widgets
-                    .filter(w => w.name?.startsWith("Layer_Mask_"))
-                    .map(w => w.value);
+                // 记录 invert_output 状态
+                const invertOutputWidget = this.widgets.find(w => w.name === "invert_output");
+                if (invertOutputWidget) {
+                    correctStates["invert_output"] = invertOutputWidget.value;
+                }
 
-                if (DEBUG) console.log(`Node ${this.id}: Serialized widgetValues: ${JSON.stringify(data.properties.widgetValues)}, widgets_values: ${data.widgets_values}`);
+                // 记录 Layer_Mask 状态
+                for (let i = 1; i <= this.layerCount; i++) {
+                    const widgetName = `Layer_Mask_${i}`;
+                    const widget = this.widgets.find(w => w.name === widgetName);
+                    if (widget) {
+                        correctStates[widgetName] = widget.value;
+                    }
+                }
+                data.properties.correctWidgetStates = correctStates;
+
+                // 重新启用 widgets_values，但确保顺序正确
+                // 按数字顺序序列化 Layer_Mask 控件状态
+                const layerWidgets = Array.from({length: this.layerCount}, (_, i) => i + 1)
+                    .map(num => `Layer_Mask_${num}`)
+                    .map(name => this.widgets.find(w => w.name === name))
+                    .filter(w => w !== undefined);
+
+                data.widgets_values = layerWidgets.map(w => w.value);
+
+                if (DEBUG) console.log(`Node ${this.id}: Serialized correctWidgetStates: ${JSON.stringify(data.properties.correctWidgetStates)}, widgets_values: ${data.widgets_values}`);
                 return data;
             } catch (error) {
                 console.error(`Node ${this.id}: Error in serialize: ${error.message}`);
@@ -451,7 +450,7 @@ app.registerExtension({
                         width: this.size[0],
                         fixedWidth: this.properties?.fixedWidth || this.size[0],
                         spacerHeight: this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT,
-                        widgetValues: this._validateAndCleanState({})
+                        correctWidgetStates: {}
                     },
                     widgets_values: []
                 };
@@ -468,7 +467,6 @@ app.registerExtension({
                 if (config.properties) {
                     // 验证和清理配置数据
                     this.layerCount = Math.min(MAX_LAYER_COUNT, Math.max(1, parseInt(config.properties.layerCount) || 8));
-                    this.properties.widgetValues = this._validateAndCleanState(config.properties.widgetValues || {});
                     this.properties.fixedWidth = getFixedWidth(this, parseInt(config.properties.fixedWidth) || this.size?.[0] || MIN_WIDTH);
                     this.properties.spacerHeight = Math.max(0, parseInt(config.properties.spacerHeight) || DEFAULT_SPACER_HEIGHT);
 
@@ -490,15 +488,10 @@ app.registerExtension({
                     try {
                         this.rebuildWidgets();
 
-                        // 应用保存的状态到控件
-                        for (const widget of this.widgets) {
-                            if (widget.name?.startsWith("Layer_Mask_") &&
-                                this.properties.widgetValues[widget.name] !== undefined) {
-                                widget.value = !!this.properties.widgetValues[widget.name];
-                            }
-                        }
+                        // 执行状态修正 - 这会修正所有控件的状态
+                        correctWidgetStates(this);
 
-                        if (DEBUG) console.log(`Node ${this.id}: Configured with widgetValues: ${JSON.stringify(this.properties.widgetValues)}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
+                        if (DEBUG) console.log(`Node ${this.id}: Configured with correctWidgetStates: ${JSON.stringify(config.properties?.correctWidgetStates)}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
                     } catch (rebuildError) {
                         console.error(`Node ${this.id}: Error during rebuild in onConfigure:`, rebuildError);
                     }
@@ -509,7 +502,6 @@ app.registerExtension({
                 // 尝试基本恢复
                 try {
                     this.layerCount = 8;
-                    this.properties.widgetValues = {};
                     this.rebuildWidgets();
                 } catch (recoveryError) {
                     console.error(`Node ${this.id}: Recovery also failed:`, recoveryError);
@@ -533,7 +525,13 @@ app.registerExtension({
         nodeType.prototype.onExecute = function () {
             try {
                 if (origOnExecute) origOnExecute.apply(this);
-                this.widgets_values = this.widgets.filter(w => w.name.startsWith("Layer_Mask_")).map(w => w.value);
+                // 重新启用 widgets_values 用于执行
+                const layerWidgets = Array.from({length: this.layerCount}, (_, i) => i + 1)
+                    .map(num => `Layer_Mask_${num}`)
+                    .map(name => this.widgets.find(w => w.name === name))
+                    .filter(w => w !== undefined);
+
+                this.widgets_values = layerWidgets.map(w => w.value);
                 if (DEBUG) console.log(`Node ${this.id}: Executing with widgets_values: ${this.widgets_values}`);
             } catch (error) {
                 console.error(`Node ${this.id}: Error in onExecute: ${error.message}`);
