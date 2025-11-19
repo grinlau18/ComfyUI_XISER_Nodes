@@ -4,13 +4,21 @@
  */
 
 import { app } from '/scripts/app.js';
-import { initializeUI } from './canvas_ui.js';
-import { initializeKonva, selectLayer, deselectLayer, applyStates, destroyKonva, setupWheelEvents } from './canvas_konva.js';
-import { loadImages, clearNodeCache } from './canvas_images.js';
-import { setupLayerEventListeners, clearHistory, cleanupLayerEventListeners } from './canvas_history.js';
-import { log, createNodeState, initializeCanvasProperties, debounce, throttle, cleanupNodeState, withAdjustmentDefaults } from './canvas_state.js';
-import { initializeAdjustmentControls } from './canvas_adjust.js';
-import { updateHistory, undo, redo, resetCanvas } from './canvas_history.js';
+import { initializeUI } from './canvas/canvas_ui.js';
+import { initializeKonva, selectLayer, deselectLayer, applyStates, destroyKonva, setupWheelEvents } from './canvas/canvas_konva.js';
+import { loadImages, clearNodeCache } from './canvas/canvas_images.js';
+import { setupLayerEventListeners, clearHistory, cleanupLayerEventListeners } from './canvas/canvas_history.js';
+import { log, createNodeState, initializeCanvasProperties, debounce, throttle, cleanupNodeState, withAdjustmentDefaults } from './canvas/canvas_state.js';
+import { initializeAdjustmentControls } from './canvas/canvas_adjust.js';
+import { updateHistory, undo, redo, resetCanvas } from './canvas/canvas_history.js';
+import {
+  ensureLayerIds,
+  layerIdOf,
+  getLayerOrderList,
+  mergeIncomingStates,
+  persistImageStates,
+  applyLayerOrder,
+} from './canvas/layer_store.js';
 
 // Layout padding applied around the Konva canvas so the node always fits its content
 const NODE_HORIZONTAL_PADDING = 20; // Extra width so connectors/widgets have breathing room
@@ -30,6 +38,9 @@ const createDefaultLayerState = (boardWidth, boardHeight, borderWidth) =>
     rotation: 0,
     skewX: 0,
     skewY: 0,
+    visible: true,
+    filename: undefined,
+    order: undefined,
   });
 
 const deriveInitialStates = (imagePaths, rawStates, boardWidth, boardHeight, borderWidth) => {
@@ -237,6 +248,92 @@ app.registerExtension({
         });
       };
 
+      let applyLayerOrderBound = () => {};
+      let persistImageStatesBound = () => {};
+
+      
+
+      const attachFilenamesToStates = () => {
+        const filenames = Array.isArray(node.properties?.ui_config?.image_paths)
+          ? node.properties.ui_config.image_paths
+          : [];
+        nodeState.initialStates = nodeState.initialStates.map((s, idx) => ({
+          ...s,
+          filename: s?.filename || filenames[idx],
+          order: Number.isFinite(s?.order) ? s.order : idx,
+        }));
+      };
+
+      
+
+      const setLayerVisibility = (layerIndex, visible) => {
+        const nodeRef = nodeState.imageNodes?.[layerIndex];
+        if (!nodeRef || !nodeState.initialStates[layerIndex]) return;
+        nodeRef.visible(visible);
+        nodeState.initialStates[layerIndex] = withAdjustmentDefaults({
+          ...nodeState.initialStates[layerIndex],
+          visible,
+        });
+        nodeState.imageLayer?.batchDraw();
+        uiElements.updateLayerPanel(selectLayer, deselectLayer, {
+          onToggleVisibility: setLayerVisibility,
+          onMoveLayer: moveLayer,
+        });
+        persistImageStatesBound();
+        updateHistory(nodeState, true);
+      };
+
+      const moveLayer = (layerIndex, direction = 0) => {
+        if (!Array.isArray(nodeState.imageNodes) || nodeState.imageNodes.length === 0) return;
+        if (direction === 0) return;
+
+        log.info(`Moving layer ${layerIndex} with direction ${direction}`);
+
+        ensureLayerIds(node);
+        const ordered = nodeState.initialStates
+          .map((s, idx) => ({
+            idx,
+            order: Number.isFinite(s?.order) ? s.order : idx,
+          }))
+          .sort((a, b) => a.order - b.order);
+        const currentPos = ordered.findIndex(item => item.idx === layerIndex);
+
+        if (currentPos === -1) {
+          log.warn(`Layer ${layerIndex} not found in order list`);
+          return;
+        }
+
+        // direction > 0: move up (toward top, higher zIndex)
+        const targetPos = direction > 0 ? currentPos + 1 : currentPos - 1;
+
+        // 检查目标位置是否有效
+        if (targetPos < 0 || targetPos >= ordered.length) {
+          log.warn(`Cannot move layer ${layerIndex} to position ${targetPos}, out of bounds`);
+          return;
+        }
+
+        const [moved] = ordered.splice(currentPos, 1);
+        ordered.splice(targetPos, 0, moved);
+
+        ordered.forEach((item, order) => {
+          const state = nodeState.initialStates[item.idx];
+          if (state) {
+            state.order = order;
+          }
+        });
+
+        applyLayerOrderBound();
+        // 更新图层列表
+        uiElements.updateLayerPanel(selectLayer, deselectLayer, {
+          onToggleVisibility: setLayerVisibility,
+          onMoveLayer: moveLayer,
+        });
+        updateHistory(nodeState, true);
+        persistImageStatesBound();
+
+        log.info(`Layer move completed: moved layer ${layerIndex} to order ${targetPos}`);
+      };
+
       const scheduleLayoutUpdate = (layout) => {
         if (nodeState.layoutRaf) {
           cancelAnimationFrame(nodeState.layoutRaf);
@@ -374,28 +471,27 @@ app.registerExtension({
             scaledHeight,
           });
 
-          // Preserve existing image states
-          nodeState.initialStates = normalizeStateArray(nodeState.initialStates);
-          if (nodeState.initialStates.length < imagePaths.length) {
-            const newStates = Array(imagePaths.length - nodeState.initialStates.length)
-              .fill(null)
-              .map(() => createDefaultLayerState(boardWidth, boardHeight, borderWidth));
-            nodeState.initialStates = [...nodeState.initialStates, ...newStates];
-          } else if (nodeState.initialStates.length > imagePaths.length) {
-            nodeState.initialStates = normalizeStateArray(nodeState.initialStates.slice(0, imagePaths.length));
-          }
-          applyStates(nodeState);
+        // Preserve existing image states
+        nodeState.initialStates = normalizeStateArray(nodeState.initialStates);
+        if (nodeState.initialStates.length < imagePaths.length) {
+          const newStates = Array(imagePaths.length - nodeState.initialStates.length)
+            .fill(null)
+            .map(() => createDefaultLayerState(boardWidth, boardHeight, borderWidth));
+          nodeState.initialStates = [...nodeState.initialStates, ...newStates];
+        } else if (nodeState.initialStates.length > imagePaths.length) {
+          nodeState.initialStates = normalizeStateArray(nodeState.initialStates.slice(0, imagePaths.length));
+        }
+        attachFilenamesToStates();
+        applyStates(nodeState);
 
-          // Sync image_states
-          const imageStatesWidget = node.widgets.find((w) => w.name === 'image_states');
-          if (imageStatesWidget) {
-            imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
-          }
-          node.setProperty('image_states', nodeState.initialStates);
+          persistImageStatesBound();
 
           // Update UI elements
           uiElements.updateUIScale(displayScale);
-          uiElements.updateLayerPanel(selectLayer, deselectLayer);
+          uiElements.updateLayerPanel(selectLayer, deselectLayer, {
+            onToggleVisibility: setLayerVisibility,
+            onMoveLayer: moveLayer,
+          });
           updateHistory(nodeState);
 
         } catch (e) {
@@ -432,11 +528,7 @@ app.registerExtension({
           }
 
           nodeState.initialStates = normalizeStateArray(nodeState.initialStates.slice(0, imagePaths.length));
-          node.properties.image_states = nodeState.initialStates;
-          if (imageStatesWidget) {
-            imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
-          }
-          node.setProperty('image_states', nodeState.initialStates);
+          persistImageStatesBound();
           syncWidgetValues();
 
           app.queuePrompt?.();
@@ -453,6 +545,7 @@ app.registerExtension({
       nodeState.undo = () => undo(node, nodeState);
       nodeState.redo = () => redo(node, nodeState);
       nodeState.updateHistory = () => updateHistory(nodeState);
+      nodeState.applyLayerOrder = applyLayerOrder;
 
       // Initialize node inputs
       node.inputs = [
@@ -628,6 +721,9 @@ app.registerExtension({
 
       // Sync widget values
       syncWidgetValues();
+      applyLayerOrderBound = () => applyLayerOrder(node, nodeState);
+      persistImageStatesBound = () => persistImageStates(node, nodeState, imageStatesWidget, syncWidgetValues);
+      nodeState.applyLayerOrder = applyLayerOrderBound;
 
       /**
        * Polls for image updates and triggers reload if necessary.
@@ -709,9 +805,22 @@ app.registerExtension({
 
       node.onExecuted = async function (message) {
         const log = nodeState.log || console;
-        let states = message?.image_states || [];
+        const uiPayload = message?.ui || message || {};
+        let states = uiPayload?.image_states || message?.image_states || [];
         let newImagePaths = [];
-        let fileData = message?.file_data || null;
+        let fileData = message?.file_data || uiPayload?.file_data || null;
+        const msgBoardWidth = uiPayload?.board_width ?? message?.board_width;
+        const msgBoardHeight = uiPayload?.board_height ?? message?.board_height;
+        const msgBorderWidth = uiPayload?.border_width ?? message?.border_width;
+        const msgAutoSize = uiPayload?.auto_size ?? message?.auto_size;
+        const canvasSig = JSON.stringify({
+          w: msgBoardWidth,
+          h: msgBoardHeight,
+          bw: msgBorderWidth,
+          fa: msgAutoSize,
+          fdw: fileData?.canvas?.width,
+          fdh: fileData?.canvas?.height,
+        });
 
         /**
          * Compares two arrays for equality by checking each element.
@@ -761,10 +870,62 @@ app.registerExtension({
           nodeState.lastImagePaths &&
           arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
           objectsEqual(states, nodeState.initialStates) &&
-          objectsEqual(fileData, nodeState.file_data)
+          objectsEqual(fileData, nodeState.file_data) &&
+          canvasSig === nodeState.lastCanvasSig
         ) {
           return;
         }
+
+        // If backend returns board dimensions (e.g., auto_size), sync widgets/properties before layout
+        const toScalar = (val) => {
+          if (Array.isArray(val)) return val[0];
+          return val;
+        };
+        const toNumber = (val, fallback) => {
+          const scalar = toScalar(val);
+          const parsed = parseInt(scalar, 10);
+          return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        const toAutoSize = (val, fallback) => {
+          const scalar = toScalar(val);
+          if (scalar === 'on' || scalar === 'off') return scalar;
+          return fallback;
+        };
+
+        if (msgBoardWidth !== undefined && msgBoardHeight !== undefined) {
+          const backendBoardWidth = Math.min(Math.max(toNumber(msgBoardWidth, 1024), 256), 8192);
+          const backendBoardHeight = Math.min(Math.max(toNumber(msgBoardHeight, 1024), 256), 8192);
+          const backendBorderWidth = Math.min(Math.max(toNumber(msgBorderWidth, borderWidth), 10), 200);
+          const backendAutoSize = toAutoSize(msgAutoSize, node.properties.ui_config.auto_size || 'off');
+
+          node.properties.ui_config.board_width = backendBoardWidth;
+          node.properties.ui_config.board_height = backendBoardHeight;
+          node.properties.ui_config.border_width = backendBorderWidth;
+          node.properties.ui_config.auto_size = backendAutoSize;
+          node.setProperty('ui_config', node.properties.ui_config);
+
+          if (boardWidthWidget) boardWidthWidget.value = backendBoardWidth;
+          if (boardHeightWidget) boardHeightWidget.value = backendBoardHeight;
+          if (borderWidthWidget) borderWidthWidget.value = backendBorderWidth;
+          if (autoSizeWidget) autoSizeWidget.value = backendAutoSize;
+        } else if (toAutoSize(node.properties.ui_config.auto_size, 'off') === 'on' && fileData?.canvas?.width && fileData?.canvas?.height) {
+          // Fallback: derive size from file_data when backend UI payload is missing dimensions
+          const fdWidth = Math.min(Math.max(toNumber(fileData.canvas.width, 1024), 256), 8192);
+          const fdHeight = Math.min(Math.max(toNumber(fileData.canvas.height, 1024), 256), 8192);
+          node.properties.ui_config.board_width = fdWidth;
+          node.properties.ui_config.board_height = fdHeight;
+          node.setProperty('ui_config', node.properties.ui_config);
+          if (boardWidthWidget) boardWidthWidget.value = fdWidth;
+          if (boardHeightWidget) boardHeightWidget.value = fdHeight;
+        }
+
+        // Always refresh local sizing variables from ui_config after potential updates above
+        boardWidth = node.properties.ui_config.board_width || boardWidth;
+        boardHeight = node.properties.ui_config.board_height || boardHeight;
+        borderWidth = node.properties.ui_config.border_width || borderWidth;
+
+        // Remember last canvas signature to avoid skipping future updates unintentionally
+        nodeState.lastCanvasSig = canvasSig;
 
         if (fileData?.layers?.length) {
           log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(fileData)}`);
@@ -801,13 +962,14 @@ app.registerExtension({
           applyStates(nodeState);
           nodeState.imageLayer.batchDraw();
 
-          // Update image_states only if changed
-          if (!objectsEqual(node.properties.image_states, states)) {
-            const normalized = Array.isArray(states) ? normalizeStateArray(states) : normalizeStateArray(nodeState.initialStates);
-            node.properties.image_states = normalized;
-            nodeState.initialStates = normalized;
-            node.setProperty('image_states', nodeState.initialStates);
-          }
+          // Update image_states: merge incoming with filename/order to preserve stacking
+          const mergedStates = mergeIncomingStates(node, nodeState, states, imagePaths);
+          node.properties.image_states = mergedStates;
+          node.properties.ui_config = { ...(node.properties.ui_config || {}), image_states: mergedStates };
+          nodeState.initialStates = mergedStates;
+          node.setProperty('image_states', nodeState.initialStates);
+          node.setProperty('ui_config', node.properties.ui_config);
+          applyLayerOrderBound();
 
           nodeState.lastImagePaths = imagePaths.slice();
 
@@ -822,8 +984,14 @@ app.registerExtension({
           }
 
           updateSize();
-          uiElements.updateLayerPanel(selectLayer, deselectLayer);
+          uiElements.updateLayerPanel(selectLayer, deselectLayer, {
+            onToggleVisibility: setLayerVisibility,
+            onMoveLayer: moveLayer,
+          });
           updateHistory(nodeState);
+          // 确保本次渲染后的叠加顺序立即持久化，避免下一次执行回退
+          log.info(`onExecuted persist before setProperty, orders=${JSON.stringify(nodeState.initialStates.map(s=>s.order))}`);
+          persistImageStatesBound();
 
           const outputCanvas = nodeState.stage.toCanvas();
           const layers = nodeState.initialStates.map((state, index) => {

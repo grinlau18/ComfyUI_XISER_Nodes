@@ -324,7 +324,6 @@ export function selectLayer(nodeState, index) {
   const node = nodeState.imageNodes[index];
   deselectLayer(nodeState);
   nodeState.selectedLayer = node;
-  node.moveToTop();
   nodeState.transformer.nodes([node]);
   if (nodeState.adjustments && typeof nodeState.adjustments.onLayerSelected === 'function') {
     nodeState.adjustments.onLayerSelected(index);
@@ -334,11 +333,15 @@ export function selectLayer(nodeState, index) {
   // Update layer panel selection
   if (Array.isArray(nodeState.layerItems) && nodeState.layerItems.length > 0) {
     nodeState.layerItems.forEach((item) => item.classList.remove('selected'));
-    const listItemIndex = nodeState.imageNodes.length - 1 - index; // Map imageNodes index to layerItems index
-    if (nodeState.layerItems[listItemIndex]) {
-      nodeState.layerItems[listItemIndex].classList.add('selected');
+    // Find the layer item that matches the selected index
+    const selectedItem = nodeState.layerItems.find(item => {
+      const itemIndex = parseInt(item.dataset.index, 10);
+      return itemIndex === index;
+    });
+    if (selectedItem) {
+      selectedItem.classList.add('selected');
     } else {
-      log.warn(`Layer item at listItemIndex ${listItemIndex} not found for node ${nodeState.nodeId}`);
+      log.warn(`Layer item for index ${index} not found for node ${nodeState.nodeId}`);
     }
   } else {
     log.warn(`No valid layerItems array for node ${nodeState.nodeId}`);
@@ -364,13 +367,7 @@ export function deselectLayer(nodeState) {
   if (!nodeState.selectedLayer) {
     return;
   }
-  nodeState.defaultLayerOrder.forEach((node, index) => {
-    if (node) {
-      node.zIndex(index);
-    } else {
-      log.warn(`Null node in defaultLayerOrder at index ${index} for node ${nodeState.nodeId}`);
-    }
-  });
+
   nodeState.selectedLayer = null;
   nodeState.transformer.nodes([]);
   if (nodeState.adjustments && typeof nodeState.adjustments.onLayerDeselected === 'function') {
@@ -402,6 +399,7 @@ export function applyStates(nodeState) {
     const scaleX = state.scaleX || 1;
     const scaleY = state.scaleY || 1;
     const rotation = state.rotation || 0;
+    const visible = state.visible !== false;
 
     try {
       node.x(x);
@@ -409,6 +407,7 @@ export function applyStates(nodeState) {
       node.scaleX(scaleX);
       node.scaleY(scaleY);
       node.rotation(rotation);
+      node.visible(visible);
       nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation });
       if (typeof nodeState.applyLayerAdjustments === 'function') {
         try {

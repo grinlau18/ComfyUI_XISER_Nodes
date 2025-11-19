@@ -23,7 +23,7 @@ export function updateHistory(nodeState, force = false) {
 
   // Ensure initialStates is an array
   const initialStates = Array.isArray(nodeState.initialStates) ? nodeState.initialStates : [];
-  const currentState = initialStates.map(state => withAdjustmentDefaults({
+  const currentState = initialStates.map((state, idx) => withAdjustmentDefaults({
     x: state?.x || 0,
     y: state?.y || 0,
     scaleX: state?.scaleX || 1,
@@ -34,6 +34,7 @@ export function updateHistory(nodeState, force = false) {
     brightness: state?.brightness,
     contrast: state?.contrast,
     saturation: state?.saturation,
+    order: Number.isFinite(state?.order) ? state.order : idx,
   }));
 
   // Only push to history if the state has changed
@@ -63,7 +64,7 @@ export function undo(node, nodeState) {
       return;
     }
     nodeState.historyIndex--;
-    nodeState.initialStates = (nodeState.history[nodeState.historyIndex] || []).map(state => withAdjustmentDefaults({
+    nodeState.initialStates = (nodeState.history[nodeState.historyIndex] || []).map((state, idx) => withAdjustmentDefaults({
       x: state.x,
       y: state.y,
       scaleX: state.scaleX || 1,
@@ -74,8 +75,12 @@ export function undo(node, nodeState) {
       brightness: state.brightness,
       contrast: state.contrast,
       saturation: state.saturation,
+      order: Number.isFinite(state.order) ? state.order : idx,
     }));
     applyStates(nodeState);
+    if (typeof nodeState.applyLayerOrder === 'function') {
+      nodeState.applyLayerOrder();
+    }
     node.properties.image_states = nodeState.initialStates;
     const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
     if (imageStatesWidget) {
@@ -100,7 +105,7 @@ export function redo(node, nodeState) {
       return;
     }
     nodeState.historyIndex++;
-    nodeState.initialStates = (nodeState.history[nodeState.historyIndex] || []).map(state => withAdjustmentDefaults({
+    nodeState.initialStates = (nodeState.history[nodeState.historyIndex] || []).map((state, idx) => withAdjustmentDefaults({
       x: state.x,
       y: state.y,
       scaleX: state.scaleX || 1,
@@ -111,8 +116,12 @@ export function redo(node, nodeState) {
       brightness: state.brightness,
       contrast: state.contrast,
       saturation: state.saturation,
+      order: Number.isFinite(state.order) ? state.order : idx,
     }));
     applyStates(nodeState);
+    if (typeof nodeState.applyLayerOrder === 'function') {
+      nodeState.applyLayerOrder();
+    }
     node.properties.image_states = nodeState.initialStates;
     const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
     if (imageStatesWidget) {
@@ -138,8 +147,17 @@ export function resetCanvas(node, nodeState, imagePaths, updateSize) {
     const boardWidth = node.properties.ui_config.board_width || 1024;
     const borderWidth = node.properties.ui_config.border_width || 120;
     const boardHeight = node.properties.ui_config.board_height || 1024;
+    const layerIds = Array.isArray(node.properties?.ui_config?.layer_ids) && node.properties.ui_config.layer_ids.length === imagePaths.length
+      ? node.properties.ui_config.layer_ids
+      : imagePaths.map((_, idx) => `layer_${idx}`);
 
-    nodeState.initialStates = imagePaths.map(() => withAdjustmentDefaults({
+    node.properties.ui_config = {
+      ...(node.properties.ui_config || {}),
+      layer_ids: layerIds,
+      layer_order: layerIds.slice(), // 初始顺序与输入一致
+    };
+
+    nodeState.initialStates = imagePaths.map((_, idx) => withAdjustmentDefaults({
       x: borderWidth + boardWidth / 2,
       y: borderWidth + boardHeight / 2,
       scaleX: 1,
@@ -147,14 +165,27 @@ export function resetCanvas(node, nodeState, imagePaths, updateSize) {
       rotation: 0,
       skewX: 0,
       skewY: 0,
+      visible: true,
+      order: idx,
+      layer_id: layerIds[idx],
+      filename: imagePaths[idx],
     }));
-    applyStates(nodeState);
+
     node.properties.image_states = nodeState.initialStates;
+    node.properties.ui_config.image_states = nodeState.initialStates;
     const imageStatesWidget = node.widgets.find(w => w.name === 'image_states');
     if (imageStatesWidget) {
       imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
     }
     node.setProperty('image_states', nodeState.initialStates);
+    node.setProperty('ui_config', node.properties.ui_config);
+    applyStates(nodeState);
+    if (typeof nodeState.applyLayerOrder === 'function') {
+      nodeState.applyLayerOrder(); // 重置叠加顺序到初始输入顺序
+    } else if (Array.isArray(nodeState.imageNodes)) {
+      nodeState.imageNodes.forEach((imgNode, idx) => imgNode?.zIndex(idx));
+      nodeState.imageLayer?.batchDraw();
+    }
     nodeState.imageLayer.batchDraw();
     deselectLayer(nodeState);
     updateSize();

@@ -1,6 +1,6 @@
 /**
  * @file xis_button_manager.js
- * @description XIS_CreateShape 节点按钮管理模块
+ * @description XIS_ShapeAndText 节点按钮管理模块
  * @author grinlau18
  */
 
@@ -318,4 +318,175 @@ export function updateButtonPositions(node, stageWidth) {
     node.konvaState.verticalAlignButton.x(stageWidth - config.xOffset);
     node.konvaState.verticalAlignButton.y(config.yOffset);
   }
+
+  if (node.konvaState.gridToggleButton && node.konvaState.gridToggleButtonConfig) {
+    const config = node.konvaState.gridToggleButtonConfig;
+    node.konvaState.gridToggleButton.x(stageWidth - config.xOffset);
+    node.konvaState.gridToggleButton.y(config.yOffset);
+  }
+
+  if (node.konvaState.helpButton && node.konvaState.helpButtonConfig) {
+    const config = node.konvaState.helpButtonConfig;
+    node.konvaState.helpButton.x(stageWidth - config.xOffset);
+    node.konvaState.helpButton.y(config.yOffset);
+  }
+}
+
+/**
+ * 创建网格显示切换按钮
+ */
+export function createGridToggleButton(node, stage, layer, toggleGrid) {
+  const config = node.konvaState.gridToggleButtonConfig;
+  const button = new Konva.Group({
+    x: stage.width() - config.xOffset,
+    y: config.yOffset,
+    width: config.width,
+    height: config.height,
+    listening: true,
+    name: 'gridToggleButton',
+    draggable: false,
+    preventDefault: true
+  });
+
+  const bg = new Konva.Circle({
+    radius: config.bgRadius,
+    fill: 'rgba(0, 0, 0, 0.7)',
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
+    shadowBlur: 6,
+    shadowOffset: { x: 0, y: 2 },
+    shadowOpacity: 0.4,
+    listening: true
+  });
+
+  const icon = new Konva.Path({
+    data: 'M4 4H20V20H4V4ZM6 6V18H18V6H6ZM6 10H18V12H6V10ZM6 14H18V16H6V14ZM10 6H12V18H10V6ZM14 6H16V18H14V6Z',
+    fill: '#FFFFFF',
+    scaleX: config.iconScale,
+    scaleY: config.iconScale,
+    offsetX: 12,
+    offsetY: 12,
+    listening: false,
+    opacity: 1
+  });
+
+  button.add(bg);
+  button.add(icon);
+
+  const applyState = () => {
+    const visible = node.konvaState.gridVisible !== false;
+    bg.fill(visible ? 'rgba(0, 0, 0, 0.75)' : 'rgba(0, 0, 0, 0.35)');
+    icon.opacity(visible ? 1 : 0.45);
+    const layer = button.getLayer();
+    if (layer) layer.batchDraw();
+  };
+
+  const triggerToggle = () => {
+    const next = !(node.konvaState.gridVisible !== false);
+    node.konvaState.gridVisible = next;
+    if (typeof toggleGrid === "function") {
+      toggleGrid(next);
+    }
+    if (node?.properties) {
+      node.properties.show_grid = next;
+    }
+    if (node?.graph?.setDirty) {
+      node.graph.setDirty(true, false);
+    }
+    node.setDirtyCanvas?.(true, true);
+    applyState();
+  };
+
+  button.on('click tap', (e) => {
+    e.cancelBubble = true;
+    triggerToggle();
+  });
+
+  button.on('mouseenter', () => {
+    bg.fill('rgba(53, 57, 62, 0.85)');
+    icon.opacity(1);
+    const layerRef = button.getLayer();
+    if (layerRef) layerRef.batchDraw();
+  });
+
+  button.on('mouseleave', () => {
+    applyState();
+  });
+
+  button.on('mousedown touchstart', () => {
+    bg.fill('rgba(53, 57, 62, 0.85)');
+    const layerRef = button.getLayer();
+    if (layerRef) layerRef.batchDraw();
+  });
+
+  button.on('mouseup touchend', () => {
+    applyState();
+  });
+
+  layer.add(button);
+  node.konvaState.gridToggleButton = button;
+  applyState();
+
+  return button;
+}
+
+/**
+ * 创建帮助按钮
+ * @param {Object} node - 节点实例
+ * @param {Object} stage - Konva舞台
+ * @param {Object} layer - Konva图层
+ * @param {Function} onClick - 点击回调
+ */
+export function createHelpButton(node, stage, layer, onClick) {
+  const config = node.konvaState.helpButtonConfig;
+  const button = new Konva.Group({
+    x: stage.width() - config.xOffset,
+    y: config.yOffset,
+    width: config.width,
+    height: config.height,
+    listening: true,
+    name: 'helpButton',
+    draggable: false,
+    preventDefault: true
+  });
+
+  const bg = new Konva.Circle({
+    radius: config.bgRadius,
+    fill: 'rgba(0, 0, 0, 0.7)',
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
+    shadowBlur: 6,
+    shadowOffset: { x: 0, y: 2 },
+    shadowOpacity: 0.4,
+    listening: true
+  });
+
+  const textBoxSize = (config.fontSize || 18) * 1.4;
+  const icon = new Konva.Text({
+    text: '?',
+    fontSize: config.fontSize || 18,
+    fontStyle: '600',
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+    fill: '#FFFFFF',
+    align: 'center',
+    verticalAlign: 'middle',
+    width: textBoxSize,
+    height: textBoxSize,
+    offsetX: textBoxSize / 2,
+    offsetY: textBoxSize / 2,
+    listening: false
+  });
+
+  button.add(bg);
+  button.add(icon);
+
+  button.on('click tap', (e) => {
+    e.cancelBubble = true;
+    if (typeof onClick === 'function') {
+      onClick(node);
+    }
+  });
+
+  layer.add(button);
+  node.konvaState.helpButton = button;
+  setupButtonHoverEffects(button, bg, icon);
+  return button;
 }

@@ -165,6 +165,9 @@ class XISER_Canvas:
             "brightness": 0.0,
             "contrast": 0.0,
             "saturation": 0.0,
+            "visible": True,
+            "order": None,
+            "filename": None,
         }
         if not isinstance(state, dict):
             return default_state
@@ -183,6 +186,13 @@ class XISER_Canvas:
         normalized["brightness"] = max(-1.0, min(1.0, brightness))
         normalized["contrast"] = max(-100.0, min(100.0, contrast))
         normalized["saturation"] = max(-100.0, min(100.0, saturation))
+        normalized["visible"] = bool(state.get("visible", True))
+        if isinstance(state.get("filename"), str):
+            normalized["filename"] = state.get("filename")
+        try:
+            normalized["order"] = int(state.get("order")) if state.get("order") is not None else None
+        except (TypeError, ValueError):
+            normalized["order"] = None
         return normalized
 
     def _apply_coordinate_based_transform(self, pil_img, scale_x=1.0, scale_y=1.0, rotation=0.0, skew_x=0.0, skew_y=0.0):
@@ -530,6 +540,20 @@ class XISER_Canvas:
             f"layer_data={'present' if layer_data else 'None'}"
         )
 
+        # Normalize file_data into a dict if possible (supports JSON string/bytes wrappers)
+        parsed_file_data = file_data
+        if parsed_file_data and not isinstance(parsed_file_data, dict):
+            try:
+                if isinstance(parsed_file_data, (bytes, bytearray)):
+                    parsed_file_data = parsed_file_data.decode("utf-8")
+                if isinstance(parsed_file_data, str):
+                    parsed_file_data = json.loads(parsed_file_data)
+                elif isinstance(parsed_file_data, dict) and "content" in parsed_file_data and isinstance(parsed_file_data["content"], str):
+                    parsed_file_data = json.loads(parsed_file_data["content"])
+            except Exception as e:
+                logger.warning(f"Instance {self.instance_id} - Failed to decode file_data, keeping original: {e}")
+                parsed_file_data = file_data
+
         # Validate inputs
         if pack_images is None:
             logger.error(f"Instance {self.instance_id} - images input cannot be None")
@@ -604,14 +628,38 @@ class XISER_Canvas:
             first_image_size = (first_pil_img.width, first_pil_img.height)
             logger.info(f"Instance {self.instance_id} - First image dimensions: {first_image_size}")
 
-        # Handle auto_size based on first image dimensions only
-        if auto_size == "on" and images_list:
-            # Use first image dimensions
-            board_width = min(max(first_pil_img.width, 256), 8192)
-            board_height = min(max(first_pil_img.height, 256), 8192)
-            logger.info(
-                f"Instance {self.instance_id} - Auto-size enabled, using board size {board_width}x{board_height} from first image"
-            )
+        # Extract canvas size from file_data if provided
+        file_canvas_width = None
+        file_canvas_height = None
+        if isinstance(parsed_file_data, dict):
+            try:
+                canvas_info = parsed_file_data.get("canvas", {})
+                if isinstance(canvas_info, dict):
+                    cw = canvas_info.get("width")
+                    ch = canvas_info.get("height")
+                    if cw is not None and ch is not None:
+                        file_canvas_width = max(256, min(8192, int(cw)))
+                        file_canvas_height = max(256, min(8192, int(ch)))
+                        logger.info(
+                            f"Instance {self.instance_id} - Detected canvas size from file_data: {file_canvas_width}x{file_canvas_height}"
+                        )
+            except Exception as e:
+                logger.warning(f"Instance {self.instance_id} - Failed to parse canvas size from file_data: {e}")
+
+        # Handle auto_size with priority: file_data canvas > first image dimensions
+        if auto_size == "on":
+            if file_canvas_width is not None and file_canvas_height is not None:
+                board_width = file_canvas_width
+                board_height = file_canvas_height
+                logger.info(
+                    f"Instance {self.instance_id} - Auto-size enabled, using board size {board_width}x{board_height} from file_data canvas"
+                )
+            elif images_list:
+                board_width = min(max(first_pil_img.width, 256), 8192)
+                board_height = min(max(first_pil_img.height, 256), 8192)
+                logger.info(
+                    f"Instance {self.instance_id} - Auto-size enabled, using board size {board_width}x{board_height} from first image"
+                )
 
         # Check for image or parameter changes
         current_params = {
@@ -654,7 +702,11 @@ class XISER_Canvas:
             if "layers" in layer_data and layer_data["layers"]:
                 logger.info(f"Instance {self.instance_id} - Applying layer states from layer_data")
                 new_image_states = []
-                for layer_info in layer_data["layers"]:
+                sorted_layers = sorted(
+                    layer_data["layers"],
+                    key=lambda l: l.get("order", layer_data["layers"].index(l))
+                )
+                for layer_info in sorted_layers:
                     normalized_state = self._normalize_state(layer_info, border_width, board_width, board_height)
                     new_image_states.append(normalized_state)
                 image_states = new_image_states
@@ -698,10 +750,12 @@ class XISER_Canvas:
             logger.info(f"Instance {self.instance_id} - Updated image_paths: {image_paths}")
 
             # Handle image_states based on file_data
-            if file_data and file_data.get("layers"):
+            new_image_states = None
+
+            if isinstance(parsed_file_data, dict) and parsed_file_data.get("layers"):
                 logger.info(f"Instance {self.instance_id} - Applying layer states from file_data")
                 image_states = []
-                for i, layer in enumerate(file_data.get("layers", [])):
+                for i, layer in enumerate(parsed_file_data.get("layers", [])):
                     if i >= len(image_paths):
                         break
                     img = Image.open(os.path.join(self.output_dir, image_paths[i])).convert(
@@ -717,10 +771,13 @@ class XISER_Canvas:
                             "scaleX": layer.get("scale_x", 1.0),
                             "scaleY": layer.get("scale_y", 1.0),
                             "rotation": layer.get("rotation", 0.0),
+                            "visible": layer.get("visible", True),
+                            "order": layer.get("order", i),
+                            "filename": image_paths[i] if i < len(image_paths) else None,
                         }
                     )
                 # Pad with default states if fewer layers in file_data
-                for i in range(len(file_data["layers"]), len(image_paths)):
+                for i in range(len(parsed_file_data["layers"]), len(image_paths)):
                     image_states.append(
                         {
                             "x": border_width + board_width / 2,
@@ -728,6 +785,9 @@ class XISER_Canvas:
                             "scaleX": 1.0,
                             "scaleY": 1.0,
                             "rotation": 0.0,
+                            "visible": True,
+                            "order": i,
+                            "filename": image_paths[i] if i < len(image_paths) else None,
                         }
                     )
             elif not image_states or len(image_states) != len(image_paths):
@@ -743,8 +803,12 @@ class XISER_Canvas:
                                 "scaleX": 1.0,
                                 "scaleY": 1.0,
                                 "rotation": 0.0,
+                                "visible": True,
+                                "order": i,
+                                "filename": image_paths[i] if i < len(image_paths) else None,
                             }
                         )
+            if new_image_states is not None:
                 image_states = new_image_states
             self.properties["image_states"] = image_states
 
@@ -765,16 +829,36 @@ class XISER_Canvas:
                             "scaleX": 1.0,
                             "scaleY": 1.0,
                             "rotation": 0.0,
+                            "visible": True,
+                            "order": i,
+                            "filename": image_paths[i] if i < len(image_paths) else None,
                         }
                     )
-            image_states = new_image_states
+            # Only overwrite if we actually built a replacement list
+            if new_image_states is not None:
+                image_states = new_image_states
             self.properties["image_states"] = image_states
 
         image_states = [
             self._normalize_state(state, border_width, board_width, board_height)
             for state in image_states
         ]
+        # Ensure order存在，默认按索引，并重排为连续序号
+        for idx, state in enumerate(image_states):
+            if state.get("order") is None:
+                state["order"] = idx
+        # Re-sequence orders to avoid duplicates/invalid values
+        ordered_indices = sorted(
+            range(len(image_states)),
+            key=lambda i: image_states[i].get("order", i)
+        )
+        for new_order, idx in enumerate(ordered_indices):
+            image_states[idx]["order"] = new_order
         self.properties["image_states"] = image_states
+        logger.info(
+            f"Instance {self.instance_id} - Incoming layer states (idx, order, filename): "
+            f"{[(i, s.get('order'), s.get('filename')) for i, s in enumerate(image_states)]}"
+        )
 
         # Create canvas with specified color
         canvas_color_rgb = {
@@ -789,11 +873,28 @@ class XISER_Canvas:
         canvas_pil = Image.fromarray(canvas_img, mode="RGBA")
 
         # Apply images to canvas
-        mask_list = []
-        layer_images = []
+        mask_list = [torch.zeros((board_height, board_width), dtype=torch.float32) for _ in image_states]
+        layer_images = [torch.zeros((board_height, board_width, 4), dtype=torch.float32) for _ in image_states]
 
-        for i, (path, state) in enumerate(zip(image_paths, image_states)):
+        # Build rendering order by state order; ignore filename (may change per run)
+        render_list = []
+        for idx, (path, st) in enumerate(zip(image_paths, image_states)):
+            order_val = st.get("order", idx)
+            if order_val is None:
+                order_val = idx
+            render_list.append((order_val, idx, path, st))
+
+        render_list.sort(key=lambda tup: tup[0])
+        logger.info(
+            f"Instance {self.instance_id} - Render order (order, idx, filename): "
+            f"{[(o, idx, st.get('filename')) for o, idx, _, st in render_list]}"
+        )
+
+        for _, i, path, state in render_list:
             try:
+                if not state.get("visible", True):
+                    # 保持占位，但不渲染到画布
+                    continue
                 img = Image.open(os.path.join(self.output_dir, path)).convert("RGBA")
                 brightness = state.get("brightness", 0.0)
                 contrast = state.get("contrast", 0.0)
@@ -863,17 +964,15 @@ class XISER_Canvas:
                     img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped
                 )
                 mask.paste(alpha_cropped, (max(0, paste_x), max(0, paste_y)))
-                mask_list.append(
-                    torch.from_numpy(np.array(mask, dtype=np.float32) / 255.0)
-                )
+                mask_list[i] = torch.from_numpy(np.array(mask, dtype=np.float32) / 255.0)
                 layer_canvas = Image.new("RGBA", (board_width, board_height), (0, 0, 0, 0))
                 layer_canvas.paste(img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped)
                 layer_rgba = torch.from_numpy(np.array(layer_canvas).astype(np.float32) / 255.0)
-                layer_images.append(layer_rgba)
+                layer_images[i] = layer_rgba
             except Exception as e:
                 logger.error(f"Instance {self.instance_id} - Failed to apply image {i+1}: {e}")
-                mask_list.append(torch.zeros((board_height, board_width), dtype=torch.float32))
-                layer_images.append(torch.zeros((board_height, board_width, 4), dtype=torch.float32))
+                mask_list[i] = torch.zeros((board_height, board_width), dtype=torch.float32)
+                layer_images[i] = torch.zeros((board_height, board_width, 4), dtype=torch.float32)
 
         # Ensure mask_list is not empty
         if not mask_list:
@@ -944,7 +1043,9 @@ class XISER_Canvas:
                 "contrast": state.get("contrast", 0.0),
                 "saturation": state.get("saturation", 0.0),
                 "opacity": 1.0,  # Default opacity
-                "visible": True   # Default visibility
+                "visible": state.get("visible", True),   # Visibility from state
+                "order": state.get("order", i),
+                "filename": state.get("filename"),
             })
 
         logger.info(
@@ -956,6 +1057,11 @@ class XISER_Canvas:
                 "image_states": image_states,
                 "image_base64_chunks": image_base64_chunks,
                 "image_paths": image_paths,
+                # Wrap scalar values in lists to satisfy UI aggregation expectations
+                "board_width": [board_width],
+                "board_height": [board_height],
+                "border_width": [border_width],
+                "auto_size": [auto_size],
             },
             "result": (canvas_tensor, masks_tensor, layer_images_tensor, layer_data_output),
         }

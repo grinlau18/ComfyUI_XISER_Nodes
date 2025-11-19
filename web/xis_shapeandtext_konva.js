@@ -1,6 +1,6 @@
 /**
- * @file XIS_CreateShape_Konva.js
- * @description ComfyUI 节点注册和前端逻辑，使用 Konva 库创建几何形状节点，支持移动、缩放、旋转和变形。
+ * @file XIS_ShapeAndText_Konva.js
+ * @description ComfyUI 节点注册和前端逻辑，使用 Konva 库创建几何形状和文字节点，支持移动、缩放、旋转和变形。
  * @author grinlau18
  */
 
@@ -9,12 +9,13 @@ import ShapeRegistry from "./shape_generators/registry.js";
 import KonvaWheelInteraction from "./shape_generators/konva_wheel_interaction.js";
 
 // 导入模块化组件
-import { log, normalizeColor } from "./shape_generators/xis_shape_utils.js";
-import { createKonvaShape, updateKonvaShape, setStateManagementFunctions } from "./shape_generators/xis_shape_creator.js";
-import { createResetButton, createCenterAlignButton, createVerticalAlignButton, createSettingsButton, updateButtonPositions } from "./shape_generators/xis_button_manager.js";
+import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from "./shape_generators/xis_shape_utils.js";
+import { createKonvaShape, updateKonvaShape, setStateManagementFunctions, getBaseShapeSize } from "./shape_generators/xis_shape_creator.js";
+import { createResetButton, createCenterAlignButton, createVerticalAlignButton, createSettingsButton, createGridToggleButton, createHelpButton, updateButtonPositions } from "./shape_generators/xis_button_manager.js";
 import { createGridSystem, updateGridColor } from "./shape_generators/xis_grid_system.js";
 import { saveShapeState, restoreShapeState, resetShapeState, centerAlignShape, verticalAlignShape, updateCanvasBackground } from "./shape_generators/xis_state_manager.js";
 import { setupInputListeners, setupParametricControls, initializeWidgetsFromProperties, setControlDependencies } from "./shape_generators/xis_control_manager.js";
+import { createHelpPanel } from "./shape_generators/xis_help_overlay.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
@@ -33,7 +34,11 @@ const CANVAS_SCALE_FACTOR = 0.75;
 // 描边宽度补偿因子 - 用于调整前端描边宽度显示比例
 const STROKE_WIDTH_COMPENSATION = 0.9; // 值越小，前端描边越细
 
-console.log("XIS_CreateShape_Konva.js loaded successfully");
+// 导出描边补偿因子供其他模块使用
+window.STROKE_WIDTH_COMPENSATION = STROKE_WIDTH_COMPENSATION;
+window.XISER_CANVAS_SCALE_FACTOR = CANVAS_SCALE_FACTOR;
+
+log.info("xis_shapeandtext_konva.js loaded successfully");
 
 // 设置模块间的依赖关系
 setStateManagementFunctions(saveShapeState, restoreShapeState);
@@ -90,20 +95,27 @@ export function setupKonvaCanvas(node) {
     transformer: null,
     layer: null,
     background: null,
+    gridLayer: null,
     resetButton: null,
     centerAlignButton: null,
     verticalAlignButton: null,
     settingsButton: null,
+    gridToggleButton: null,
     paramsContainer: null,
     paramsBody: null,
     paramsTitle: null,
+    helpPanel: null,
+    helpPanelVisible: false,
+    helpPanelPosition: { left: 520, top: 160 },
     initialized: false,
     isSettingValue: false,
     settingsVisible: false,
-    settingsPosition: { left: 64, top: 64 }
+    settingsPosition: { left: 64, top: 64 },
+    toggleHelpPanel: null
   };
   node.konvaState.saveShapeState = saveShapeState;
   node.konvaState.restoreShapeState = restoreShapeState;
+  node.konvaState.gridVisible = node.properties.show_grid !== false;
 
   // 重置按钮配置
   node.konvaState.resetButtonConfig = {
@@ -141,6 +153,24 @@ export function setupKonvaCanvas(node) {
     height: 28,
     bgRadius: 20,
     iconScale: 0.7
+  };
+
+  node.konvaState.gridToggleButtonConfig = {
+    xOffset: 182,
+    yOffset: 32,
+    width: 28,
+    height: 28,
+    bgRadius: 20,
+    iconScale: 0.9
+  };
+
+  node.konvaState.helpButtonConfig = {
+    xOffset: 232,
+    yOffset: 32,
+    width: 28,
+    height: 28,
+    bgRadius: 20,
+    fontSize: 20
   };
 
   // 创建主容器
@@ -216,7 +246,7 @@ export function setupKonvaCanvas(node) {
     color: #f5f5f5;
     letter-spacing: 0.5px;
   `;
-  paramsTitle.textContent = "图形设置";
+  paramsTitle.textContent = "Shape Settings";
   const paramsClose = document.createElement("button");
   paramsClose.textContent = "×";
   paramsClose.style.cssText = `
@@ -251,6 +281,30 @@ export function setupKonvaCanvas(node) {
   node.konvaState.paramsContainer = paramsContainer;
   node.konvaState.paramsBody = paramsBody;
   node.konvaState.paramsTitle = paramsTitle;
+  node.konvaState.helpPanelPosition = node.konvaState.helpPanelPosition || { left: 520, top: 160 };
+  node.konvaState.helpPanelVisible = false;
+
+  function toggleHelpPanel(visible) {
+    const api = node.konvaState.helpPanel;
+    if (!api) return;
+    const show = visible !== undefined ? visible : !node.konvaState.helpPanelVisible;
+    node.konvaState.helpPanelVisible = show;
+    api.setVisibility(show);
+    if (show) {
+      const { left, top } = node.konvaState.helpPanelPosition || { left: 520, top: 160 };
+      api.clampPosition(left, top);
+    }
+  }
+  node.konvaState.toggleHelpPanel = toggleHelpPanel;
+
+  const helpPanelApi = createHelpPanel(node, {
+    onClose: () => toggleHelpPanel(false),
+    onPositionChange: (pos) => {
+      node.konvaState.helpPanelPosition = pos;
+    }
+  });
+  helpPanelApi.clampPosition(node.konvaState.helpPanelPosition.left, node.konvaState.helpPanelPosition.top);
+  node.konvaState.helpPanel = helpPanelApi;
 
   const clampPanelPosition = (overrideLeft, overrideTop) => {
     const panel = node.konvaState.paramsContainer;
@@ -368,6 +422,9 @@ export function setupKonvaCanvas(node) {
     const transparentBg = Boolean(properties.transparent_bg);
     const backgroundColor = transparentBg ? 'rgba(0, 0, 0, 0.3)' : bgColor;
 
+    const backgroundLayer = new Konva.Layer();
+    stage.add(backgroundLayer);
+
     const background = new Konva.Rect({
       x: 0,
       y: 0,
@@ -380,10 +437,13 @@ export function setupKonvaCanvas(node) {
 
     // 创建网格系统
     const { gridLayer, drawGrid } = createGridSystem(stage, backgroundColor);
+    node.konvaState.gridLayer = gridLayer;
+    node.konvaState.drawGrid = drawGrid;
+    gridLayer.visible(node.konvaState.gridVisible !== false);
 
     const layer = new Konva.Layer();
     stage.add(layer);
-    layer.add(background);
+    backgroundLayer.add(background);
 
     const overlayLayer = new Konva.Layer();
     stage.add(overlayLayer);
@@ -394,6 +454,21 @@ export function setupKonvaCanvas(node) {
     // 创建居中对齐按钮
     const centerAlignButton = createCenterAlignButton(node, stage, overlayLayer, centerAlignShape);
     const verticalAlignButton = createVerticalAlignButton(node, stage, overlayLayer, verticalAlignShape);
+    const gridToggleButton = createGridToggleButton(node, stage, overlayLayer, (visible) => {
+      node.konvaState.gridVisible = visible;
+      if (node.konvaState.gridLayer) {
+        if (visible) {
+          const props = node.properties || {};
+          const newBgColor = props.transparent_bg ? 'rgba(0, 0, 0, 0.3)' : (props.bg_color || "#000000");
+          node.konvaState.drawGrid?.(newBgColor);
+        }
+        node.konvaState.gridLayer.visible(visible);
+        node.konvaState.gridLayer.batchDraw();
+      }
+    });
+    const helpButton = createHelpButton(node, stage, overlayLayer, () => {
+      toggleHelpPanel();
+    });
 
     const settingsButton = createSettingsButton(node, stage, overlayLayer, (pos) => {
       if (node.konvaState.settingsVisible) {
@@ -437,11 +512,15 @@ export function setupKonvaCanvas(node) {
           target.getName() === 'resetButton' ||
           target.getName() === 'centerAlignButton' ||
           target.getName() === 'verticalAlignButton' ||
+          target.getName() === 'gridToggleButton' ||
+          target.getName() === 'helpButton' ||
           target.getName() === 'settingsButton' ||
           (target.parent && (
             target.parent.getName() === 'resetButton' ||
             target.parent.getName() === 'centerAlignButton' ||
             target.parent.getName() === 'verticalAlignButton' ||
+            target.parent.getName() === 'gridToggleButton' ||
+            target.parent.getName() === 'helpButton' ||
             target.parent.getName() === 'settingsButton'
           ))
         )
@@ -449,7 +528,21 @@ export function setupKonvaCanvas(node) {
         return; // 忽略按钮点击，让按钮自己的事件处理器处理
       }
 
-      const shape = e.target.closest('Path') || e.target.closest('Group') || e.target;
+      let shape = target;
+      if (target.getParent) {
+        if (typeof target.closest === "function") {
+          shape = target.closest('Path') || target.closest('Group') || target;
+        } else {
+          let current = target;
+          while (current && current !== stage) {
+            if (current.getClassName && (current.getClassName() === 'Path' || current.getClassName() === 'Group')) {
+              shape = current;
+              break;
+            }
+            current = current.getParent && current.getParent();
+          }
+        }
+      }
       if (shape && shape.getName() === 'shape') {
         transformer.nodes([shape]);
       } else {
@@ -463,6 +556,7 @@ export function setupKonvaCanvas(node) {
     node.konvaState.overlayLayer = overlayLayer;
     node.konvaState.transformer = transformer;
     node.konvaState.background = background;
+    node.konvaState.gridLayer = gridLayer;
     node.konvaState.drawGrid = drawGrid;
 
     // 初始化形状
@@ -508,6 +602,8 @@ export function setupKonvaCanvas(node) {
     serialize: true,
     hideOnZoom: false,
     getValue: () => {
+      const canvasScaleFactor = node.konvaState?.canvasScaleFactor ?? CANVAS_SCALE_FACTOR;
+      const baseShapeSize = node.konvaState?.baseSize ?? getBaseShapeSize(node.properties);
       try {
         const shape = node.konvaState?.shape;
 
@@ -529,11 +625,15 @@ export function setupKonvaCanvas(node) {
           input.name === "shape_data" && input.link !== null
         );
 
+        const modeSelection = node.properties.mode_selection || shapeTypeToMode(node.properties.shape_type || "circle") || DEFAULT_MODE_SELECTION;
+        const canonicalShapeType = modeToShapeType(modeSelection);
+
         // 返回完整的序列化数据包含变换参数
         const serializedData = {
-          shape_type: node.properties.shape_type || "circle",
+          mode_selection: modeSelection,
+          shape_type: canonicalShapeType,
           shape_params: node.properties.shape_params || JSON.stringify({ angle: 360, inner_radius: 0 }),
-          shape_color: node.properties.shape_color || "#FF0000",
+          shape_color: node.properties.shape_color || "#0f98b3",
           bg_color: node.properties.bg_color || "rgba(0,0,0,0)",
           transparent_bg: Boolean(node.properties.transparent_bg),
           stroke_color: node.properties.stroke_color || "#FFFFFF",
@@ -547,7 +647,9 @@ export function setupKonvaCanvas(node) {
           skew: shapeState.skew || { x: 0, y: 0 },
           shape_state: node.properties.shapeState || node.properties.shape_state || JSON.stringify(shapeState || {}),
           // 标记是否有shape_data输入
-          has_shape_data_input: hasShapeData
+          has_shape_data_input: hasShapeData,
+          base_shape_size: baseShapeSize,
+          canvas_scale_factor: canvasScaleFactor
         };
 
         log.info(`Node ${node.id} serialized data for backend: position=${JSON.stringify(serializedData.position)}, rotation=${serializedData.rotation}, scale=${JSON.stringify(serializedData.scale)}, skew=${JSON.stringify(serializedData.skew)}, has_shape_data_input=${hasShapeData}`);
@@ -557,9 +659,10 @@ export function setupKonvaCanvas(node) {
 
         // 返回最基本的默认数据
         return {
+          mode_selection: DEFAULT_MODE_SELECTION,
           shape_type: "circle",
           shape_params: JSON.stringify({ angle: 360, inner_radius: 0 }),
-          shape_color: "#FF0000",
+          shape_color: "#0f98b3",
           bg_color: "#000000",
           transparent_bg: false,
           stroke_color: "#FFFFFF",
@@ -570,7 +673,9 @@ export function setupKonvaCanvas(node) {
           rotation: 0,
           scale: { x: 1, y: 1 },
           skew: { x: 0, y: 0 },
-          has_shape_data_input: false
+          has_shape_data_input: false,
+          base_shape_size: baseShapeSize,
+          canvas_scale_factor: canvasScaleFactor
         };
       }
     },
@@ -594,7 +699,13 @@ export function setupKonvaCanvas(node) {
           safeValue.shapeState = safeValue.shape_state;
         }
 
-        if (safeValue.shape_type !== undefined && safeValue.shape_type !== node.properties.shape_type) propertiesToUpdate.shape_type = safeValue.shape_type;
+        if (safeValue.mode_selection !== undefined && safeValue.mode_selection !== node.properties.mode_selection) {
+          propertiesToUpdate.mode_selection = safeValue.mode_selection;
+          propertiesToUpdate.shape_type = modeToShapeType(safeValue.mode_selection);
+        } else if (safeValue.shape_type !== undefined && safeValue.shape_type !== node.properties.shape_type) {
+          propertiesToUpdate.shape_type = safeValue.shape_type;
+          propertiesToUpdate.mode_selection = shapeTypeToMode(safeValue.shape_type);
+        }
         if (safeValue.shape_params !== undefined && safeValue.shape_params !== node.properties.shape_params) propertiesToUpdate.shape_params = safeValue.shape_params;
         if (safeValue.shape_color !== undefined && normalizeColor(safeValue.shape_color) !== normalizeColor(node.properties.shape_color)) propertiesToUpdate.shape_color = safeValue.shape_color;
         if (safeValue.bg_color !== undefined && normalizeColor(safeValue.bg_color) !== normalizeColor(node.properties.bg_color)) propertiesToUpdate.bg_color = safeValue.bg_color;
@@ -603,6 +714,7 @@ export function setupKonvaCanvas(node) {
         if (safeValue.stroke_width !== undefined && parseInt(safeValue.stroke_width) !== parseInt(node.properties.stroke_width)) propertiesToUpdate.stroke_width = parseInt(safeValue.stroke_width) || 0;
         if (safeValue.width !== undefined && parseInt(safeValue.width) !== parseInt(node.properties.width)) propertiesToUpdate.width = parseInt(safeValue.width) || 512;
         if (safeValue.height !== undefined && parseInt(safeValue.height) !== parseInt(node.properties.height)) propertiesToUpdate.height = parseInt(safeValue.height) || 512;
+        if (safeValue.show_grid !== undefined && Boolean(safeValue.show_grid) !== Boolean(node.properties.show_grid)) propertiesToUpdate.show_grid = Boolean(safeValue.show_grid);
         if (safeValue.shapeState !== undefined && safeValue.shapeState !== node.properties.shapeState) propertiesToUpdate.shapeState = safeValue.shapeState;
 
         // 只在有实际变化时合并属性
@@ -631,6 +743,17 @@ export function setupKonvaCanvas(node) {
           if (colorPropsChanged) {
             updateCanvasBackground(node);
             updateKonvaShape(node);
+          }
+
+          if (propertiesToUpdate.show_grid !== undefined && node.konvaState?.gridLayer) {
+            node.konvaState.gridVisible = propertiesToUpdate.show_grid;
+            if (node.konvaState.gridVisible) {
+              const props = node.properties || {};
+              const bgColor = props.transparent_bg ? 'rgba(0, 0, 0, 0.3)' : (props.bg_color || "#000000");
+              node.konvaState.drawGrid?.(bgColor);
+            }
+            node.konvaState.gridLayer.visible(node.konvaState.gridVisible !== false);
+            node.konvaState.gridLayer.batchDraw();
           }
 
           // 如果有shapeState，恢复形状状态
@@ -683,6 +806,11 @@ export function updateCanvasSize(node) {
     return;
   }
 
+  const properties = node.properties || {};
+  const bgColor = properties.bg_color || "#000000";
+  const transparentBg = Boolean(properties.transparent_bg);
+  const backgroundColor = transparentBg ? 'rgba(0, 0, 0, 0.3)' : bgColor;
+
   // 固定画布尺寸为输出尺寸的75%
   const outputWidth = parseInt(node.properties.width) || 512;
   const outputHeight = parseInt(node.properties.height) || 512;
@@ -706,7 +834,11 @@ export function updateCanvasSize(node) {
 
   // 更新网格颜色
   if (node.konvaState.drawGrid) {
-    node.konvaState.drawGrid();
+    node.konvaState.drawGrid(backgroundColor);
+    if (node.konvaState.gridLayer) {
+      node.konvaState.gridLayer.visible(node.konvaState.gridVisible !== false);
+      node.konvaState.gridLayer.batchDraw();
+    }
   }
 
   // 更新按钮位置
@@ -762,16 +894,32 @@ export function updateCanvasSize(node) {
 }
 
 // 注册扩展
+log.info("xis_shapeandtext_konva.js: registering XISER.ShapeAndTextKonva");
 app.registerExtension({
-  name: "XISER.CreateShapeKonva",
+  name: "XISER.ShapeAndTextKonva",
 
   /**
    * 节点创建时初始化 UI 和监听器
    * @param {Object} node - 节点实例
    */
   nodeCreated(node) {
-    if (node.comfyClass === "XIS_CreateShape") {
-      log.info(`Node ${node.id} created`);
+    // 检查多种可能的节点标识属性
+    const supportedClasses = ["XIS_ShapeAndText"];
+    const nodeIdentifier = node.comfyClass || node.type || node.constructor?.name || '';
+
+    // 调试：输出所有可能的节点属性
+    log.info(`xis_shapeandtext_konva.js: nodeCreated called for node ${node.id}`);
+    log.info(`  - comfyClass: ${node.comfyClass}`);
+    log.info(`  - type: ${node.type}`);
+    log.info(`  - constructor.name: ${node.constructor?.name}`);
+    log.info(`  - computed identifier: ${nodeIdentifier}`);
+
+    if (!supportedClasses.includes(nodeIdentifier)) {
+      log.info(`xis_shapeandtext_konva.js: Node ${node.id} skipped - identifier: ${nodeIdentifier}, supported: ${supportedClasses}`);
+      return;
+    }
+
+    log.info(`xis_shapeandtext_konva.js: Node ${node.id} created - identifier: ${nodeIdentifier}`);
 
       // 保存原始onConnectionsChange方法
       const origOnConnectionsChange = node.onConnectionsChange;
@@ -849,15 +997,17 @@ app.registerExtension({
 
       // 仅在必要时初始化默认属性，避免覆盖已有状态
       const defaultProperties = {
+        mode_selection: DEFAULT_MODE_SELECTION,
         shape_type: "circle",
         shape_params: JSON.stringify({ angle: 360, inner_radius: 0 }),
-        shape_color: "#FF0000",
+        shape_color: "#0f98b3",
         bg_color: "#000000",
         transparent_bg: false,
         stroke_color: "#FFFFFF",
         stroke_width: 0,
         width: 512,
-        height: 512
+        height: 512,
+        show_grid: true
       };
 
       // 仅为未定义的属性设置默认值
@@ -888,7 +1038,6 @@ app.registerExtension({
           }
         });
       }, 100);
-    }
   },
 
   /**
@@ -898,8 +1047,10 @@ app.registerExtension({
    * @param {Object} app - ComfyUI 应用实例
    */
   beforeRegisterNodeDef(nodeType, nodeData, app) {
-    if (nodeData.name === "XIS_CreateShape") {
-      nodeType.prototype.comfyClass = "XIS_CreateShape";
+    log.info(`xis_shapeandtext_konva.js: beforeRegisterNodeDef called for ${nodeData.name}`);
+    if (nodeData.name === "XIS_ShapeAndText") {
+      nodeType.prototype.comfyClass = "XIS_ShapeAndText";
+      log.info("xis_shapeandtext_konva.js: set comfyClass = XIS_ShapeAndText");
 
       // shape_data输入端口由后端Python文件定义，前端只负责检测和处理连接状态
 
@@ -950,7 +1101,7 @@ app.registerExtension({
    * 设置扩展样式
    */
   setup() {
-    console.log("XIS_CreateShapeKonva extension setup called");
+    console.log("XIS_ShapeAndTextKonva extension setup called");
     const style = document.createElement("style");
     style.textContent = `
       [class^="xiser-shape-node-"] {
@@ -994,6 +1145,6 @@ app.registerExtension({
       }
     `;
     document.head.appendChild(style);
-    log.info("XISER.CreateShapeKonva extension styles applied");
+    log.info("XISER.ShapeAndTextKonva extension styles applied");
   }
 });

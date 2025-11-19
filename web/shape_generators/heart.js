@@ -98,7 +98,7 @@ export class HeartGenerator {
         // Path offset control (replaces roundness and expansion)
         const offsetDiv = document.createElement("div");
         offsetDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">路径偏移:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Path Offset:</label>
             <input type="range" min="-100" max="100" step="1"
                    value="${(shapeParams.path_offset || 0) * 100}"
                    style="width: 100%;"

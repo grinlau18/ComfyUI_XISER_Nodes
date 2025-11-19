@@ -10,9 +10,13 @@ import { setupCanvas, updateDisplay, setupInputListeners, removeInputListeners, 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"
 
-// 节点最小尺寸配置 (方便手动修改)
-const MIN_NODE_WIDTH = 640;   // 节点最小宽度 (px)
-const MIN_NODE_HEIGHT = 680;  // 节点最小高度 (px)
+// 节点界面尺寸配置 (如需调整整体界面大小，可直接修改下方常量)
+const NODE_UI_WIDTH = 560;
+const NODE_UI_HEIGHT = 594;
+
+// 为兼容旧逻辑继续保留最小尺寸常量（与界面尺寸保持一致）
+const MIN_NODE_WIDTH = NODE_UI_WIDTH;
+const MIN_NODE_HEIGHT = NODE_UI_HEIGHT;
 
 /**
  * 确保节点ID有效
@@ -62,10 +66,11 @@ async function initializeNode(node) {
     // 设置初始节点大小（使用防护标志避免递归）
     if (!node._resizing) {
       node._resizing = true;
-      node.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+      node.size = [NODE_UI_WIDTH, NODE_UI_HEIGHT];
       if (node.setSize && LGraphNode && LGraphNode.prototype.setSize) {
-        LGraphNode.prototype.setSize.call(node, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
+        LGraphNode.prototype.setSize.call(node, [NODE_UI_WIDTH, NODE_UI_HEIGHT]);
       }
+      node.resizable = false;
       node._resizing = false;
     }
 
@@ -113,7 +118,7 @@ app.registerExtension({
           { x: 0, y: 0 },
           { x: 1, y: 1 }
         ],
-        node_size: [MIN_NODE_WIDTH, MIN_NODE_HEIGHT],
+        node_size: [NODE_UI_WIDTH, NODE_UI_HEIGHT],
         data_type: "FLOAT",
         start_value: "0",
         end_value: "1",
@@ -138,11 +143,12 @@ app.registerExtension({
       }
 
       // 设置初始节点大小
-      node.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
+      node.size = [NODE_UI_WIDTH, NODE_UI_HEIGHT];
       // 使用LiteGraph的原型方法避免递归（与XIS_CreateShape_Konva.js保持一致）
       if (node.setSize && LGraphNode && LGraphNode.prototype.setSize) {
-        LGraphNode.prototype.setSize.call(node, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
+        LGraphNode.prototype.setSize.call(node, [NODE_UI_WIDTH, NODE_UI_HEIGHT]);
       }
+      node.resizable = false;
 
       // 清理可能存在的旧DOM元素（防止节点复制和刷新时冲突）
       const selectors = [
@@ -191,6 +197,7 @@ app.registerExtension({
   beforeRegisterNodeDef(nodeType, nodeData, app) {
     if (nodeData.name === "XIS_CurveEditor") {
       nodeType.prototype.comfyClass = "XIS_CurveEditor";
+      nodeType.prototype.resizable = false;
 
       // 处理节点配置（主要用于恢复保存的工作流）
       const origOnConfigure = nodeType.prototype.onConfigure;
@@ -203,6 +210,15 @@ app.registerExtension({
         }
         this._configured = true;
 
+        this.resizable = false;
+        if (!this._resizing) {
+          this._resizing = true;
+          this.size = [NODE_UI_WIDTH, NODE_UI_HEIGHT];
+          if (this.setSize && LGraphNode && LGraphNode.prototype.setSize) {
+            LGraphNode.prototype.setSize.call(this, [NODE_UI_WIDTH, NODE_UI_HEIGHT]);
+          }
+          this._resizing = false;
+        }
 
         // 防止重复初始化 - 如果已经在nodeCreated中初始化过，则跳过
         if (this._initialized) {
@@ -227,27 +243,19 @@ app.registerExtension({
         }
       };
 
-      // 处理节点调整大小 - 防止手动调整小于最小尺寸
+      // 处理节点调整大小 - 固定节点尺寸，避免用户调整
       nodeType.prototype.onResize = function (size) {
         if (this.id === -1 || this._removed) return;
 
-        // 如果尝试调整的尺寸小于最小尺寸，强制设置为最小尺寸
-        const newWidth = size ? size[0] : this.size[0];
-        const newHeight = size ? size[1] : this.size[1];
-
-        if (newWidth < MIN_NODE_WIDTH || newHeight < MIN_NODE_HEIGHT) {
-          // 使用防护标志避免递归调用
-          if (!this._resizing) {
-            this._resizing = true;
-            // 直接设置最小尺寸，使用LiteGraph的原型方法避免递归
-            this.size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
-            if (this.setSize && LGraphNode && LGraphNode.prototype.setSize) {
-              LGraphNode.prototype.setSize.call(this, [MIN_NODE_WIDTH, MIN_NODE_HEIGHT]);
-            }
-            this.properties.node_size = [MIN_NODE_WIDTH, MIN_NODE_HEIGHT];
-            this._resizing = false;
-          }
+        if (this._resizing) return;
+        this._resizing = true;
+        const targetSize = [NODE_UI_WIDTH, NODE_UI_HEIGHT];
+        this.size = [...targetSize];
+        if (this.setSize && LGraphNode && LGraphNode.prototype.setSize) {
+          LGraphNode.prototype.setSize.call(this, targetSize);
         }
+        this.properties.node_size = [...targetSize];
+        this._resizing = false;
       };
 
       // 处理节点移除
@@ -308,4 +316,4 @@ app.registerExtension({
   }
 });
 
-export { MIN_NODE_WIDTH, MIN_NODE_HEIGHT };
+export { MIN_NODE_WIDTH, MIN_NODE_HEIGHT, NODE_UI_WIDTH, NODE_UI_HEIGHT };

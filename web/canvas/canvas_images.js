@@ -3,11 +3,13 @@
  * @module canvas_images
  */
 
+import { mergeStateWithAdjustments, withAdjustmentDefaults } from './canvas_state.js';
+import { ensureLayerIds, applyLayerOrder, persistImageStates } from './layer_store.js';
+
 /**
  * Global caches for images and URLs, isolated by nodeId.
  * @type {Map<string, Map<string, HTMLImageElement>>}
  */
-import { mergeStateWithAdjustments, withAdjustmentDefaults } from './canvas_state.js';
 
 const globalImageCache = new Map();
 
@@ -260,6 +262,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
               brightness: states[i]?.brightness,
               contrast: states[i]?.contrast,
               saturation: states[i]?.saturation,
+              order: Number.isFinite(states[i]?.order) ? states[i].order : i,
+              filename: states[i]?.filename || validImagePaths[i],
             }));
             node.properties.image_states = nodeState.initialStates;
             node.widgets.find(w => w.name === "image_states").value = JSON.stringify(nodeState.initialStates);
@@ -288,6 +292,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           offsetX: img.width / 2,
           offsetY: img.height / 2,
           filename: images[index].filename,
+          visible: state.visible !== false,
         });
         nodeState.imageLayer.add(konvaImg);
         nodeState.imageNodes[index] = konvaImg;
@@ -352,14 +357,51 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
       }
     }
 
-    // Filter out null nodes and synchronize states
-    const validNodes = nodeState.imageNodes.filter(node => node !== null);
-    if (validNodes.length !== nodeState.imageNodes.length) {
-      log.warn(`Filtered ${nodeState.imageNodes.length - validNodes.length} null imageNodes for node ${nodeId}`);
+    // Persisted map for visibility/order fallback
+    const persistedStateMap = new Map();
+    if (Array.isArray(node?.properties?.image_states)) {
+      node.properties.image_states.forEach((st, idx) => {
+        const lid = st?.layer_id || node?.properties?.ui_config?.layer_ids?.[idx] || `layer_${idx}`;
+        if (lid) persistedStateMap.set(lid, st);
+      });
     }
-    nodeState.initialStates = validNodes.map(node => nodeState.initialStates[nodeState.imageNodes.indexOf(node)]);
-    nodeState.imageNodes = validNodes;
-    nodeState.defaultLayerOrder = [...nodeState.imageNodes];
+
+    // Keep arrays aligned to image_paths; fill missing nodes with defaults
+    nodeState.imageNodes.forEach((node, idx) => {
+      if (!node) {
+        nodeState.initialStates[idx] = nodeState.initialStates[idx] || withAdjustmentDefaults({ filename: validImagePaths[idx] });
+      }
+    });
+    // Ensure filenames/order are attached; prefer persisted layer_order if available
+    ensureLayerIds(node, validImagePaths);
+    const persistedLayerOrder = Array.isArray(node.properties?.ui_config?.layer_order)
+      ? node.properties.ui_config.layer_order
+      : null;
+    nodeState.initialStates = nodeState.initialStates.map((s, idx) => {
+      const layerId = s?.layer_id || node.properties?.ui_config?.layer_ids?.[idx] || `layer_${idx}`;
+      const orderFromPersisted = Array.isArray(persistedLayerOrder) ? persistedLayerOrder.indexOf(layerId) : -1;
+      const persistedState = persistedStateMap.get(layerId);
+      return {
+        ...s,
+        layer_id: layerId,
+        filename: s?.filename || validImagePaths[idx],
+        order: orderFromPersisted >= 0 ? orderFromPersisted : (Number.isFinite(s?.order) ? s.order : idx),
+        // Prefer persisted visible if available; only use current value when explicitly boolean
+        visible: typeof persistedState?.visible === 'boolean'
+          ? persistedState.visible
+          : (typeof s?.visible === 'boolean' ? s.visible : true),
+      };
+    });
+
+    // Apply stacking by order without reordering arrays
+    const orderPairs = nodeState.imageNodes.map((node, idx) => ({
+      idx,
+      order: Number.isFinite(nodeState.initialStates[idx]?.order) ? nodeState.initialStates[idx].order : idx,
+    }));
+    // Apply stacking and persist via shared helpers
+    applyLayerOrder(node, nodeState);
+    const imageStatesWidget = node.widgets?.find(w => w.name === 'image_states');
+    persistImageStates(node, nodeState, imageStatesWidget);
 
     // Initialize transformer with scaling and rotation capabilities
     nodeState.transformer = new Konva.Transformer({

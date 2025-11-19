@@ -6,6 +6,7 @@ import cv2
 import os
 from typing import Optional, Tuple, Union, List
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
+from .canvas_mask_processor import XIS_CanvasMaskProcessor
 
 """
 Image and mask processing nodes for XISER, including loading, cropping, stitching, and resizing operations.
@@ -870,95 +871,6 @@ class XIS_MaskBatchProcessor:
         
         return (result,)
     
-
-# 多蒙版混合节点，支持最多 8 张蒙版
-class XIS_CanvasMaskProcessor:
-    DEBUG = False  # 调试模式开关
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "invert_output": ("BOOLEAN", {"default": True}),
-                "masks": ("MASK",),
-            },
-            "optional": {
-                "Layer_Mask_1": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_2": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_3": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_4": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_5": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_6": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_7": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_8": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_9": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_10": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_11": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_12": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_13": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_14": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_15": ("BOOLEAN", {"default": False}),
-                "Layer_Mask_16": ("BOOLEAN", {"default": False}),
-            }
-        }
-
-    RETURN_TYPES = ("MASK",)
-    RETURN_NAMES = ("output_mask",)
-    FUNCTION = "blend_masks"
-    CATEGORY = "XISER_Nodes/Image_And_Mask"
-
-    def blend_masks(self, invert_output, masks, **kwargs):
-        batch_size = masks.shape[0] if masks.dim() == 3 else 1
-        if batch_size < 1:
-            raise ValueError("At least one mask must be provided.")
-        
-        if torch.isnan(masks).any() or torch.isinf(masks).any():
-            raise ValueError("Input masks contain NaN or Inf values.")
-        masks = torch.clamp(masks, 0.0, 1.0)
-        
-        if self.DEBUG:
-            print(f"Input masks shape: {masks.shape}, min: {masks.min().item()}, max: {masks.max().item()}")
-        
-        enables = [kwargs.get(f"Layer_Mask_{i+1}", False) for i in range(batch_size)]
-        if self.DEBUG:
-            print(f"Received kwargs: {list(kwargs.keys())}")
-            print(f"Switches: {enables}")
-        
-        if masks.dim() == 2:
-            masks = masks.unsqueeze(0)
-        
-        shape = masks[0].shape
-        for mask in masks[1:]:
-            if mask.shape != shape:
-                raise ValueError("All masks must have the same dimensions.")
-        
-        output_mask = torch.zeros_like(masks[0])
-        
-        if not any(enables):
-            if self.DEBUG:
-                print("No layers enabled, returning default mask")
-            if invert_output:
-                output_mask = torch.ones_like(output_mask)
-            return (output_mask,)
-        
-        for i, (mask, enable) in enumerate(zip(masks, enables)):
-            if enable:
-                upper_opacity = torch.zeros_like(mask)
-                for j in range(i + 1, batch_size):
-                    upper_opacity = torch.max(upper_opacity, masks[j])
-                visible_part = mask * (1.0 - upper_opacity)
-                if self.DEBUG:
-                    print(f"Layer {i+1}, Enable: {enable}, Upper Opacity Max: {upper_opacity.max().item()}, Visible Part Max: {visible_part.max().item()}")
-                output_mask = output_mask + visible_part
-        
-        output_mask = torch.clamp(output_mask, 0.0, 1.0)
-        if self.DEBUG:
-            print(f"Output mask min: {output_mask.min().item()}, max: {output_mask.max().item()}")
-        
-        if invert_output:
-            output_mask = 1.0 - output_mask
-        
-        return (output_mask,)
 
 # 这是一个图像合成处理器，能对输入图像执行缩放、旋转等操作，并将处理后的图像放置在指定尺寸和颜色的画布上，最终输出合成结果。
 class XIS_CompositorProcessor:

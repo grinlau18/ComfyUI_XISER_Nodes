@@ -1,6 +1,6 @@
 /**
  * @file xis_grid_system.js
- * @description XIS_CreateShape 节点网格系统模块
+ * @description XIS_ShapeAndText 节点网格系统模块
  * @author grinlau18
  */
 
@@ -15,15 +15,21 @@ import { log, getGridColor } from './xis_shape_utils.js';
 export function createGridSystem(stage, backgroundColor) {
   // 创建网格层
   const gridLayer = new Konva.Layer();
+  gridLayer.listening(false);
   stage.add(gridLayer);
+
+  let currentBackground = backgroundColor;
 
   /**
    * 绘制网格
    */
-  const drawGrid = () => {
+  const drawGrid = (newBackgroundColor) => {
+    if (typeof newBackgroundColor === "string") {
+      currentBackground = newBackgroundColor;
+    }
     gridLayer.destroyChildren();
 
-    const gridColor = getGridColor(backgroundColor);
+    const gridColor = getGridColor(currentBackground);
     const gridSize = 16; // 16x16 网格
     const width = stage.width();
     const height = stage.height();
@@ -56,7 +62,7 @@ export function createGridSystem(stage, backgroundColor) {
   };
 
   // 初始绘制网格
-  drawGrid();
+  drawGrid(backgroundColor);
 
   return {
     gridLayer,
@@ -77,7 +83,11 @@ export function updateGridColor(node) {
   const backgroundColor = transparentBg ? 'rgba(0, 0, 0, 0.3)' : bgColor;
 
   // 重新绘制网格以应用新颜色
-  node.konvaState.drawGrid();
+  node.konvaState.drawGrid(backgroundColor);
+  if (node.konvaState.gridLayer) {
+    node.konvaState.gridLayer.visible(node.konvaState.gridVisible !== false);
+    node.konvaState.gridLayer.batchDraw();
+  }
 
   log.info(`Node ${node.id} grid color updated for background: ${backgroundColor}`);
 }

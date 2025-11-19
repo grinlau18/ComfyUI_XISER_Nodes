@@ -163,6 +163,38 @@ export function initializeUI(node, nodeState, widgetContainer) {
         align-items: center;
         gap: 8px;
       }
+      .xiser-layer-item-${nodeState.nodeId} .layer-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-order-button {
+        width: 18px;
+        height: 16px;
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        border: 1px solid #555;
+        border-radius: 3px;
+        padding: 0;
+        cursor: pointer;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-order-button:hover {
+        background: rgba(255,255,255,0.18);
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-visibility {
+        background: transparent;
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        padding: 3px 4px;
+        border-radius: 4px;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-visibility.off {
+        opacity: 0.5;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-visibility:hover {
+        background-color: rgba(255,255,255,0.12);
+      }
       .xiser-layer-item-${nodeState.nodeId} .layer-name {
         flex: 1;
         overflow: hidden;
@@ -422,8 +454,12 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * Updates the layer panel with current image nodes, displaying layer names from file_data if available.
    * @param {Function} selectLayer - Callback to select a layer.
    * @param {Function} deselectLayer - Callback to deselect a layer.
+   * @param {Object} actions - Extra actions for layer item controls.
+   * @param {Function} actions.onToggleVisibility - Toggle visibility handler.
+   * @param {Function} actions.onMoveLayer - Reorder handler.
    */
-  function updateLayerPanel(selectLayer, deselectLayer) {
+  function updateLayerPanel(selectLayer, deselectLayer, actions = {}) {
+    const { onToggleVisibility, onMoveLayer } = actions;
 
     // Find the content container
     const content = layerPanel.querySelector(`.xiser-layer-panel-content-${nodeState.nodeId}`);
@@ -437,12 +473,22 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
     const layers = nodeState.file_data?.layers || [];
 
-    for (let index = 0; index < nodeState.imageNodes.length; index++) {
+    const layerIds = Array.isArray(node?.properties?.ui_config?.layer_ids)
+      ? node.properties.ui_config.layer_ids
+      : [];
+
+    // 按zIndex降序排列图层，列表最上方对应画板最上层
+    const ordered = nodeState.imageNodes
+      .map((node, idx) => ({ idx, node, zIndex: node ? node.zIndex() : idx }))
+      .sort((a, b) => b.zIndex - a.zIndex);
+
+    for (const { idx: originalIndex } of ordered) {
       const item = document.createElement("div");
       item.className = `xiser-layer-item-${nodeState.nodeId}`;
-      const layerIndex = nodeState.imageNodes.length - 1 - index;
-      let layerName = `Layer ${layerIndex + 1}`;
-      const layerData = layers[layerIndex];
+      let layerName = `Layer ${originalIndex + 1}`;
+      const layerData = layers[originalIndex];
+      const isVisible = nodeState.initialStates?.[originalIndex]?.visible !== false;
+      const layerId = layerIds[originalIndex] || originalIndex.toString();
 
       if (layerData?.name) {
         try {
@@ -454,25 +500,55 @@ export function initializeUI(node, nodeState, widgetContainer) {
           const chars = [...decodedName];
           layerName = chars.length > 8 ? chars.slice(0, 8).join('') + '...' : decodedName;
         } catch (e) {
-          log.warn(`Failed to decode layer name at index ${layerIndex}: ${e.message}`);
-          layerName = `Layer ${layerIndex + 1}`;
+          log.warn(`Failed to decode layer name at index ${originalIndex}: ${e.message}`);
+          layerName = `Layer ${originalIndex + 1}`;
         }
       } else {
       }
 
       // 创建图层列表项内容
       item.innerHTML = `
+        <div class="layer-controls">
+          <button class="layer-order-button" data-dir="1" title="上移">▲</button>
+          <button class="layer-order-button" data-dir="-1" title="下移">▼</button>
+        </div>
         <span class="layer-name">${layerName}</span>
-        <span class="layer-adjust-icon" data-index="${layerIndex}">
+        <button class="layer-visibility ${isVisible ? 'on' : 'off'}" data-index="${originalIndex}" title="显示/隐藏">
+          ${isVisible ? '👁' : '🚫'}
+        </button>
+        <span class="layer-adjust-icon" data-index="${originalIndex}">
           <svg viewBox="0 0 48 48" width="14" height="14" fill="#ffffff">
             <path d="M44,14H23.65c-0.826-2.327-3.043-4-5.65-4s-4.824,1.673-5.65,4H4v4h8.35c0.826,2.327,3.043,4,5.65,4s4.824-1.673,5.65-4H44 V14z"/>
             <path d="M44,30h-8.35c-0.826-2.327-3.043-4-5.65-4s-4.824,1.673-5.65,4H4v4h20.35c0.826,2.327,3.043,4,5.65,4s4.824-1.673,5.65-4 H44V30z"/>
           </svg>
         </span>
       `;
-      item.dataset.index = layerIndex.toString();
+      item.dataset.index = originalIndex.toString();
+      item.dataset.layerId = layerId;
       content.appendChild(item);
       nodeState.layerItems.push(item);
+
+      // 显示/隐藏
+      const visibilityBtn = item.querySelector('.layer-visibility');
+      visibilityBtn?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (typeof onToggleVisibility === 'function') {
+          const currentVisible = nodeState.initialStates?.[originalIndex]?.visible !== false;
+          onToggleVisibility(originalIndex, !currentVisible);
+        }
+      });
+
+      // 上下移动
+      const orderButtons = item.querySelectorAll('.layer-order-button');
+      orderButtons?.forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (typeof onMoveLayer === 'function') {
+            const dir = parseInt(btn.dataset.dir, 10) || 0;
+            onMoveLayer(originalIndex, dir);
+          }
+        });
+      });
 
       // 图层名称点击事件 - 选择图层
       item.addEventListener("click", (event) => {
@@ -480,12 +556,12 @@ export function initializeUI(node, nodeState, widgetContainer) {
         if (event.target.closest('.layer-adjust-icon')) {
           return;
         }
-        log.info(`Layer item ${layerIndex} (${layerName}) clicked for node ${nodeState.nodeId}`);
-        const currentIndex = parseInt(item.dataset.index);
-        if (currentIndex >= 0 && currentIndex < nodeState.imageNodes.length && nodeState.imageNodes[currentIndex]) {
-          selectLayer(nodeState, currentIndex);
+        log.info(`Layer item ${originalIndex} (${layerName}) clicked for node ${nodeState.nodeId}`);
+        const targetIndex = parseInt(item.dataset.index, 10);
+        if (targetIndex >= 0 && targetIndex < nodeState.imageNodes.length && nodeState.imageNodes[targetIndex]) {
+          selectLayer(nodeState, targetIndex);
         } else {
-          log.warn(`Invalid layer index ${currentIndex} for node ${nodeState.nodeId}`);
+          log.warn(`Invalid layer index ${targetIndex} for node ${nodeState.nodeId}`);
           deselectLayer(nodeState);
         }
       });
@@ -494,7 +570,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       const adjustIcon = item.querySelector('.layer-adjust-icon');
       adjustIcon.addEventListener("click", (event) => {
         event.stopPropagation(); // 阻止事件冒泡到图层项
-        log.info(`Adjust icon clicked for layer ${layerIndex} (${layerName}) for node ${nodeState.nodeId}`);
+        log.info(`Adjust icon clicked for layer ${originalIndex} (${layerName}) for node ${nodeState.nodeId}`);
         const currentIndex = parseInt(adjustIcon.dataset.index);
 
         // 首先选择该图层

@@ -1,16 +1,34 @@
 /**
  * @file xis_shape_creator.js
- * @description XIS_CreateShape 节点形状创建模块
+ * @description XIS_ShapeAndText 节点形状创建模块
  * @author grinlau18
  */
 
-import { log } from './xis_shape_utils.js';
+import { log, normalizeColor, modeToShapeType, DEFAULT_MODE_SELECTION } from './xis_shape_utils.js';
 import ShapeRegistry from './registry.js';
 import { getFontManager } from './text.js';
 
-// 描边宽度补偿因子 - 用于调整前端描边宽度显示比例
-const STROKE_WIDTH_COMPENSATION = 0.9;
+// 描边宽度补偿因子 - 从主文件导入
+const STROKE_WIDTH_COMPENSATION = window.STROKE_WIDTH_COMPENSATION || 0.9;
+const CANVAS_SCALE_FACTOR = window.XISER_CANVAS_SCALE_FACTOR || 0.75;
+const BASE_REFERENCE_SIZE = 512; // 与前端 Konva 画布默认参考尺寸保持一致
+const BASE_SIZE_RATIO = 0.25; // 参考尺寸占比（半径）
 const FontManager = getFontManager();
+
+/**
+ * 计算当前输出尺寸下的基础形状尺寸（与前端显示保持一致）
+ * @param {Object} properties - 节点属性
+ * @returns {number} Konva 画布中的基础半径
+ */
+export function getBaseShapeSize(properties = {}) {
+  const referenceSize = parseInt(properties.base_shape_reference, 10);
+  const baseReference = Number.isFinite(referenceSize) && referenceSize > 0
+    ? referenceSize
+    : BASE_REFERENCE_SIZE;
+
+  // 维持现有体验：默认使用常见的512输出尺寸参考值
+  return baseReference * BASE_SIZE_RATIO;
+}
 
 function getStrokeRenderOptions(node, strokeColor, strokeWidth) {
   return {
@@ -41,7 +59,8 @@ function createLayeredPath(pathData, fillColor, strokeOptions, extraOptions = {}
     listening: true
   });
 
-  basePath.strokeScaleEnabled(false);
+  // Allow stroke width to scale together with shape transforms (matches output)
+  basePath.strokeScaleEnabled(true);
 
   if (!strokeOptions.width || strokeOptions.width <= 0) {
     return basePath;
@@ -57,7 +76,7 @@ function createLayeredPath(pathData, fillColor, strokeOptions, extraOptions = {}
     lineCap: strokeOptions.cap,
     miterLimit: strokeOptions.miterLimit
   });
-  strokePath.strokeScaleEnabled(false);
+  strokePath.strokeScaleEnabled(true);
   basePath.strokeEnabled(false);
 
   const layeredGroup = new Konva.Group({
@@ -112,31 +131,25 @@ export function createKonvaShape(node, shapeType, size, color, rotation, transfo
 
   // 使用模块化形状生成器
   const shapeData = ShapeRegistry.generateShape(shapeType, shapeParams, size);
+  const internalRotation = parseFloat(shapeParams.shape_rotation ?? 0) || 0;
+  const contentGroup = new Konva.Group({
+    x: 0,
+    y: 0,
+    listening: true,
+    name: 'shapeContent',
+    rotation: internalRotation
+  });
+  rootShape.add(contentGroup);
 
   if (shapeData) {
     if (shapeData.metadata.hasInnerRadius && shapeData.metadata.isFullCircle) {
       const outerLayer = createLayeredPath(shapeData.pathData, color, strokeOptions);
       const innerFill = node.properties.bg_color || "#000000";
       const innerLayer = createLayeredPath(shapeData.innerPathData, innerFill, strokeOptions);
-      rootShape.add(outerLayer);
-      rootShape.add(innerLayer);
-    } else if (shapeData.metadata.type === "spiral") {
-      const strokeOnlyPath = new Konva.Path({
-        x: 0,
-        y: 0,
-        data: shapeData.pathData,
-        fillEnabled: false,
-        stroke: strokeOptions.color,
-        strokeWidth: strokeOptions.width,
-        lineJoin: strokeOptions.join,
-        lineCap: strokeOptions.cap,
-        miterLimit: strokeOptions.miterLimit,
-        listening: true
-      });
-      strokeOnlyPath.strokeScaleEnabled(false);
-      rootShape.add(strokeOnlyPath);
+      contentGroup.add(outerLayer);
+      contentGroup.add(innerLayer);
     } else {
-      rootShape.add(createLayeredPath(shapeData.pathData, color, strokeOptions));
+      contentGroup.add(createLayeredPath(shapeData.pathData, color, strokeOptions));
     }
 
     log.info(`Node ${node.id} created ${shapeType} shape with metadata:`, shapeData.metadata);
@@ -157,7 +170,7 @@ export function createKonvaShape(node, shapeType, size, color, rotation, transfo
     defaultPoints.forEach(([x, y]) => defaultPathData += ` L ${x} ${y}`);
     defaultPathData += ` Z`;
 
-    rootShape.add(createLayeredPath(defaultPathData, color, strokeOptions));
+    contentGroup.add(createLayeredPath(defaultPathData, color, strokeOptions));
     log.info(`Node ${node.id} created default circle path with ${defaultPoints.length} points`);
   }
 
@@ -190,7 +203,7 @@ export function createKonvaShape(node, shapeType, size, color, rotation, transfo
 }
 
 function createKonvaTextShape(node, shapeParams, color, strokeColor, strokeWidth) {
-  const defaults = {
+const defaults = {
     content: "A",
     font_file: "",
     font_family: "",
@@ -200,7 +213,8 @@ function createKonvaTextShape(node, shapeParams, color, strokeColor, strokeWidth
     font_weight: "normal",
     font_style: "normal",
     underline: false,
-    uppercase: true
+    uppercase: true,
+    text_align: "center"
   };
 
   const params = { ...defaults, ...(shapeParams || {}) };
@@ -219,6 +233,7 @@ function createKonvaTextShape(node, shapeParams, color, strokeColor, strokeWidth
   const isItalic = params.font_style === "italic";
   const fontStyle = `${isBold ? "bold" : "normal"}${isItalic ? " italic" : ""}`.trim();
   const textDecoration = params.underline ? "underline" : "";
+  const textAlign = (params.text_align || "center").toLowerCase();
 
   const strokeJoinStyle = "round";
 
@@ -232,7 +247,7 @@ function createKonvaTextShape(node, shapeParams, color, strokeColor, strokeWidth
     lineHeight,
     fontStyle,
     textDecoration,
-    align: "center"
+    align: ["left", "center", "right"].includes(textAlign) ? textAlign : "center"
   };
 
   const fillText = new Konva.Text({
@@ -337,8 +352,14 @@ export function updateKonvaShape(node, value = null) {
   const state = node.konvaState;
   const properties = node.properties || {};
 
-  const shapeType = value?.shape_type || properties.shape_type || "circle";
-  const shapeColor = value?.shape_color || properties.shape_color || "#FF0000";
+  const modeSelectionValue =
+    value?.mode_selection ??
+    properties.mode_selection ??
+    value?.shape_type ??
+    properties.shape_type ??
+    DEFAULT_MODE_SELECTION;
+  const shapeType = modeToShapeType(modeSelectionValue);
+  const shapeColor = value?.shape_color || properties.shape_color || "#0f98b3";
   const strokeColor = value?.stroke_color || properties.stroke_color || "#FFFFFF";
   const strokeWidth = value?.stroke_width !== undefined ? parseInt(value.stroke_width) : parseInt(properties.stroke_width || 0);
   let storedState = null;
@@ -381,8 +402,13 @@ export function updateKonvaShape(node, value = null) {
     !state.shape ||
     state.shape.shapeType !== shapeType ||
     state.shape.shapeParamsHash !== shapeParamsStr ||
-    (state.shape.lastStrokeWidth !== undefined && state.shape.lastStrokeWidth !== strokeWidth);
-  const baseSize = Math.min(state.stage.width(), state.stage.height()) * 0.25;
+    (state.shape.lastStrokeWidth !== undefined && state.shape.lastStrokeWidth !== strokeWidth) ||
+    (state.shape.lastShapeColor !== undefined && normalizeColor(state.shape.lastShapeColor) !== normalizeColor(shapeColor)) ||
+    (state.shape.lastStrokeColor !== undefined && normalizeColor(state.shape.lastStrokeColor) !== normalizeColor(strokeColor));
+  // 记录基础形状大小，用于前后端保持一致
+  const baseSize = getBaseShapeSize(properties);
+  node.konvaState.baseSize = baseSize;
+  node.konvaState.canvasScaleFactor = CANVAS_SCALE_FACTOR;
 
   let shape = state.shape;
   if (needsRebuild) {
@@ -403,9 +429,14 @@ export function updateKonvaShape(node, value = null) {
     newShape.shapeType = shapeType;
     newShape.shapeParamsHash = shapeParamsStr;
     newShape.lastStrokeWidth = strokeWidth; // 存储当前描边宽度
+    newShape.lastShapeColor = shapeColor; // 存储当前形状颜色
+    newShape.lastStrokeColor = strokeColor; // 存储当前描边颜色
     state.layer.add(newShape);
     state.shape = newShape;
     shape = newShape;
+
+    // 恢复之前保存的状态
+    restoreShapeState(node);
   } else if (shape) {
     shape.children?.forEach(child => {
       const applyFill = typeof child.fill === "function";
@@ -430,8 +461,10 @@ export function updateKonvaShape(node, value = null) {
         if (applyStrokeWidth) child.strokeWidth(strokeWidth * STROKE_WIDTH_COMPENSATION);
       }
     });
-    // 更新存储的描边宽度
+    // 更新存储的描边宽度和颜色
     shape.lastStrokeWidth = strokeWidth;
+    shape.lastShapeColor = shapeColor;
+    shape.lastStrokeColor = strokeColor;
   }
 
   if (shape) {

@@ -21,8 +21,8 @@
 4. **交互式编辑**：使用画布界面定位、缩放和旋转图层
 5. **生成输出**：将输出连接到工作流进行进一步处理
 
-### XIS_CreateShape 快速入门
-1. **添加 XIS_CreateShape 节点**：位于 `XISER_Nodes/Visual_Editing` 类别
+### XIS_ShapeAndText 快速入门
+1. **添加 XIS_ShapeAndText 节点**：位于 `XISER_Nodes/Visual_Editing` 类别
 2. **选择形状类型**：从圆形、多边形、星形、心形等选择
 3. **自定义外观**：设置颜色、描边和透明度
 4. **应用变换**：使用交互式画布进行定位和缩放
@@ -123,7 +123,7 @@
 
 ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
-#### XIS_CreateShape
+#### XIS_ShapeAndText
 - **功能**：使用交互控制生成几何形状
 - **特性**：
   - 多种形状类型：圆形、多边形、星形、心形、花朵、螺旋、太阳爆发、正方形
@@ -135,8 +135,8 @@
   - 分离的形状图像、蒙版和背景输出
   - 带有交互画布小部件的实时预览
 
-![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
-![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
+![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
+![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
 
 > **字体使用方式**：将 `.ttf/.otf/.ttc` 文件放入 `custom_nodes/ComfyUI_XISER_Nodes/fonts` 目录，在 Text 模式面板点击「刷新字体」即可加载；所有文本参数会写入 `shape_params`，批量模式同样生效。
 
@@ -278,7 +278,7 @@
 - **PSD导入**：导入PSD文件并提取图层
 - **实时预览**：立即查看变换效果
 
-### XIS_CreateShape 操作指南
+### XIS_ShapeAndText 操作指南
 
 **形状创建：**
 - **形状类型**：圆形、多边形、星形、心形、花朵、螺旋、太阳爆发、正方形
@@ -312,7 +312,7 @@
 1. XIS_CoordinatePath生成坐标路径
 2. XIS_CurveEditor创建分布曲线
 3. XIS_MultiPointGradient生成渐变
-4. XIS_CreateShape创建几何形状
+4. XIS_ShapeAndText创建几何形状
 
 ---
 

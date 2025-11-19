@@ -11,7 +11,6 @@ import { FlowerGenerator } from './flower.js';
 import { WavyGenerator } from './wavy.js';
 import { SpiralGenerator } from './spiral.js';
 import { SunburstGenerator } from './sunburst.js';
-import { SquareGenerator } from './square.js';
 import { TextGenerator } from './text.js';
 
 export class ShapeRegistry {
@@ -87,7 +86,6 @@ ShapeRegistry.register(FlowerGenerator);
 ShapeRegistry.register(WavyGenerator);
 ShapeRegistry.register(SpiralGenerator);
 ShapeRegistry.register(SunburstGenerator);
-ShapeRegistry.register(SquareGenerator);
 ShapeRegistry.register(TextGenerator);
 
 export default ShapeRegistry;

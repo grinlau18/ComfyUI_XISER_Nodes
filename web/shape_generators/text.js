@@ -111,6 +111,7 @@ const DEFAULT_TEXT_PARAMS = {
   font_style: "normal",
   underline: false,
   uppercase: true,
+  text_align: "center",
 };
 
 function createField(label, element) {
@@ -196,7 +197,7 @@ export class TextGenerator {
       params.content = textarea.value;
       commit();
     });
-    container.appendChild(createField("文本内容", textarea));
+  container.appendChild(createField("Text Content", textarea));
 
     const fontRow = document.createElement("div");
     fontRow.style.display = "flex";
@@ -213,7 +214,7 @@ export class TextGenerator {
 
     const defaultOption = document.createElement("option");
     defaultOption.value = "";
-    defaultOption.textContent = "默认字体";
+  defaultOption.textContent = "Default Font";
     fontSelect.appendChild(defaultOption);
 
     fontSelect.addEventListener("change", async () => {
@@ -229,7 +230,7 @@ export class TextGenerator {
     fontRow.appendChild(fontSelect);
 
     const refreshBtn = document.createElement("button");
-    refreshBtn.textContent = "刷新字体";
+  refreshBtn.textContent = "Refresh Fonts";
     refreshBtn.style.padding = "6px 10px";
     refreshBtn.style.borderRadius = "4px";
     refreshBtn.style.border = "1px solid #555";
@@ -241,24 +242,24 @@ export class TextGenerator {
     });
     fontRow.appendChild(refreshBtn);
 
-    container.appendChild(createField("字体文件（放入 /fonts 目录）", fontRow));
+  container.appendChild(createField("Font Files (place under /fonts)", fontRow));
 
     const numericGrid = document.createElement("div");
     numericGrid.style.display = "grid";
     numericGrid.style.gridTemplateColumns = "repeat(auto-fit, minmax(120px, 1fr))";
     numericGrid.style.gap = "10px";
 
-    numericGrid.appendChild(createField("字体大小", createNumberInput(params.font_size, 16, 1024, 1, (val) => {
+  numericGrid.appendChild(createField("Font Size", createNumberInput(params.font_size, 16, 1024, 1, (val) => {
       params.font_size = Math.max(16, Math.min(1024, val));
       commit();
     })));
 
-    numericGrid.appendChild(createField("字间距 (px)", createNumberInput(params.letter_spacing, -20, 200, 0.5, (val) => {
+  numericGrid.appendChild(createField("Letter Spacing (px)", createNumberInput(params.letter_spacing, -20, 200, 0.5, (val) => {
       params.letter_spacing = val;
       commit();
     })));
 
-    numericGrid.appendChild(createField("行距 (倍数)", createNumberInput(params.line_spacing, 0.5, 3, 0.1, (val) => {
+  numericGrid.appendChild(createField("Line Spacing (x)", createNumberInput(params.line_spacing, 0.5, 3, 0.1, (val) => {
       params.line_spacing = Math.max(0.5, val);
       commit();
     })));
@@ -270,19 +271,19 @@ export class TextGenerator {
     toggleRow.style.flexWrap = "wrap";
     toggleRow.style.gap = "8px";
 
-    const boldBtn = createToggleButton("粗体", params.font_weight === "bold", (val) => {
+  const boldBtn = createToggleButton("Bold", params.font_weight === "bold", (val) => {
       params.font_weight = val ? "bold" : "normal";
       commit();
     });
-    const italicBtn = createToggleButton("斜体", params.font_style === "italic", (val) => {
+  const italicBtn = createToggleButton("Italic", params.font_style === "italic", (val) => {
       params.font_style = val ? "italic" : "normal";
       commit();
     });
-    const underlineBtn = createToggleButton("下划线", Boolean(params.underline), (val) => {
+  const underlineBtn = createToggleButton("Underline", Boolean(params.underline), (val) => {
       params.underline = val;
       commit();
     });
-    const uppercaseBtn = createToggleButton("大写", Boolean(params.uppercase), (val) => {
+  const uppercaseBtn = createToggleButton("Uppercase", Boolean(params.uppercase), (val) => {
       params.uppercase = val;
       commit();
     });
@@ -293,10 +294,55 @@ export class TextGenerator {
     toggleRow.appendChild(uppercaseBtn);
     container.appendChild(toggleRow);
 
+    const alignmentRow = document.createElement("div");
+    alignmentRow.style.display = "flex";
+    alignmentRow.style.gap = "8px";
+
+    const alignmentOptions = [
+    { label: "Align Left", value: "left" },
+    { label: "Align Center", value: "center" },
+    { label: "Align Right", value: "right" }
+    ];
+
+    let currentAlign = (params.text_align || "center").toLowerCase();
+    if (!["left", "center", "right"].includes(currentAlign)) {
+      currentAlign = "center";
+    }
+
+    const updateAlignButtons = () => {
+      alignmentRow.querySelectorAll("button").forEach((btn) => {
+        const active = btn.dataset.align === currentAlign;
+        btn.style.background = active ? "#2f80ed" : "rgba(0,0,0,0.4)";
+      });
+    };
+
+    alignmentOptions.forEach(({ label, value }) => {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.dataset.align = value;
+      btn.style.padding = "6px 10px";
+      btn.style.borderRadius = "4px";
+      btn.style.border = "1px solid #555";
+      btn.style.cursor = "pointer";
+      btn.style.color = "#fff";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (currentAlign !== value) {
+          currentAlign = value;
+          params.text_align = value;
+          updateAlignButtons();
+          commit();
+        }
+      });
+      alignmentRow.appendChild(btn);
+    });
+    updateAlignButtons();
+  container.appendChild(createField("Text Alignment", alignmentRow));
+
     const hint = document.createElement("div");
     hint.style.fontSize = "11px";
     hint.style.color = "#aaa";
-    hint.innerHTML = "提示：将 .ttf/.otf 文件放入 <code>custom_nodes/ComfyUI_XISER_Nodes/fonts</code> 后点击刷新字体。";
+  hint.innerHTML = "Tip: Drop .ttf/.otf files into <code>custom_nodes/ComfyUI_XISER_Nodes/fonts</code> and click Refresh Fonts.";
     container.appendChild(hint);
 
     async function loadFonts(force = false) {
@@ -304,7 +350,7 @@ export class TextGenerator {
       fontSelect.innerHTML = "";
       const defaultOpt = document.createElement("option");
       defaultOpt.value = "";
-      defaultOpt.textContent = "默认字体";
+      defaultOpt.textContent = "Default Font";
       fontSelect.appendChild(defaultOpt);
 
       try {
@@ -312,7 +358,7 @@ export class TextGenerator {
         if (!fonts.length) {
           const emptyOpt = document.createElement("option");
           emptyOpt.value = "";
-          emptyOpt.textContent = "未找到字体文件";
+          emptyOpt.textContent = "No font files found";
           fontSelect.appendChild(emptyOpt);
         } else {
           fonts.forEach((font) => {
@@ -325,7 +371,7 @@ export class TextGenerator {
       } catch (err) {
         const errorOpt = document.createElement("option");
         errorOpt.value = "";
-        errorOpt.textContent = "字体加载失败";
+        errorOpt.textContent = "Font load failed";
         fontSelect.appendChild(errorOpt);
       } finally {
         fontSelect.disabled = false;

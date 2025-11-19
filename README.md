@@ -21,8 +21,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 4. **Interactive Editing**: Use the canvas interface to position, scale, and rotate layers
 5. **Generate Output**: Connect the output to your workflow for further processing
 
-### Getting Started with XIS_CreateShape
-1. **Add XIS_CreateShape Node**: Located in `XISER_Nodes/Visual_Editing`
+### Getting Started with XIS_ShapeAndText
+1. **Add XIS_ShapeAndText Node**: Located in `XISER_Nodes/Visual_Editing`
 2. **Choose Shape Type**: Select from circle, polygon, star, heart, etc.
 3. **Customize Appearance**: Set colors, stroke, and transparency
 4. **Apply Transformations**: Use the interactive canvas for positioning and scaling
@@ -124,10 +124,10 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
-#### XIS_CreateShape
+#### XIS_ShapeAndText
 - **Function**: Generate geometric shapes with interactive controls
 - **Features**:
-  - Multiple shape types: circle, polygon, star, heart, flower, spiral, sunburst, square
+  - Multiple shape types: circle / sector / doughnut, polygon (with rounded corners), star, heart, flower, spiral, sunburst, text
   - **Text mode**: convert custom text into vector shapes using fonts from `custom_nodes/ComfyUI_XISER_Nodes/fonts`, with controls for content, font, spacing, weight, italic, and underline
   - Configurable colors, stroke, transparency, and background
   - Advanced transformations: rotation, scaling, skewing, positioning
@@ -136,8 +136,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Separate shape image, mask, and background outputs
   - Real-time preview with interactive canvas widget
 
-![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
-![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
+![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
+![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
 
 ##### Text Mode & Fonts
 - Switch the shape type to **Text** to unlock a dedicated control panel with content input, font selection, letter/line spacing, bold, italic, underline and uppercase toggles.
@@ -301,10 +301,10 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 - **PSD Import**: Import PSD files with layer extraction
 - **Real-time Preview**: See transformations immediately
 
-### XIS_CreateShape Operation Guide
+### XIS_ShapeAndText Operation Guide
 
 **Shape Creation:**
-- **Shape Types**: Circle, polygon, star, heart, flower, spiral, sunburst, square
+- **Shape Types**: Circle / sector / doughnut, polygon (supports rounded corners), star, heart, flower, spiral, sunburst, text
 - **Interactive Canvas**: Real-time preview with interactive widget
 - **Batch Processing**: Create multiple shapes with shape data input
 
@@ -335,7 +335,7 @@ Using visual editing nodes:
 1. Generate coordinate paths with XIS_CoordinatePath
 2. Create distribution curves with XIS_CurveEditor
 3. Generate gradients with XIS_MultiPointGradient
-4. Create geometric shapes with XIS_CreateShape
+4. Create geometric shapes with XIS_ShapeAndText
 
 ---
 

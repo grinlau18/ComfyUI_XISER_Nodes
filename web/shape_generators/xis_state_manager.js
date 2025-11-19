@@ -1,6 +1,6 @@
 /**
  * @file xis_state_manager.js
- * @description XIS_CreateShape 节点状态管理模块
+ * @description XIS_ShapeAndText 节点状态管理模块
  * @author grinlau18
  */
 
@@ -199,6 +199,14 @@ export function updateCanvasBackground(node) {
 
   node.konvaState.background.fill(backgroundColor);
   node.konvaState.layer.batchDraw();
+
+  if (node.konvaState.drawGrid) {
+    node.konvaState.drawGrid(backgroundColor);
+    if (node.konvaState.gridLayer) {
+      node.konvaState.gridLayer.visible(node.konvaState.gridVisible !== false);
+      node.konvaState.gridLayer.batchDraw();
+    }
+  }
 
   log.info(`Node ${node.id} background updated to: ${backgroundColor}`);
 }

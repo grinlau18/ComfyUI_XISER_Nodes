@@ -7,7 +7,7 @@
  * Logging utility for the XISER_Canvas node with configurable log levels.
  * @type {Object}
  */
-const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'error'; // Default to 'debug' if not specified
+const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'debug'; // Default to 'debug' if not specified
 export const log = {
   debug: (message, ...args) => {
     if (LOG_LEVEL === 'debug') {
@@ -48,8 +48,13 @@ const clampValue = (value, min, max, fallback = 0) => {
 };
 
 export function withAdjustmentDefaults(state = {}) {
+  const orderVal = Number.isFinite(state?.order) ? state.order : undefined;
+  const filenameVal = typeof state?.filename === 'string' ? state.filename : undefined;
   return {
     ...state,
+    visible: state?.visible !== false, // 默认可见，兼容旧数据
+    order: orderVal,
+    filename: filenameVal,
     brightness: clampValue(state?.brightness ?? 0, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, 0),
     contrast: clampValue(state?.contrast ?? 0, CONTRAST_RANGE.min, CONTRAST_RANGE.max, 0),
     saturation: clampValue(state?.saturation ?? 0, SATURATION_RANGE.min, SATURATION_RANGE.max, 0),
@@ -81,24 +86,41 @@ export function createNodeState(nodeId, app) {
 
   const imagePaths = Array.isArray(node.properties.ui_config.image_paths) 
     ? node.properties.ui_config.image_paths.slice() : [];
-
+  const persistedStates = Array.isArray(node.properties.ui_config.image_states)
+    ? node.properties.ui_config.image_states.map((s) => withAdjustmentDefaults(s || {}))
+    : Array.isArray(node.properties.image_states)
+    ? node.properties.image_states.map((s) => withAdjustmentDefaults(s || {}))
+    : null;
+  const persistedLayerOrder = Array.isArray(node.properties.ui_config.layer_order)
+    ? node.properties.ui_config.layer_order
+    : null;
 
   return {
     nodeId,
     imageNodes: new Array(imagePaths.length).fill(null), // Initialize with nulls
     defaultLayerOrder: [],
-    initialStates: imagePaths.map(() => withAdjustmentDefaults({
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      skewX: 0,
-      skewY: 0,
-      brightness: 0,
-      contrast: 0,
-      saturation: 0,
-    })), // Default states
+    initialStates: persistedStates && persistedStates.length === imagePaths.length
+      ? persistedStates.map((s, idx) => withAdjustmentDefaults({
+          ...s,
+          order: Array.isArray(persistedLayerOrder) && persistedLayerOrder.length === imagePaths.length
+            ? persistedLayerOrder[idx]
+            : (Number.isFinite(s?.order) ? s.order : idx),
+          filename: s?.filename || imagePaths[idx],
+        }))
+      : imagePaths.map((path, idx) => withAdjustmentDefaults({
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          skewX: 0,
+          skewY: 0,
+          brightness: 0,
+          contrast: 0,
+          saturation: 0,
+          order: idx,
+          filename: path,
+        })), // Default states
     transformer: null,
     lastImagePaths: imagePaths.slice(),
     lastImagePathsHash: null,
@@ -196,6 +218,17 @@ export function initializeCanvasProperties(node, nodeState) {
   let imagePaths = Array.isArray(uiConfig.image_paths) 
     ? uiConfig.image_paths.filter(p => typeof p === 'string' && p.trim().length > 0) 
     : [];
+  // Restore persisted image_states if present in ui_config
+  if (Array.isArray(uiConfig.image_states) && uiConfig.image_states.length) {
+    const layerOrder = Array.isArray(uiConfig.layer_order) ? uiConfig.layer_order : null;
+    nodeState.initialStates = uiConfig.image_states.map((s, idx) => withAdjustmentDefaults({
+      ...s,
+      order: Array.isArray(layerOrder) && layerOrder.length === uiConfig.image_states.length
+        ? layerOrder[idx]
+        : (Number.isFinite(s?.order) ? s.order : idx),
+      filename: s?.filename || imagePaths[idx],
+    }));
+  }
 
   let canvasColorValue =
     node.widgets?.find(w => w.name === 'canvas_color')?.value ||

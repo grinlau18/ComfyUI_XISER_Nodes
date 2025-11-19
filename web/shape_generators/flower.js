@@ -92,7 +92,7 @@ export class FlowerGenerator {
         // Petal count control
         const petalsDiv = document.createElement("div");
         petalsDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">花瓣数量:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Petal Count:</label>
             <input type="range" min="3" max="12" step="1"
                    value="${shapeParams.petals || 5}"
                    style="width: 100%;"
@@ -110,7 +110,7 @@ export class FlowerGenerator {
         const lengthDiv = document.createElement("div");
         lengthDiv.style.marginTop = "8px";
         lengthDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">花瓣长度:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Petal Length:</label>
             <input type="range" min="10" max="130" step="1"
                    value="${(shapeParams.petal_length || 0.5) * 100}"
                    style="width: 100%;"
