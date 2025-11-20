@@ -128,7 +128,7 @@ app.registerExtension({
       nodeState.firstImageDimensions = { width: 0, height: 0 };
       nodeState.imageNodes = [];
       nodeState.isInteracting = false;
-      nodeState.fileData = null;
+      nodeState.file_data = null;
       nodeState.pollIntervalId = null;
       nodeState.lastAutoSize = null;
       nodeState.layoutRaf = null;
@@ -843,7 +843,7 @@ app.registerExtension({
         const uiPayload = message?.ui || message || {};
         let states = uiPayload?.image_states || message?.image_states || [];
         let newImagePaths = [];
-        let fileData = message?.file_data || uiPayload?.file_data || null;
+        let file_data = message?.file_data || uiPayload?.file_data || null;
         const msgBoardWidth = uiPayload?.board_width ?? message?.board_width;
         const msgBoardHeight = uiPayload?.board_height ?? message?.board_height;
         const msgBorderWidth = uiPayload?.border_width ?? message?.border_width;
@@ -853,8 +853,8 @@ app.registerExtension({
           h: msgBoardHeight,
           bw: msgBorderWidth,
           fa: msgAutoSize,
-          fdw: fileData?.canvas?.width,
-          fdh: fileData?.canvas?.height,
+          fdw: file_data?.canvas?.width,
+          fdh: file_data?.canvas?.height,
         });
 
         /**
@@ -905,7 +905,7 @@ app.registerExtension({
           nodeState.lastImagePaths &&
           arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
           objectsEqual(states, nodeState.initialStates) &&
-          objectsEqual(fileData, nodeState.file_data) &&
+          objectsEqual(file_data, nodeState.file_data) &&
           canvasSig === nodeState.lastCanvasSig
         ) {
           return;
@@ -943,10 +943,10 @@ app.registerExtension({
           if (boardHeightWidget) boardHeightWidget.value = backendBoardHeight;
           if (borderWidthWidget) borderWidthWidget.value = backendBorderWidth;
           if (autoSizeWidget) autoSizeWidget.value = backendAutoSize;
-        } else if (toAutoSize(node.properties.ui_config.auto_size, 'off') === 'on' && fileData?.canvas?.width && fileData?.canvas?.height) {
+        } else if (toAutoSize(node.properties.ui_config.auto_size, 'off') === 'on' && file_data?.canvas?.width && file_data?.canvas?.height) {
           // Fallback: derive size from file_data when backend UI payload is missing dimensions
-          const fdWidth = Math.min(Math.max(toNumber(fileData.canvas.width, 1024), 256), 8192);
-          const fdHeight = Math.min(Math.max(toNumber(fileData.canvas.height, 1024), 256), 8192);
+          const fdWidth = Math.min(Math.max(toNumber(file_data.canvas.width, 1024), 256), 8192);
+          const fdHeight = Math.min(Math.max(toNumber(file_data.canvas.height, 1024), 256), 8192);
           node.properties.ui_config.board_width = fdWidth;
           node.properties.ui_config.board_height = fdHeight;
           node.setProperty('ui_config', node.properties.ui_config);
@@ -962,9 +962,9 @@ app.registerExtension({
         // Remember last canvas signature to avoid skipping future updates unintentionally
         nodeState.lastCanvasSig = canvasSig;
 
-        if (fileData?.layers?.length) {
-          log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(fileData)}`);
-          states = fileData.layers.map((layer, i) => {
+        if (file_data?.layers?.length) {
+          log.info(`Processing file_data for node ${node.id}: ${JSON.stringify(file_data)}`);
+          states = file_data.layers.map((layer, i) => {
             if (i >= newImagePaths.length) return null;
             return {
               x: layer.offset_x + borderWidth + (layer.width || 512) / 2,
@@ -974,8 +974,8 @@ app.registerExtension({
               rotation: layer.rotation || 0,
             };
           }).filter(s => s !== null);
-          if (!objectsEqual(nodeState.file_data, fileData)) {
-            nodeState.file_data = fileData;
+          if (!objectsEqual(nodeState.file_data, file_data)) {
+            nodeState.file_data = file_data;
           } else {
             nodeState.file_data = null;
           }

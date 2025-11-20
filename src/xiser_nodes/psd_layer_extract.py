@@ -58,7 +58,7 @@ class XIS_PSDLayerExtractor:
         @param {boolean} crop_by_canvas - If true, crops images to canvas size; if false, outputs full layer images
         @returns {tuple} (pack_images, file_data)
         @returns {list} pack_images - List of image tensors (XIS_IMAGES format)
-        @returns {dict} file_data - Metadata including canvas size and layer information
+        @returns {dict} file_data - Metadata including canvas size and layer information (width, height, position, transform)
         @throws {ValueError} If file is invalid or no valid layers are found
         """
         if not uploaded_file:
@@ -136,6 +136,8 @@ class XIS_PSDLayerExtractor:
                 # 初始化图层信息
                 layer_info = {
                     "name": layer.name,
+                    "width": layer_width,      # 图层实际宽度
+                    "height": layer_height,    # 图层实际高度
                     "offset_x": offset_x,
                     "offset_y": offset_y,
                     "rotation": 0.0,  # 默认旋转角度
