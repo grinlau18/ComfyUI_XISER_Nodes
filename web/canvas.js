@@ -251,8 +251,6 @@ app.registerExtension({
       let applyLayerOrderBound = () => {};
       let persistImageStatesBound = () => {};
 
-      
-
       const attachFilenamesToStates = () => {
         const filenames = Array.isArray(node.properties?.ui_config?.image_paths)
           ? node.properties.ui_config.image_paths
@@ -263,8 +261,6 @@ app.registerExtension({
           order: Number.isFinite(s?.order) ? s.order : idx,
         }));
       };
-
-      
 
       const setLayerVisibility = (layerIndex, visible) => {
         const nodeRef = nodeState.imageNodes?.[layerIndex];
@@ -278,10 +274,38 @@ app.registerExtension({
         uiElements.updateLayerPanel(selectLayer, deselectLayer, {
           onToggleVisibility: setLayerVisibility,
           onMoveLayer: moveLayer,
+          onToggleLock: setLayerLock,
         });
-        persistImageStatesBound();
-        updateHistory(nodeState, true);
       };
+
+      const setLayerLock = (layerIndex, locked) => {
+        const nodeRef = nodeState.imageNodes?.[layerIndex];
+        if (!nodeRef || !nodeState.initialStates[layerIndex]) return;
+        // 设置图层是否可被选中（锁定状态）
+        nodeRef.listening(!locked);
+        nodeState.initialStates[layerIndex] = withAdjustmentDefaults({
+          ...nodeState.initialStates[layerIndex],
+          locked,
+        });
+        nodeState.imageLayer?.batchDraw();
+        uiElements.updateLayerPanel(selectLayer, deselectLayer, {
+          onToggleVisibility: setLayerVisibility,
+          onMoveLayer: moveLayer,
+          onToggleLock: setLayerLock,
+        });
+        updateHistory(nodeState);
+      };
+
+      // 重新选中当前选中的图层，保持选中状态同步
+      if (nodeState.selectedLayer) {
+        const selectedIndex = nodeState.imageNodes.indexOf(nodeState.selectedLayer);
+        if (selectedIndex !== -1) {
+          selectLayer(nodeState, selectedIndex);
+        }
+      }
+
+      persistImageStatesBound();
+      updateHistory(nodeState, true);
 
       const moveLayer = (layerIndex, direction = 0) => {
         if (!Array.isArray(nodeState.imageNodes) || nodeState.imageNodes.length === 0) return;
@@ -327,7 +351,17 @@ app.registerExtension({
         uiElements.updateLayerPanel(selectLayer, deselectLayer, {
           onToggleVisibility: setLayerVisibility,
           onMoveLayer: moveLayer,
+          onToggleLock: setLayerLock,
         });
+
+        // 重新选中当前选中的图层，保持选中状态同步
+        if (nodeState.selectedLayer) {
+          const selectedIndex = nodeState.imageNodes.indexOf(nodeState.selectedLayer);
+          if (selectedIndex !== -1) {
+            selectLayer(nodeState, selectedIndex);
+          }
+        }
+
         updateHistory(nodeState, true);
         persistImageStatesBound();
 
@@ -471,18 +505,18 @@ app.registerExtension({
             scaledHeight,
           });
 
-        // Preserve existing image states
-        nodeState.initialStates = normalizeStateArray(nodeState.initialStates);
-        if (nodeState.initialStates.length < imagePaths.length) {
-          const newStates = Array(imagePaths.length - nodeState.initialStates.length)
-            .fill(null)
-            .map(() => createDefaultLayerState(boardWidth, boardHeight, borderWidth));
-          nodeState.initialStates = [...nodeState.initialStates, ...newStates];
-        } else if (nodeState.initialStates.length > imagePaths.length) {
-          nodeState.initialStates = normalizeStateArray(nodeState.initialStates.slice(0, imagePaths.length));
-        }
-        attachFilenamesToStates();
-        applyStates(nodeState);
+          // Preserve existing image states
+          nodeState.initialStates = normalizeStateArray(nodeState.initialStates);
+          if (nodeState.initialStates.length < imagePaths.length) {
+            const newStates = Array(imagePaths.length - nodeState.initialStates.length)
+              .fill(null)
+              .map(() => createDefaultLayerState(boardWidth, boardHeight, borderWidth));
+            nodeState.initialStates = [...nodeState.initialStates, ...newStates];
+          } else if (nodeState.initialStates.length > imagePaths.length) {
+            nodeState.initialStates = normalizeStateArray(nodeState.initialStates.slice(0, imagePaths.length));
+          }
+          attachFilenamesToStates();
+          applyStates(nodeState);
 
           persistImageStatesBound();
 
@@ -491,6 +525,7 @@ app.registerExtension({
           uiElements.updateLayerPanel(selectLayer, deselectLayer, {
             onToggleVisibility: setLayerVisibility,
             onMoveLayer: moveLayer,
+            onToggleLock: setLayerLock,
           });
           updateHistory(nodeState);
 
@@ -987,6 +1022,7 @@ app.registerExtension({
           uiElements.updateLayerPanel(selectLayer, deselectLayer, {
             onToggleVisibility: setLayerVisibility,
             onMoveLayer: moveLayer,
+            onToggleLock: setLayerLock,
           });
           updateHistory(nodeState);
           // 确保本次渲染后的叠加顺序立即持久化，避免下一次执行回退

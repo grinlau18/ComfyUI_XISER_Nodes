@@ -132,7 +132,11 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     }
     if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
-      selectLayer(nodeState, index);
+      // 检查图层是否被锁定
+      const isLocked = nodeState.initialStates?.[index]?.locked === true;
+      if (!isLocked) {
+        selectLayer(nodeState, index);
+      }
     }
   });
 
@@ -140,7 +144,11 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     const target = e.target;
     if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
-      selectLayer(nodeState, index);
+      // 检查图层是否被锁定
+      const isLocked = nodeState.initialStates?.[index]?.locked === true;
+      if (!isLocked) {
+        selectLayer(nodeState, index);
+      }
     }
   });
 
@@ -408,7 +416,10 @@ export function applyStates(nodeState) {
       node.scaleY(scaleY);
       node.rotation(rotation);
       node.visible(visible);
-      nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation });
+      // 设置图层是否可被选中（锁定状态）
+      const isLocked = state.locked === true;
+      node.listening(!isLocked);
+      nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation, locked: isLocked });
       if (typeof nodeState.applyLayerAdjustments === 'function') {
         try {
           nodeState.applyLayerAdjustments(i);

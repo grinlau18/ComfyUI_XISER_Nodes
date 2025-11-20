@@ -53,6 +53,7 @@ export function withAdjustmentDefaults(state = {}) {
   return {
     ...state,
     visible: state?.visible !== false, // 默认可见，兼容旧数据
+    locked: state?.locked === true, // 默认未锁定
     order: orderVal,
     filename: filenameVal,
     brightness: clampValue(state?.brightness ?? 0, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, 0),

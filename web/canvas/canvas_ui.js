@@ -169,25 +169,48 @@ export function initializeUI(node, nodeState, widgetContainer) {
         gap: 2px;
       }
       .xiser-layer-item-${nodeState.nodeId} .layer-order-button {
-        width: 18px;
-        height: 16px;
+        width: 20px;
+        height: 18px;
         background: rgba(255,255,255,0.08);
         color: #fff;
         border: 1px solid #555;
         border-radius: 3px;
         padding: 0;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .xiser-layer-item-${nodeState.nodeId} .layer-order-button:hover {
         background: rgba(255,255,255,0.18);
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-lock {
+        background: transparent;
+        border: none;
+        color: #ffffff5e;
+        cursor: pointer;
+        padding: 2px 3px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-lock.locked {
+        color: #ffffffff;
+      }
+      .xiser-layer-item-${nodeState.nodeId} .layer-lock:hover {
+        background-color: rgba(255,255,255,0.12);
       }
       .xiser-layer-item-${nodeState.nodeId} .layer-visibility {
         background: transparent;
         border: none;
         color: #fff;
         cursor: pointer;
-        padding: 3px 4px;
+        padding: 2px 3px;
         border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .xiser-layer-item-${nodeState.nodeId} .layer-visibility.off {
         opacity: 0.5;
@@ -420,7 +443,14 @@ export function initializeUI(node, nodeState, widgetContainer) {
     const header = document.createElement("div");
     header.className = `xiser-layer-panel-header-${nodeState.nodeId}`;
     header.innerHTML = `
-      <span>🏞️ Layers</span>
+      <span>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+          <path d="M4 8L12 4L20 8L12 12L4 8Z"></path>
+          <path d="M4 12L12 16L20 12"></path>
+          <path d="M4 16L12 20L20 16"></path>
+        </svg>
+        Layers
+      </span>
       <span>&nbsp;▾</span>
     `;
 
@@ -457,9 +487,10 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @param {Object} actions - Extra actions for layer item controls.
    * @param {Function} actions.onToggleVisibility - Toggle visibility handler.
    * @param {Function} actions.onMoveLayer - Reorder handler.
+   * @param {Function} actions.onToggleLock - Toggle lock handler.
    */
   function updateLayerPanel(selectLayer, deselectLayer, actions = {}) {
-    const { onToggleVisibility, onMoveLayer } = actions;
+    const { onToggleVisibility, onMoveLayer, onToggleLock } = actions;
 
     // Find the content container
     const content = layerPanel.querySelector(`.xiser-layer-panel-content-${nodeState.nodeId}`);
@@ -488,6 +519,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       let layerName = `Layer ${originalIndex + 1}`;
       const layerData = layers[originalIndex];
       const isVisible = nodeState.initialStates?.[originalIndex]?.visible !== false;
+      const isLocked = nodeState.initialStates?.[originalIndex]?.locked === true;
       const layerId = layerIds[originalIndex] || originalIndex.toString();
 
       if (layerData?.name) {
@@ -509,12 +541,27 @@ export function initializeUI(node, nodeState, widgetContainer) {
       // 创建图层列表项内容
       item.innerHTML = `
         <div class="layer-controls">
-          <button class="layer-order-button" data-dir="1" title="上移">▲</button>
-          <button class="layer-order-button" data-dir="-1" title="下移">▼</button>
+          <button class="layer-order-button" data-dir="1" title="上移">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M18.2929 15.2893C18.6834 14.8988 18.6834 14.2656 18.2929 13.8751L13.4007 8.98766C12.6195 8.20726 11.3537 8.20757 10.5729 8.98835L5.68257 13.8787C5.29205 14.2692 5.29205 14.9024 5.68257 15.2929C6.0731 15.6835 6.70626 15.6835 7.09679 15.2929L11.2824 11.1073C11.673 10.7168 12.3061 10.7168 12.6966 11.1073L16.8787 15.2893C17.2692 15.6798 17.9024 15.6798 18.2929 15.2893Z"/>
+            </svg>
+          </button>
+          <button class="layer-order-button" data-dir="-1" title="下移">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+              <path d="M5.70711 9.71069C5.31658 10.1012 5.31658 10.7344 5.70711 11.1249L10.5993 16.0123C11.3805 16.7927 12.6463 16.7924 13.4271 16.0117L18.3174 11.1213C18.708 10.7308 18.708 10.0976 18.3174 9.70708C17.9269 9.31655 17.2937 9.31655 16.9032 9.70708L12.7176 13.8927C12.3271 14.2833 11.6939 14.2832 11.3034 13.8927L7.12132 9.71069C6.7308 9.32016 6.09763 9.32016 5.70711 9.71069Z"/>
+            </svg>
+          </button>
         </div>
         <span class="layer-name">${layerName}</span>
+        <button class="layer-lock ${isLocked ? 'locked' : ''}" data-index="${originalIndex}" title="${isLocked ? '解锁' : '锁定'}">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            ${isLocked ? '<path d="M18 8H17V6C17 3.24 14.76 1 12 1C9.24 1 7 3.24 7 6V8H6C4.9 8 4 8.9 4 10V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V10C20 8.9 19.1 8 18 8ZM12 17C10.9 17 10 16.1 10 15C10 13.9 10.9 13 12 13C13.1 13 14 13.9 14 15C14 16.1 13.1 17 12 17ZM15.1 8H8.9V6C8.9 4.29 10.29 2.9 12 2.9C13.71 2.9 15.1 4.29 15.1 6V8Z"/>' : '<path d="M18 8H17V6C17 3.24 14.76 1 12 1C9.24 1 7 3.24 7 6V8H6C4.9 8 4 8.9 4 10V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V10C20 8.9 19.1 8 18 8ZM12 17C10.9 17 10 16.1 10 15C10 13.9 10.9 13 12 13C13.1 13 14 13.9 14 15C14 16.1 13.1 17 12 17ZM15.1 8H8.9V6C8.9 4.29 10.29 2.9 12 2.9C13.71 2.9 15.1 4.29 15.1 6V8Z"/>'}
+          </svg>
+        </button>
         <button class="layer-visibility ${isVisible ? 'on' : 'off'}" data-index="${originalIndex}" title="显示/隐藏">
-          ${isVisible ? '👁' : '🚫'}
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+            ${isVisible ? '<path d="M0 8L3.07945 4.30466C4.29638 2.84434 6.09909 2 8 2C9.90091 2 11.7036 2.84434 12.9206 4.30466L16 8L12.9206 11.6953C11.7036 13.1557 9.90091 14 8 14C6.09909 14 4.29638 13.1557 3.07945 11.6953L0 8ZM8 11C9.65685 11 11 9.65685 11 8C11 6.34315 9.65685 5 8 5C6.34315 5 5 6.34315 5 8C5 9.65685 6.34315 11 8 11Z"/>' : '<path fill-rule="evenodd" clip-rule="evenodd" d="M16 16H13L10.8368 13.3376C9.96488 13.7682 8.99592 14 8 14C6.09909 14 4.29638 13.1557 3.07945 11.6953L0 8L3.07945 4.30466C3.14989 4.22013 3.22229 4.13767 3.29656 4.05731L0 0H3L16 16ZM5.35254 6.58774C5.12755 7.00862 5 7.48941 5 8C5 9.65685 6.34315 11 8 11C8.29178 11 8.57383 10.9583 8.84053 10.8807L5.35254 6.58774Z"/><path d="M16 8L14.2278 10.1266L7.63351 2.01048C7.75518 2.00351 7.87739 2 8 2C9.90091 2 11.7036 2.84434 12.9206 4.30466L16 8Z"/>'}
+          </svg>
         </button>
         <span class="layer-adjust-icon" data-index="${originalIndex}">
           <svg viewBox="0 0 48 48" width="14" height="14" fill="#ffffff">
@@ -527,6 +574,16 @@ export function initializeUI(node, nodeState, widgetContainer) {
       item.dataset.layerId = layerId;
       content.appendChild(item);
       nodeState.layerItems.push(item);
+
+      // 锁定/解锁
+      const lockBtn = item.querySelector('.layer-lock');
+      lockBtn?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (typeof onToggleLock === 'function') {
+          const currentLocked = nodeState.initialStates?.[originalIndex]?.locked === true;
+          onToggleLock(originalIndex, !currentLocked);
+        }
+      });
 
       // 显示/隐藏
       const visibilityBtn = item.querySelector('.layer-visibility');
