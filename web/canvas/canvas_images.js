@@ -130,6 +130,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     }
   });
   nodeState.imageNodes = new Array(validImagePaths.length).fill(null);
+  nodeState.imageRefs = new Array(validImagePaths.length).fill(null);
   if (nodeState.imageLayer) {
     if (nodeState.adjustments?.detachIcon) {
       try {
@@ -167,9 +168,12 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     brightness: states[i]?.brightness,
     contrast: states[i]?.contrast,
     saturation: states[i]?.saturation,
+    visible: states[i]?.visible,
+    locked: states[i]?.locked,
   }));
 
   const images = validImagePaths.map(path => ({ filename: path, subfolder: "xiser_canvas", type: "output", mime_type: "image/png" }));
+  nodeState.imageRefs = images.slice();
   if (uiElements && uiElements.updateStatusText) {
     uiElements.updateStatusText(`Loading images... 0/${images.length}`, "#fff");
   } else {
@@ -294,6 +298,10 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           filename: images[index].filename,
           visible: state.visible !== false,
         });
+        const ref = nodeState.imageRefs?.[index];
+        if (ref) {
+          konvaImg.fileRef = ref;
+        }
         nodeState.imageLayer.add(konvaImg);
         nodeState.imageNodes[index] = konvaImg;
         nodeState.initialStates[index] = withAdjustmentDefaults({
@@ -484,6 +492,23 @@ export function clearNodeCache(nodeId) {
   if (globalLoadedImageUrls.has(nodeId)) {
     globalLoadedImageUrls.get(nodeId).clear();
     globalLoadedImageUrls.delete(nodeId);
+  }
+}
+
+/**
+ * Invalidates a cached image for a specific node so the next load request fetches it anew.
+ * @param {string|number} nodeId - Identifier for the node whose cache should be affected.
+ * @param {string} filename - The cached filename/reference to invalidate.
+ */
+export function invalidateCachedImage(nodeId, filename) {
+  if (!nodeId || !filename) return;
+  const imageCache = globalImageCache.get(nodeId);
+  const loadedImageUrls = globalLoadedImageUrls.get(nodeId);
+  if (imageCache && imageCache.has(filename)) {
+    imageCache.delete(filename);
+  }
+  if (loadedImageUrls && loadedImageUrls.has(filename)) {
+    loadedImageUrls.delete(filename);
   }
 }
 

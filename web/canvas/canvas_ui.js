@@ -1,3 +1,6 @@
+import { invalidateCachedImage } from './canvas_images.js';
+import { persistImageStates } from './layer_store.js';
+
 /**
  * @fileoverview Manages UI components for the XISER_Canvas node, including buttons, modal, layer panel, and CSS styles.
  * @module canvas_ui
@@ -12,6 +15,7 @@
  */
 export function initializeUI(node, nodeState, widgetContainer) {
   const log = nodeState.log || console;
+  let cutoutButton;
 
   // Configurable button positions (px, at displayScale = 1)
   const BUTTON_POSITIONS = {
@@ -312,7 +316,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
    * @param {string} text - The text to display.
    * @param {string} color - The text color (optional).
    */
-  function updateStatusText(text, color) {
+  function updateStatusText(text, color, options = {}) {
     statusText.innerText = text;
     statusText.style.color = color || '#fff';
     statusText.classList.remove('hidden');
@@ -322,10 +326,166 @@ export function initializeUI(node, nodeState, widgetContainer) {
       clearTimeout(nodeState.statusTimeoutId);
     }
 
+    if (options.autoHide === false) {
+      return;
+    }
     // Set new timeout to hide after 3 seconds
     nodeState.statusTimeoutId = setTimeout(() => {
       statusText.classList.add('hidden');
     }, STATUS_AUTO_HIDE_TIMEOUT);
+  }
+
+  function buildCutoutPayload(fileRef) {
+    const payload = {
+      detail_method: 'VITMatte',
+      detail_erode: 4,
+      detail_dilate: 2,
+      black_point: 0.01,
+      white_point: 0.99,
+      process_detail: false,
+      max_megapixels: 2.0,
+      model: 'BiRefNet-general-epoch_244.pth',
+    };
+
+    if (fileRef?.filename) {
+      payload.filename = fileRef.filename;
+    }
+    payload.subfolder = fileRef?.subfolder ?? '';
+    if (fileRef?.type) {
+      payload.type = fileRef.type;
+    }
+    if (fileRef?.dataUrl) {
+      payload.image_data = fileRef.dataUrl;
+    }
+
+    return payload;
+  }
+
+  function applyCutoutToLayer(dataUrl, layerNode, layerIndex, originalRef, fileInfo) {
+    return new Promise((resolve, reject) => {
+      if (!layerNode) {
+        reject(new Error('图层未选中'));
+        return;
+      }
+      const img = new Image();
+      img.onload = () => {
+        layerNode.image(img);
+        layerNode.width(img.width);
+        layerNode.height(img.height);
+        const updatedRef = {
+          filename: originalRef?.filename,
+          subfolder: originalRef?.subfolder,
+          type: originalRef?.type,
+          dataUrl,
+        };
+        if (fileInfo) {
+          updatedRef.subfolder = fileInfo.subfolder ?? updatedRef.subfolder;
+          updatedRef.type = fileInfo.type || updatedRef.type;
+        }
+        layerNode.fileRef = updatedRef;
+        if (layerIndex >= 0 && Array.isArray(nodeState.imageRefs)) {
+          nodeState.imageRefs[layerIndex] = updatedRef;
+        }
+        if (layerIndex >= 0) {
+          const existing = nodeState.initialStates[layerIndex] || {};
+          const updatedState = {
+            ...existing,
+            filename: updatedRef.filename,
+            subfolder: updatedRef.subfolder,
+            order: existing.order ?? layerIndex,
+          };
+          nodeState.initialStates[layerIndex] = updatedState;
+          node.properties.image_states = nodeState.initialStates;
+          const imageStatesWidget = node.widgets?.find(w => w.name === 'image_states');
+          if (imageStatesWidget) {
+            imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+          }
+        }
+        if (!node.properties.ui_config) {
+          node.properties.ui_config = {};
+        }
+        const paths = Array.isArray(node.properties.ui_config.image_paths)
+          ? [...node.properties.ui_config.image_paths]
+          : [];
+        paths[layerIndex] = updatedRef.filename;
+        node.properties.ui_config.image_paths = paths;
+        node.properties.image_paths = paths;
+        if (typeof node.setProperty === 'function') {
+          node.setProperty('image_states', node.properties.image_states);
+          node.setProperty('ui_config', node.properties.ui_config);
+          node.setProperty('image_paths', node.properties.image_paths);
+        }
+        // Refresh caches for the updated image so reloads pick up the new bitmap.
+        invalidateCachedImage(nodeState.nodeId, updatedRef.filename);
+        nodeState.lastImagePathsHash = null;
+        persistImageStates(node, nodeState, node.widgets?.find(w => w.name === 'image_states'));
+        nodeState.imageLayer?.batchDraw();
+        resolve();
+      };
+      img.onerror = () => reject(new Error('无法加载抠图结果'));
+      img.src = dataUrl;
+    });
+  }
+
+  async function runCutoutOnSelectedLayer() {
+    if (nodeState.isProcessingCutout) {
+      updateStatusText('抠图正在执行...', '#ffc107');
+      return;
+    }
+    const selectedLayer = nodeState.selectedLayer;
+    if (!selectedLayer) {
+      updateStatusText('请先选中一个图层', '#f55');
+      return;
+    }
+    const layerIndex = nodeState.imageNodes.indexOf(selectedLayer);
+    if (layerIndex === -1) {
+      updateStatusText('图层索引无效', '#f55');
+      return;
+    }
+    const fileRef = selectedLayer.fileRef || nodeState.imageRefs?.[layerIndex];
+    if (!fileRef?.filename && !fileRef?.dataUrl) {
+      updateStatusText('无法获取图层来源', '#f00');
+      return;
+    }
+    const payload = buildCutoutPayload(fileRef);
+    nodeState.isProcessingCutout = true;
+    if (cutoutButton) {
+      cutoutButton.disabled = true;
+    }
+    updateStatusText('Extracting the main subject...', '#0cf', { autoHide: false });
+    try {
+      const response = await fetch('/xiser/cutout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+      const detail = result?.detail || result?.error || result?.message || response.statusText;
+      const url = result?.url ?? '';
+      const suggestion = result?.suggestion ? ` ${result.suggestion}` : '';
+      const baseText = detail && url ? `${detail}. Download: ${url}` : detail || 'Server error';
+      const instructionText = `${baseText}${suggestion}`;
+      throw new Error(instructionText);
+      }
+      if (!result) {
+        throw new Error('Invalid response from cutout service');
+      }
+      if (!result?.image) {
+        throw new Error(result?.error || '服务器未返回抠图结果');
+      }
+      await applyCutoutToLayer(result.image, selectedLayer, layerIndex, fileRef, result?.file_info);
+      updateStatusText('抠图完成', '#0f0');
+    } catch (error) {
+      const message = error?.message || '未知错误';
+      log.error(`Canvas cutout failed for node ${nodeState.nodeId}: ${message}`);
+      updateStatusText(`抠图失败：${message}`, '#f00');
+    } finally {
+      nodeState.isProcessingCutout = false;
+      if (cutoutButton) {
+        cutoutButton.disabled = false;
+      }
+    }
   }
 
   /**
@@ -349,6 +509,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
     const resetIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11 2L13 3.99545L12.9408 4.05474M13 18.0001L11 19.9108L11.0297 19.9417M12.9408 4.05474L11 6M12.9408 4.05474C12.6323 4.01859 12.3183 4 12 4C7.58172 4 4 7.58172 4 12C4 14.5264 5.17107 16.7793 7 18.2454M17 5.75463C18.8289 7.22075 20 9.47362 20 12C20 16.4183 16.4183 20 12 20C11.6716 20 11.3477 19.9802 11.0297 19.9417M13 22.0001L11.0297 19.9417" stroke="#fdfdfd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
     const undoIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g transform="scale(-1,1) translate(-24,0)"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.2929 4.29289C13.6834 3.90237 14.3166 3.90237 14.7071 4.29289L18.7071 8.29289C19.0976 8.68342 19.0976 9.31658 18.7071 9.70711L14.7071 13.7071C14.3166 14.0976 13.6834 14.0976 13.2929 13.7071C12.9024 13.3166 12.9024 12.6834 13.2929 12.2929L15.5858 10H10.5C8.567 10 7 11.567 7 13.5C7 15.433 8.567 17 10.5 17H13C13.5523 17 14 17.4477 14 18C14 18.5523 13.5523 19 13 19H10.5C7.46243 19 5 16.5376 5 13.5C5 10.4624 7.46243 8 10.5 8H15.5858L13.2929 5.70711C12.9024 5.31658 12.9024 4.68342 13.2929 4.29289Z" fill="#fdfdfd"></path></g></svg>`;
     const redoIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M13.2929 4.29289C13.6834 3.90237 14.3166 3.90237 14.7071 4.29289L18.7071 8.29289C19.0976 8.68342 19.0976 9.31658 18.7071 9.70711L14.7071 13.7071C14.3166 14.0976 13.6834 14.0976 13.2929 13.7071C12.9024 13.3166 12.9024 12.6834 13.2929 12.2929L15.5858 10H10.5C8.567 10 7 11.567 7 13.5C7 15.433 8.567 17 10.5 17H13C13.5523 17 14 17.4477 14 18C14 18.5523 13.5523 19 13 19H10.5C7.46243 19 5 16.5376 5 13.5C5 10.4624 7.46243 8 10.5 8H15.5858L13.2929 5.70711C12.9024 5.31658 12.9024 4.68342 13.2929 4.29289Z" fill="#fdfdfd"></path></svg>`;
+    const cutoutIcon = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 6L18 18M6 18L18 6" stroke="#fdfdfd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="6" cy="6" r="2.5" stroke="#fdfdfd" stroke-width="2"></circle><circle cx="6" cy="18" r="2.5" stroke="#fdfdfd" stroke-width="2"></circle><path d="M14 9L18 5M14 15L18 19" stroke="#fdfdfd" stroke-width="2" stroke-linecap="round"></path></svg>`;
 
     const instructionButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-instruction-button-${nodeState.nodeId}`, instructionIcon, 'Tips');
     instructionButton.onclick = () => {
@@ -375,11 +536,18 @@ export function initializeUI(node, nodeState, widgetContainer) {
       nodeState.redo();
     };
 
+    cutoutButton = createIconButton(`xiser-button-${nodeState.nodeId} xiser-cutout-button-${nodeState.nodeId}`, cutoutIcon, 'Cutout');
+    cutoutButton.title = '一键抠图';
+    cutoutButton.onclick = () => {
+      log.info(`Cutout button clicked for node ${nodeState.nodeId}`);
+      runCutoutOnSelectedLayer();
+    };
+
     const group = document.createElement('div');
     group.className = `xiser-button-group-${nodeState.nodeId}`;
-    group.append(undoButton, redoButton, resetButton, instructionButton);
+    group.append(cutoutButton, undoButton, redoButton, resetButton, instructionButton);
 
-    return { instructionButton, resetButton, undoButton, redoButton, buttonGroup: group };
+    return { instructionButton, resetButton, undoButton, redoButton, cutoutButton, buttonGroup: group };
   }
 
   /**
@@ -409,6 +577,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
             <li>Use the layer panel to select and reorder layers</li>
             <li>Selected layers are automatically brought to the top</li>
             <li>Deselect layers to restore original stacking order</li>
+            <li>Use the eye icon to toggle visibility and the arrow buttons to lock the desired stacking prior to execution</li>
           </ul>
         </li>
         <li><strong>Auto Size Feature:</strong> Enable "auto_size" to automatically adjust canvas dimensions to match the first image's size.</li>
@@ -419,6 +588,13 @@ export function initializeUI(node, nodeState, widgetContainer) {
             <li>Brightness (-100% to +100%) shifts exposure; Contrast (-100 to +100) compresses or expands tones.</li>
             <li>Saturation (-100 to +100) matches backend output: -100 yields monochrome, 0 restores original color, +100 doubles color intensity.</li>
             <li>Reset button restores all three sliders to their defaults for the active layer.</li>
+          </ul>
+        </li>
+        <li><strong>Cutout Tool:</strong>
+          <ul>
+            <li>Click the cutout icon (✂) to run the BiRefNet mask generator on the selected layer.</li>
+            <li>Confirm the preview, then execute downstream nodes; the masked result stays visible in the canvas and outputs.</li>
+            <li>If the required BiRefNet model is missing, follow the instructions in README.md to download it before using this feature.</li>
           </ul>
         </li>
         <li><strong>History & Undo:</strong> Use undo/redo buttons to navigate through layer transformation history.</li>

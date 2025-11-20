@@ -71,6 +71,15 @@
 
 **依赖项**：需要 `torch`、`PIL`、`numpy`、`opencv-python` 和 ComfyUI 核心库。
 
+### 抠图模型配置
+画布中的新抠图功能依赖 BiRefNet 蒙版模型，按以下步骤安装：
+
+1. 下载 `BiRefNet-general-epoch_244.pth` 检查点，并放入 `ComfyUI/models/BiRefNet/pth/`。可使用以下镜像：
+   - https://pan.baidu.com/s/12z3qUuqag3nqpN2NJ5pSzg?pwd=ek65
+   - https://drive.google.com/drive/folders/1s2Xe0cjq-2ctnJBR24563yMSCOu4CcxM
+2. 在 ComfyUI 所在环境中安装推理依赖：`pip install kornia==0.7.2 timm`
+3. 重启 ComfyUI，画布上的抠图按钮即可调用 BiRefNet 并将带透明区域的结果保存在界面与输出中。
+
 ---
 
 ## 节点分类概览
@@ -83,6 +92,8 @@
   - 自定义画布尺寸、边框和背景颜色
   - 拖拽、缩放、旋转图像操作，支持实时预览
   - 图层管理，自动置顶和堆叠顺序
+  - 支持图层显示/隐藏开关与手动叠放顺序调整
+  - 一键抠图（BiRefNet）允许在执行前生成带透明区域的图像
   - 精确图像合成的蒙版生成
   - 20步历史的撤销/重做功能
   - 自动尺寸功能，匹配第一张图像尺寸
@@ -214,6 +225,13 @@
   - 浮点数和整数滑块
   - 可配置范围和步长
 
+#### CreatePointsString
+- **功能**：将六组帧与强度对序列化为多行字符串
+- **特性**：
+  - 支持 frame_a~frame_f 与 intensity_a~intensity_f 的输入范围
+  - 输出格式化字符串，可用于时间轴提示或蒙版强度列表
+  - 适合快速描述关键帧型参数以在其他节点复用
+
 ### 🔧 工具节点
 
 #### XIS_ResizeToDivisible
@@ -247,6 +265,14 @@
 - **特性**：
   - 基于指定顺序重新排列图像
   - 支持批量图像处理
+
+---
+
+## 致谢
+
+- 交互画布部分基于 [Konva](https://konvajs.org/) 构建，感谢 Konva 团队提供稳定的 2D 图形 API。
+- 抠图功能依赖 [BiRefNet](https://github.com/tamzi/bi-ref-net)，感谢原作者与 tin2tin/2D_Asset_Generator 社区项目，并同时使用 `kornia` 与 `timm` 的推理支持。
+- 感谢 ComfyUI 与社区中所有自定义节点作者对多图层画布、历史记录等功能的持续投入。
 
 ---
 

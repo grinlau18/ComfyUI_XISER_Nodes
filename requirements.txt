@@ -2,3 +2,5 @@ opencv-python
 psd-tools
 shapely
 fonttools
+kornia==0.7.2
+timm

@@ -113,6 +113,29 @@ class XIS_PSDLayerExtractor:
         }
         canvas_width, canvas_height = psd.width, psd.height
 
+        # 生成空白画布图片（用于前端auto_size参考）
+        try:
+            # 创建透明空白图片张量
+            blank_image_tensor = torch.zeros((canvas_height, canvas_width, 4), dtype=torch.float32)
+            normalized_images.append(blank_image_tensor)
+
+            # 在file_data中添加空白画布图层信息
+            canvas_layer_info = {
+                "name": "Canvas Background",
+                "width": canvas_width,
+                "height": canvas_height,
+                "offset_x": 0,
+                "offset_y": 0,
+                "rotation": 0.0,
+                "scale_x": 1.0,
+                "scale_y": 1.0,
+                "is_canvas_background": True  # 标记为画布背景
+            }
+            file_data["layers"].insert(0, canvas_layer_info)
+            logger.info(f"Generated blank canvas image and layer info: {canvas_width}x{canvas_height}")
+        except Exception as e:
+            logger.warning(f"Failed to generate blank canvas image and layer info: {str(e)}")
+
         # 遍历图层
         for layer in psd:
             if not layer.is_visible() or not layer.has_pixels():

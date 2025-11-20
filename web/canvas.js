@@ -127,7 +127,9 @@ app.registerExtension({
       const nodeState = createNodeState(nodeId, app);
       nodeState.firstImageDimensions = { width: 0, height: 0 };
       nodeState.imageNodes = [];
+      nodeState.imageRefs = [];
       nodeState.isInteracting = false;
+      nodeState.isProcessingCutout = false;
       nodeState.file_data = null;
       nodeState.pollIntervalId = null;
       nodeState.lastAutoSize = null;
@@ -276,6 +278,8 @@ app.registerExtension({
           onMoveLayer: moveLayer,
           onToggleLock: setLayerLock,
         });
+        persistImageStates(node, nodeState, node.widgets?.find((w) => w.name === 'image_states'), syncWidgetValues);
+        updateHistory(nodeState);
       };
 
       const setLayerLock = (layerIndex, locked) => {
@@ -879,6 +883,32 @@ app.registerExtension({
           return JSON.stringify(obj1) === JSON.stringify(obj2);
         };
 
+        /**
+         * Strips metadata from a layer state so we only compare the transform/adjustment fields.
+         * @param {Object?} state - Layer state object.
+         * @returns {Object} Normalized state.
+         */
+        const normalizedTransformState = (state) => ({
+          x: state?.x,
+          y: state?.y,
+          scaleX: state?.scaleX,
+          scaleY: state?.scaleY,
+          rotation: state?.rotation,
+          skewX: state?.skewX,
+          skewY: state?.skewY,
+          brightness: state?.brightness,
+          contrast: state?.contrast,
+          saturation: state?.saturation,
+          visible: state?.visible,
+          order: state?.order,
+        });
+
+        const transformStateArraysEqual = (arr1, arr2) => {
+          if (!Array.isArray(arr1) && !Array.isArray(arr2)) return arr1 === arr2;
+          const normalize = (arr) => (Array.isArray(arr) ? arr.map(normalizedTransformState) : []);
+          return objectsEqual(normalize(arr1), normalize(arr2));
+        };
+
         // Extract image paths from message
         if (message?.image_paths) {
           if (typeof message.image_paths === 'string') {
@@ -900,16 +930,16 @@ app.registerExtension({
         }
 
         // Skip execution if all inputs haven't changed
-        if (
-          newImagePaths.length &&
-          nodeState.lastImagePaths &&
-          arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
-          objectsEqual(states, nodeState.initialStates) &&
-          objectsEqual(file_data, nodeState.file_data) &&
-          canvasSig === nodeState.lastCanvasSig
-        ) {
-          return;
-        }
+          if (
+            newImagePaths.length &&
+            nodeState.lastImagePaths &&
+            arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
+            transformStateArraysEqual(states, nodeState.initialStates) &&
+            objectsEqual(file_data, nodeState.file_data) &&
+            canvasSig === nodeState.lastCanvasSig
+          ) {
+            return;
+          }
 
         // If backend returns board dimensions (e.g., auto_size), sync widgets/properties before layout
         const toScalar = (val) => {
@@ -1051,7 +1081,6 @@ app.registerExtension({
             const originalHeight = imageNode.height() / (state.scaleY || 1);
             const actualCenterX = state.x - borderWidth;
             const actualCenterY = state.y - borderWidth;
-
             return {
               x: actualCenterX,
               y: actualCenterY,
@@ -1059,6 +1088,8 @@ app.registerExtension({
               scale_y: state.scaleY,
               rotation: state.rotation,
               image: imageNode.toDataURL(),
+              visible: state.visible !== false,
+              locked: state.locked === true,
             };
           });
 

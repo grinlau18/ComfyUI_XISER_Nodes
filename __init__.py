@@ -18,6 +18,7 @@ from .server_extension import (
     list_psd_files,
     get_available_fonts,
     serve_font_file,
+    cutout_image,
 )  # 导入处理函数
 
 # 导入节点映射
@@ -80,10 +81,11 @@ async def handle_color_change(request):
 # 注册路由
 try:
     PromptServer.instance.app.router.add_post("/xiser_color", handle_color_change)
+    PromptServer.instance.app.router.add_post("/xiser/cutout", cutout_image)
     PromptServer.instance.app.router.add_get("/custom/list_psd_files", list_psd_files)
     PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
     PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
-    print("[XISER] Successfully registered routes: /xiser_color, /custom/list_psd_files, /xiser/fonts")
+    print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts")
 except Exception as e:
     print("[XISER] Failed to register routes:", str(e))
 

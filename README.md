@@ -52,6 +52,15 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 **Dependencies**: Requires `torch`, `PIL`, `numpy`, `opencv-python`, and ComfyUI core libraries.
 
+### Cutout Model Setup
+The new cutout button in the canvas helper uses [BiRefNet](https://github.com/tamzi/bi-ref-net) to compute alpha masks. Follow these steps to activate it:
+
+1. Download the `BiRefNet-general-epoch_244.pth` checkpoint and place it in `ComfyUI/models/BiRefNet/pth/`. You can retrieve the file from the official mirrors:
+   - https://pan.baidu.com/s/12z3qUuqag3nqpN2NJ5pSzg?pwd=ek65
+   - https://drive.google.com/drive/folders/1s2Xe0cjq-2ctnJBR24563yMSCOu4CcxM
+2. Install the inference dependencies (if not already available) with `pip install kornia==0.7.2 timm` inside your ComfyUI environment.
+3. Restart ComfyUI; the canvas cutout button will now call BiRefNet and preserve the trimmed result in both the UI and node outputs.
+
 ---
 
 ## Key Features
@@ -83,6 +92,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Customizable canvas dimensions, borders, and background colors
   - Drag, scale, and rotate image operations with real-time preview
   - Layer management with automatic top positioning and stacking order
+  - Visible/hidden control for each layer plus manual reorder buttons for precise stacking
+  - One-click cutout tool powered by BiRefNet for generating masked composites before execution
   - Mask generation for precise image compositing
   - Undo/Redo functionality with 20-step history
   - Auto-size feature to match canvas dimensions to first image
@@ -90,7 +101,6 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - PSD file import support with layer extraction
   - Real-time transformation controls with independent scaling
   - Mouse wheel scaling and Alt+wheel rotation for precise control
-
 ![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
 ![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
 ![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
@@ -218,6 +228,13 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Float and integer sliders
   - Configurable ranges and step sizes
 
+#### CreatePointsString
+- **Function**: Serialize six frame/intensity pairs into a multi-line shorthand string
+- **Features**:
+  - Accepts six `frame`/`intensity` pairs with configurable ranges
+  - Outputs a formatted string that can be reused for time-based intensity lists
+  - Useful for workflows that drive keyframe-style prompts or mask intensities
+
 ### 🔧 Utility Nodes
 
 #### XIS_ResizeToDivisible
@@ -228,6 +245,14 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 #### XIS_InvertMask
 - **Function**: Mask inversion
+
+---
+
+## Acknowledgements
+
+- The interactive canvas uses [Konva](https://konvajs.org/) under the hood; thanks to the Konva contributors for the full-featured 2D drawing API.
+- The one-click cutout leverages [BiRefNet](https://github.com/tamzi/bi-ref-net) (thanks to the original authors and the community contributions such as the tin2tin/2D_Asset_Generator project) along with `kornia` and `timm` for the preprocessing/backbone support.
+- Any additional inspiration for layer handling came from community-built ComfyUI extensions—big thanks to the ComfyUI and custom node author communities for keeping the ecosystem so vibrant.
 - **Features**:
   - Boolean switch control support
   - Automatic value range handling
