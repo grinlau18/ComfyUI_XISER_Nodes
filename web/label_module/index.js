@@ -45,8 +45,18 @@ function ensureDefaultNodeSize(node) {
         : DEFAULT_NODE_SIZE;
     const targetSize = normalizeNodeSize(storedSize || fallbackSize);
     node.properties = node.properties || {};
-    node.properties.node_size = targetSize;
-    node.setSize([...targetSize]);
+
+    // 只有在没有设置节点大小时才设置默认大小
+    // 避免在复制节点时覆盖已继承的大小
+    if (!node.properties.node_size || !Array.isArray(node.properties.node_size) || node.properties.node_size.length !== 2) {
+        node.properties.node_size = targetSize;
+        node.setSize([...targetSize]);
+    } else {
+        // 如果已经有节点大小，确保使用正确的大小
+        const normalizedSize = normalizeNodeSize(node.properties.node_size);
+        node.setSize([...normalizedSize]);
+    }
+
     node.properties.htmlData = node.properties.htmlData || parserManager.getDefaultText(EDITOR_MODES.HTML);
     node.properties.markdownData = node.properties.markdownData || parserManager.getDefaultText(EDITOR_MODES.MARKDOWN);
 }
@@ -284,9 +294,13 @@ function setupLabelNode() {
 
             /**
              * Ensures node is redrawn after being added.
+             * Only ensures default size if node doesn't already have a valid size.
              */
             nodeType.prototype.onAdded = function () {
-                ensureDefaultNodeSize(this);
+                // Only ensure default size if the node doesn't already have a valid size
+                if (!this.properties?.node_size || !Array.isArray(this.properties.node_size) || this.properties.node_size.length !== 2) {
+                    ensureDefaultNodeSize(this);
+                }
                 this.setDirtyCanvas(true, false);
             };
 
