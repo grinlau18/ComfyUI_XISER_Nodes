@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
-const DEBUG = true; // 调试模式开关
+const DEBUG = false; // 调试模式开关
 const BASE_NODE_HEIGHT = 150; // 最小高度
 const DEFAULT_SPACER_HEIGHT = 10; // 默认不可见控件高度
 const MIN_WIDTH = 280;

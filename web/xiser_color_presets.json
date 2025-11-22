@@ -16,54 +16,299 @@
   },
   "pickerColors": {
     "light": [
-      "#FFF7F0", "#FFE4E0", "#FFD8E8", "#FBD9FF",
-      "#EECFFF", "#DEC4FF", "#C9C5FF", "#B2D0FF",
-      "#9BE0FF", "#8EF2FF", "#8CFEE8", "#9CFDD1",
-      "#BAFAC0", "#D7FBC2", "#FFF6C2", "#FFE3A1",
-      "#FFC07A", "#FF9860", "#FF7A7A", "#FF8BA7",
-      "#FFABCC", "#FFD4EB", "#F6EEF8", "#E9F5F8",
-      "#D9EEEF", "#C8E4E3", "#B6D9D6", "#A4CEC8",
-      "#93C2B9", "#88B6AB", "#8CA8FF", "#A190FF",
-      "#C184FF", "#E078FF", "#FF71EA", "#FF72C0",
-      "#FF7F98", "#FF9C7C", "#FFBE6A", "#FFE563",
-      "#C6FF70", "#9DFF97", "#7DF5C3", "#74E7EF",
-      "#78C6FF", "#8AA8FF", "#B39BFF", "#E0A8FF"
+      "#FFF7F0",
+      "#FFE4E0",
+      "#FFD8E8",
+      "#FBD9FF",
+      "#EECFFF",
+      "#DEC4FF",
+      "#C9C5FF",
+      "#B2D0FF",
+      "#9BE0FF",
+      "#8EF2FF",
+      "#8CFEE8",
+      "#9CFDD1",
+      "#BAFAC0",
+      "#D7FBC2",
+      "#FFF6C2",
+      "#FFE3A1",
+      "#FFC07A",
+      "#FF9860",
+      "#FF7A7A",
+      "#FF8BA7",
+      "#FFABCC",
+      "#FFD4EB",
+      "#F6EEF8",
+      "#E9F5F8",
+      "#D9EEEF",
+      "#C8E4E3",
+      "#B6D9D6",
+      "#A4CEC8",
+      "#93C2B9",
+      "#88B6AB",
+      "#8CA8FF",
+      "#A190FF",
+      "#C184FF",
+      "#E078FF",
+      "#FF71EA",
+      "#FF72C0",
+      "#FF7F98",
+      "#FF9C7C",
+      "#FFBE6A",
+      "#FFE563",
+      "#C6FF70",
+      "#9DFF97",
+      "#7DF5C3",
+      "#74E7EF",
+      "#78C6FF",
+      "#8AA8FF",
+      "#B39BFF",
+      "#E0A8FF"
     ],
     "dark": [
-      "#1F232B", "#262B34", "#2E323D", "#353946",
-      "#3D4150", "#45485A", "#4D5064", "#55586E",
-      "#0E1A2B", "#142236", "#1A2A42", "#21334D",
-      "#273C58", "#2D4463", "#334C6E", "#3A5579",
-      "#301F2A", "#3D1F36", "#4A1E41", "#571E4C",
-      "#631F57", "#702162", "#7D2D6F", "#8B3C7C",
-      "#1D2C28", "#1F3A2F", "#224836", "#25573D",
-      "#276544", "#2A734B", "#2F8252", "#36905B",
-      "#1F1A12", "#2C2116", "#38291B", "#453020",
-      "#523825", "#60302E", "#7A2A34", "#FF5E5B",
-      "#FF8C42", "#FFC857", "#2A1C1C", "#2F262D",
-      "#34303E", "#394A5A", "#3E5467", "#436074"
+      "#1F232B",
+      "#262B34",
+      "#2E323D",
+      "#353946",
+      "#3D4150",
+      "#45485A",
+      "#4D5064",
+      "#55586E",
+      "#0E1A2B",
+      "#142236",
+      "#1A2A42",
+      "#21334D",
+      "#273C58",
+      "#2D4463",
+      "#334C6E",
+      "#3A5579",
+      "#301F2A",
+      "#3D1F36",
+      "#4A1E41",
+      "#571E4C",
+      "#631F57",
+      "#702162",
+      "#7D2D6F",
+      "#8B3C7C",
+      "#1D2C28",
+      "#1F3A2F",
+      "#224836",
+      "#25573D",
+      "#276544",
+      "#2A734B",
+      "#2F8252",
+      "#36905B",
+      "#1F1A12",
+      "#2C2116",
+      "#38291B",
+      "#453020",
+      "#523825",
+      "#60302E",
+      "#7A2A34",
+      "#FF5E5B",
+      "#FF8C42",
+      "#FFC857",
+      "#2A1C1C",
+      "#2F262D",
+      "#34303E",
+      "#394A5A",
+      "#3E5467",
+      "#436074"
     ]
   },
   "monochrome": {
-    "light": ["#FFFFFF", "#F7F7F7", "#EFEFEF", "#E0E0E0", "#C7CBD1", "#A0A6B1"],
-    "dark": ["#000000", "#090B10", "#12151E", "#1C2130", "#262C3F", "#31354B"]
+    "light": [
+      "#FFFFFF",
+      "#F7F7F7",
+      "#EFEFEF",
+      "#E0E0E0",
+      "#C7CBD1",
+      "#A0A6B1"
+    ],
+    "dark": [
+      "#000000",
+      "#090B10",
+      "#12151E",
+      "#1C2130",
+      "#262C3F",
+      "#31354B"
+    ]
   },
   "colorSets": {
     "light": [
-      { "id": "pastel_sand", "name": { "en": "Pastel Sand", "zh": "柔沙亮卡" }, "title": "#F4D8C6", "content": "#FFF9F2" },
-      { "id": "glacier_mint", "name": { "en": "Glacier Mint", "zh": "清爽薄荷" }, "title": "#D4F1E6", "content": "#FFFFFF" },
-      { "id": "lilac_breeze", "name": { "en": "Lilac Breeze", "zh": "淡紫微风" }, "title": "#E7E0FF", "content": "#FAF9FF" },
-      { "id": "solar_citrus", "name": { "en": "Solar Citrus", "zh": "暖阳柑橘" }, "title": "#FFB347", "content": "#FFF4CC" },
-      { "id": "aqua_pop", "name": { "en": "Aqua Pop", "zh": "水光薄荷" }, "title": "#4FC3F7", "content": "#E5FBFF" },
-      { "id": "coral_slate", "name": { "en": "Coral Slate", "zh": "珊瑚银灰" }, "title": "#FF8A80", "content": "#FDF0F0" }
+      {
+        "id": "pastel_sand",
+        "name": {
+          "en": "Pastel Sand",
+          "zh": "柔沙亮卡"
+        },
+        "title": "#F4D8C6",
+        "content": "#FFF9F2"
+      },
+      {
+        "id": "glacier_mint",
+        "name": {
+          "en": "Glacier Mint",
+          "zh": "清爽薄荷"
+        },
+        "title": "#D4F1E6",
+        "content": "#FFFFFF"
+      },
+      {
+        "id": "lilac_breeze",
+        "name": {
+          "en": "Lilac Breeze",
+          "zh": "淡紫微风"
+        },
+        "title": "#E7E0FF",
+        "content": "#FAF9FF"
+      },
+      {
+        "id": "solar_citrus",
+        "name": {
+          "en": "Solar Citrus",
+          "zh": "暖阳柑橘"
+        },
+        "title": "#FFB347",
+        "content": "#FFF4CC"
+      },
+      {
+        "id": "aqua_pop",
+        "name": {
+          "en": "Aqua Pop",
+          "zh": "水光薄荷"
+        },
+        "title": "#4FC3F7",
+        "content": "#E5FBFF"
+      },
+      {
+        "id": "coral_slate",
+        "name": {
+          "en": "Coral Slate",
+          "zh": "珊瑚银灰"
+        },
+        "title": "#FF8A80",
+        "content": "#FDF0F0"
+      },
+      {
+        "id": "sunset_mauve",
+        "name": {
+          "en": "Sunset Mauve",
+          "zh": "暮色莓粉"
+        },
+        "title": "#FF9AA2",
+        "content": "#FFF0F5"
+      },
+      {
+        "id": "emerald_linen",
+        "name": {
+          "en": "Emerald Linen",
+          "zh": "翠羽素布"
+        },
+        "title": "#2E8B57",
+        "content": "#F0FFF0"
+      },
+      {
+        "id": "copper_dawn",
+        "name": {
+          "en": "Copper Dawn",
+          "zh": "晨曦铜光"
+        },
+        "title": "#A85C2D",
+        "content": "#FFF7E6"
+      }
     ],
     "dark": [
-      { "id": "slate_neon", "name": { "en": "Slate Neon", "zh": "霓虹石板" }, "title": "#00C2B2", "content": "#111619" },
-      { "id": "midnight_copper", "name": { "en": "Midnight Copper", "zh": "铜夜流光" }, "title": "#B87333", "content": "#1C1A17" },
-      { "id": "indigo_depths", "name": { "en": "Indigo Depths", "zh": "靛蓝深海" }, "title": "#2F3A60", "content": "#0F1624" },
-      { "id": "neon_plum", "name": { "en": "Neon Plum", "zh": "霓虹李紫" }, "title": "#6C63FF", "content": "#1B1D3A" },
-      { "id": "ember_glow", "name": { "en": "Ember Glow", "zh": "炽焰余温" }, "title": "#FF7043", "content": "#1F1411" },
-      { "id": "arctic_teal", "name": { "en": "Arctic Teal", "zh": "极昼青蓝" }, "title": "#00C8C8", "content": "#0D1F24" }
+      {
+        "id": "slate_neon",
+        "name": {
+          "en": "Slate Neon",
+          "zh": "霓虹石板"
+        },
+        "title": "#00C2B2",
+        "content": "#111619"
+      },
+      {
+        "id": "midnight_copper",
+        "name": {
+          "en": "Midnight Copper",
+          "zh": "铜夜流光"
+        },
+        "title": "#B87333",
+        "content": "#1C1A17"
+      },
+      {
+        "id": "indigo_depths",
+        "name": {
+          "en": "Indigo Depths",
+          "zh": "靛蓝深海"
+        },
+        "title": "#2F3A60",
+        "content": "#0F1624"
+      },
+      {
+        "id": "neon_plum",
+        "name": {
+          "en": "Neon Plum",
+          "zh": "霓虹李紫"
+        },
+        "title": "#6C63FF",
+        "content": "#1B1D3A"
+      },
+      {
+        "id": "ember_glow",
+        "name": {
+          "en": "Ember Glow",
+          "zh": "炽焰余温"
+        },
+        "title": "#FF7043",
+        "content": "#1F1411"
+      },
+      {
+        "id": "arctic_teal",
+        "name": {
+          "en": "Arctic Teal",
+          "zh": "极昼青蓝"
+        },
+        "title": "#00C8C8",
+        "content": "#0D1F24"
+      },
+      {
+        "id": "nebula_plum",
+        "name": {
+          "en": "Nebula Plum",
+          "zh": "星云李紫"
+        },
+        "title": "#B03BFF",
+        "content": "#16061F"
+      },
+      {
+        "id": "teal_midnight",
+        "name": {
+          "en": "Teal Midnight",
+          "zh": "夜海青黛"
+        },
+        "title": "#2F8F9D",
+        "content": "#070E16"
+      },
+      {
+        "id": "crimson_moon",
+        "name": {
+          "en": "Crimson Moon",
+          "zh": "赤月幽光"
+        },
+        "title": "#FF3B54",
+        "content": "#211019"
+      }
     ]
-  }
+  },
+  "customSets": [
+    {
+      "id": "custom-1763803053657",
+      "name": "静怡青草",
+      "title": "#00695c",
+      "content": "#383839",
+      "theme": "dark"
+    }
+  ]
 }

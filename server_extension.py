@@ -1,4 +1,5 @@
 import base64
+import json
 import math
 import os
 import sys
@@ -21,6 +22,7 @@ except ImportError:
 
 BASE_DIR = os.path.dirname(__file__)
 FONTS_DIR = os.path.join(BASE_DIR, "fonts")
+COLOR_PRESETS_FILE = os.path.join(BASE_DIR, "web", "xiser_color_presets.json")
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -69,6 +71,54 @@ async def serve_font_file(request):
     if not os.path.isfile(font_path):
         return web.json_response({"error": "Font not found"}, status=404)
     return web.FileResponse(font_path)
+
+
+def _read_color_presets():
+    if not os.path.isfile(COLOR_PRESETS_FILE):
+        return {}
+    try:
+        with open(COLOR_PRESETS_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
+    except Exception as exc:
+        logger.error("Failed to read color presets: %s", exc)
+        return {}
+
+
+def _write_color_presets(data):
+    os.makedirs(os.path.dirname(COLOR_PRESETS_FILE), exist_ok=True)
+    temp_path = f"{COLOR_PRESETS_FILE}.tmp"
+    with open(temp_path, "w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+    os.replace(temp_path, COLOR_PRESETS_FILE)
+
+
+async def handle_color_presets(request):
+    if request.method == "GET":
+        data = _read_color_presets()
+        return web.json_response({"customSets": data.get("customSets", [])})
+
+    if request.method == "POST":
+        try:
+            payload = await request.json()
+        except Exception as exc:
+            logger.error("Failed to parse presets payload: %s", exc)
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        custom_sets = payload.get("customSets")
+        if not isinstance(custom_sets, list):
+            return web.json_response({"error": "customSets must be an array"}, status=400)
+
+        data = _read_color_presets()
+        data["customSets"] = custom_sets
+        try:
+            _write_color_presets(data)
+        except Exception as exc:
+            logger.error("Failed to persist color presets: %s", exc)
+            return web.json_response({"error": "Unable to write presets"}, status=500)
+
+        return web.json_response({"customSets": data["customSets"]})
+
+    return web.json_response({"error": "Method not allowed"}, status=405)
 
 
 ## BiRefNet helpers ----------------------------------------------------
@@ -328,5 +378,7 @@ try:
     PromptServer.instance.app.router.add_post("/xiser/cutout", cutout_image)
     PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
     PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
+    PromptServer.instance.app.router.add_get("/xiser/color-presets", handle_color_presets)
+    PromptServer.instance.app.router.add_post("/xiser/color-presets", handle_color_presets)
 except Exception as exc:
     logger.warning("Failed to register routes: %s", exc)

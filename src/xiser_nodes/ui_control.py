@@ -67,26 +67,6 @@ class XIS_INT_Slider:
         return (value,)
     
 
-class XIS_Label:
-    @classmethod
-    def INPUT_TYPES(cls) -> dict:
-        """Returns the input types for the node."""
-        return {}  # No input parameters
-
-    RETURN_TYPES = ()  # No return values
-    FUNCTION = "execute"  # Node execution function
-    CATEGORY = "XISER_Nodes/UI_And_Control"  # Node category
-
-    def execute(self) -> None:
-        pass
-
-    def onNodeCreated(self) -> None:
-        self.properties = self.properties or {}
-        self.properties["textData"] = (
-            '<p style="font-size:20px;color:#FFFFFF;">小贴纸</p>'
-            '<p style="font-size:12px;color:#999999;">使用右键菜单编辑文字</p>'
-        )
-        self.color = "#333355"  # Default dark gray
 
 # IPA参数设置节点
 class XIS_IPAStyleSettings:
@@ -398,7 +378,6 @@ NODE_CLASS_MAPPINGS = {
     "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
     "XIS_Float_Slider": XIS_Float_Slider,
     "XIS_INT_Slider": XIS_INT_Slider,
-    "XIS_Label": XIS_Label,
     "XIS_ResolutionSelector": XIS_ResolutionSelector,
     "XIS_PromptProcessor": XIS_PromptProcessor,
     "XIS_MultiPromptSwitch": XIS_MultiPromptSwitch,

@@ -1,7 +1,7 @@
 import { app } from "/scripts/app.js";
 
 const COLOR_CONFIG_PATH = "/extensions/ComfyUI_XISER_Nodes/xiser_color_presets.json";
-const COLOR_SET_STORAGE_KEY = "xiser_saved_color_sets_v1";
+const COLOR_PRESETS_ENDPOINT = "/xiser/color-presets";
 
 const FALLBACK_LIGHT_PICKER_COLORS = [
     "#FFF7F0", "#FFE4E0", "#FFD8E8", "#FBD9FF",
@@ -66,7 +66,10 @@ const FALLBACK_COLOR_CONFIG = {
             { id: "lilac_breeze", name: { en: "Lilac Breeze", zh: "淡紫微风" }, title: "#E7E0FF", content: "#FAF9FF" },
             { id: "solar_citrus", name: { en: "Solar Citrus", zh: "暖阳柑橘" }, title: "#FFB347", content: "#FFF4CC" },
             { id: "aqua_pop", name: { en: "Aqua Pop", zh: "水光薄荷" }, title: "#4FC3F7", content: "#E5FBFF" },
-            { id: "coral_slate", name: { en: "Coral Slate", zh: "珊瑚银灰" }, title: "#FF8A80", content: "#FDF0F0" }
+            { id: "coral_slate", name: { en: "Coral Slate", zh: "珊瑚银灰" }, title: "#FF8A80", content: "#FDF0F0" },
+            { id: "sunset_mauve", name: { en: "Sunset Mauve", zh: "暮色莓粉" }, title: "#FF9AA2", content: "#FFF0F5" },
+            { id: "emerald_linen", name: { en: "Emerald Linen", zh: "翠羽素布" }, title: "#2E8B57", content: "#F0FFF0" },
+            { id: "copper_dawn", name: { en: "Copper Dawn", zh: "晨曦铜光" }, title: "#A85C2D", content: "#FFF7E6" }
         ],
         dark: [
             { id: "slate_neon", name: { en: "Slate Neon", zh: "霓虹石板" }, title: "#00C2B2", content: "#111619" },
@@ -74,21 +77,20 @@ const FALLBACK_COLOR_CONFIG = {
             { id: "indigo_depths", name: { en: "Indigo Depths", zh: "靛蓝深海" }, title: "#2F3A60", content: "#0F1624" },
             { id: "neon_plum", name: { en: "Neon Plum", zh: "霓虹李紫" }, title: "#6C63FF", content: "#1B1D3A" },
             { id: "ember_glow", name: { en: "Ember Glow", zh: "炽焰余温" }, title: "#FF7043", content: "#1F1411" },
-            { id: "arctic_teal", name: { en: "Arctic Teal", zh: "极昼青蓝" }, title: "#00C8C8", content: "#0D1F24" }
+            { id: "arctic_teal", name: { en: "Arctic Teal", zh: "极昼青蓝" }, title: "#00C8C8", content: "#0D1F24" },
+            { id: "nebula_plum", name: { en: "Nebula Plum", zh: "星云李紫" }, title: "#B03BFF", content: "#16061F" },
+            { id: "teal_midnight", name: { en: "Teal Midnight", zh: "夜海青黛" }, title: "#2F8F9D", content: "#070E16" },
+            { id: "crimson_moon", name: { en: "Crimson Moon", zh: "赤月幽光" }, title: "#FF3B54", content: "#211019" }
         ]
-    }
+    },
+    customSets: []
 };
 
 const LOCALE_TEXT = {
     en: {
-        colorPickerTitle: "XIS Color Picker",
-        manageMenu: "XISER Node Colors",
-        changeTitleBg: "Change Title Background",
-        changeContentBg: "Change Body Background",
-        managePresets: "Preset Manager (Batch)",
+        manageMenu: "XISER Node Color Manager",
         dialogTitle: "XIS Color Presets",
         selectionInfo: count => `Applying to ${count} node${count === 1 ? "" : "s"}`,
-        applyButton: "Apply to selection",
         saveButton: "Save preset",
         closeButton: "Close",
         defaultSection: "Curated presets",
@@ -103,46 +105,33 @@ const LOCALE_TEXT = {
         colorCategoriesTitle: theme => (theme === "light" ? "Light-safe palette" : "Dark-safe palette"),
         recommendedSection: theme => (theme === "light" ? "Light theme picks" : "Dark theme picks"),
         recommendedEmpty: "No curated colors available.",
-        eyeDropper: "Eyedropper",
-        confirm: "Apply",
-        cancel: "Cancel",
         titleSwatchLabel: "Title background",
         contentSwatchLabel: "Body background",
         notSetLabel: "Not set",
-        presetNamePlaceholder: "Preset name (optional)",
-        eyeDropperUnsupported: "Eyedropper API is not available in this browser. Please use Chrome or Edge."
+        presetNamePlaceholder: "Preset name (optional)"
     },
     zh: {
-        colorPickerTitle: "XIS 节点颜色选择器",
-        manageMenu: "XISER 节点颜色",
-        changeTitleBg: "更改标题背景",
-        changeContentBg: "更改内容背景",
-        managePresets: "管理颜色组合（批量）",
+        manageMenu: "XISER 节点颜色管理",
         dialogTitle: "XIS 颜色组合管理",
         selectionInfo: count => `当前将应用到 ${count} 个节点`,
-        applyButton: "应用到选中节点",
         saveButton: "保存组合",
         closeButton: "关闭",
-        defaultSection: "默认配色",
+        defaultSection: "预设主题配色",
         customSection: "我的配色",
         emptyCustom: "暂无自定义组合，先设置后点击“保存组合”。",
         deleteButton: "删除",
         applySetButton: "应用",
-        themeSwitcherLabel: "预设主题",
+        themeSwitcherLabel: "主题风格",
         themeLight: "亮色",
         themeDark: "暗色",
         customPresetName: index => `自定义配色 ${index}`,
-        colorCategoriesTitle: theme => (theme === "light" ? "亮色配色建议" : "暗色配色建议"),
+        colorCategoriesTitle: theme => (theme === "light" ? "自定义配色名称" : "自定义配色名称"),
         recommendedSection: theme => (theme === "light" ? "亮色主题推荐" : "暗色主题推荐"),
         recommendedEmpty: "暂未提供精选颜色。",
-        eyeDropper: "吸管",
-        confirm: "确认",
-        cancel: "取消",
         titleSwatchLabel: "标题背景",
         contentSwatchLabel: "内容背景",
         notSetLabel: "未设置",
-        presetNamePlaceholder: "组合名称（可选）",
-        eyeDropperUnsupported: "浏览器不支持吸管功能，请使用现代浏览器（Chrome/Edge）。"
+        presetNamePlaceholder: "组合名称（可选）"
     }
 };
 
@@ -309,6 +298,18 @@ function mergeColorConfig(externalConfig) {
                 }))
         };
     }
+    if (Array.isArray(externalConfig.customSets)) {
+        merged.customSets = externalConfig.customSets
+            .filter(set => set && (set.title || set.content))
+            .map((set, index) => ({
+                id: set.id || `custom-${index}`,
+                name: set.name || t("customPresetName", index + 1),
+                title: set.title,
+                content: set.content
+            }));
+    } else {
+        merged.customSets = merged.customSets || [];
+    }
     return merged;
 }
 
@@ -353,24 +354,39 @@ function getDefaultColor(key, theme = detectActiveTheme()) {
     return fallbackCommon || "#000000";
 }
 
-function loadSavedColorSets() {
+async function loadSavedColorSets() {
+    await loadColorConfigFromFile();
+    const stored = Array.isArray(colorConfig.customSets) ? colorConfig.customSets : [];
+    return stored
+        .filter(set => set && (set.title || set.content))
+        .map((set, index) => ({
+            id: set.id || `custom-${index}`,
+            name: set.name || t("customPresetName", index + 1),
+            title: set.title,
+            content: set.content
+        }));
+}
+
+async function persistColorSets(sets) {
     try {
-        const stored = localStorage.getItem(COLOR_SET_STORAGE_KEY);
-        const parsed = stored ? JSON.parse(stored) : [];
-        if (Array.isArray(parsed)) {
-            return parsed
-                .filter(set => set && (set.title || set.content))
-                .map((set, index) => ({
-                    id: set.id || `custom-${index}`,
-                    name: set.name || t("customPresetName", index + 1),
-                    title: set.title,
-                    content: set.content
-                }));
+        const response = await fetch(COLOR_PRESETS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customSets: sets })
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
+        const result = await response.json();
+        if (Array.isArray(result.customSets)) {
+            colorConfig.customSets = result.customSets;
+            return result.customSets;
+        }
+        return sets;
     } catch (error) {
-        console.warn("[XISER] Failed to read saved presets:", error);
+        console.error("[XISER] Failed to persist custom presets:", error);
+        return sets;
     }
-    return [];
 }
 
 function getPickerColors(theme = detectActiveTheme()) {
@@ -381,14 +397,6 @@ function getPickerColors(theme = detectActiveTheme()) {
 function getMonochromeColors(theme = detectActiveTheme()) {
     const themeKey = theme === "light" ? "light" : "dark";
     return (colorConfig.monochrome?.[themeKey] || FALLBACK_COLOR_CONFIG.monochrome[themeKey] || []).slice();
-}
-
-function saveColorSets(sets) {
-    try {
-        localStorage.setItem(COLOR_SET_STORAGE_KEY, JSON.stringify(sets));
-    } catch (error) {
-        console.warn("[XISER] Failed to persist color presets:", error);
-    }
 }
 
 function getTargetNodes(node) {
@@ -469,224 +477,7 @@ function hydrateNodeAppearance(node) {
     }
 }
 
-function createColorPickerDialog(colorType = "title", callback, currentColor = null) {
-    const isDarkTheme = document.body.classList.contains("dark-theme");
-    const backgroundColor = isDarkTheme ? "#2E2E2E" : "#FFFFFF";
-    const textColor = isDarkTheme ? "#FFFFFF" : "#333333";
-    const borderColor = isDarkTheme ? "#444444" : "#CCCCCC";
-    let paletteTheme = detectActiveTheme();
-
-    const dialog = document.createElement("div");
-    dialog.style.position = "fixed";
-    dialog.style.top = "50%";
-    dialog.style.left = "50%";
-    dialog.style.transform = "translate(-50%, -50%)";
-    dialog.style.background = backgroundColor;
-    dialog.style.padding = "16px 16px 12px 16px";
-    dialog.style.borderRadius = "8px";
-    dialog.style.boxShadow = "0 4px 8px rgba(0,0,0,0.5)";
-    dialog.style.zIndex = "10000";
-    dialog.style.color = textColor;
-    dialog.style.fontFamily = "Arial, sans-serif";
-    dialog.style.width = "500px";
-    dialog.style.maxHeight = "900px";
-    dialog.style.overflowY = "auto";
-    dialog.style.boxSizing = "border-box";
-
-    const title = document.createElement("h3");
-    title.textContent = t("colorPickerTitle");
-    title.style.margin = "0 0 10px";
-    title.style.fontSize = "16px";
-    dialog.appendChild(title);
-    const detachDrag = makeDialogDraggable(dialog, title);
-    const removeDialog = () => {
-        detachDrag();
-        if (dialog.parentNode) {
-            dialog.parentNode.removeChild(dialog);
-        }
-    };
-
-    const closeIcon = document.createElement("button");
-    closeIcon.innerHTML = "&times;";
-    closeIcon.setAttribute("aria-label", t("closeButton"));
-    closeIcon.style.position = "absolute";
-    closeIcon.style.top = "8px";
-    closeIcon.style.right = "10px";
-    closeIcon.style.border = "none";
-    closeIcon.style.background = "transparent";
-    closeIcon.style.color = textColor;
-    closeIcon.style.fontSize = "20px";
-    closeIcon.style.cursor = "pointer";
-    closeIcon.addEventListener("click", removeDialog);
-    dialog.appendChild(closeIcon);
-
-    // 当前颜色显示 - 使用标准颜色输入框
-    const currentColorSection = document.createElement("div");
-    currentColorSection.style.display = "flex";
-    currentColorSection.style.alignItems = "center";
-    currentColorSection.style.justifyContent = "space-between";
-    currentColorSection.style.marginBottom = "12px";
-    currentColorSection.style.padding = "8px";
-    currentColorSection.style.border = `1px solid ${borderColor}`;
-    currentColorSection.style.borderRadius = "6px";
-    currentColorSection.style.background = isDarkTheme ? "#1E1E1E" : "#F8F8F8";
-
-    const currentColorLabel = document.createElement("span");
-    currentColorLabel.textContent = colorType === "title" ? t("titleSwatchLabel") : t("contentSwatchLabel");
-    currentColorLabel.style.fontSize = "13px";
-    currentColorLabel.style.fontWeight = "bold";
-
-    // 使用标准的颜色输入框
-    const currentColorInput = document.createElement("input");
-    currentColorInput.type = "color";
-    currentColorInput.value = currentColor || "#000000";
-    currentColorInput.style.width = "40px";
-    currentColorInput.style.height = "40px";
-    currentColorInput.style.borderRadius = "6px";
-    currentColorInput.style.border = `2px solid ${borderColor}`;
-    currentColorInput.style.cursor = "pointer";
-
-    // 监听颜色变化
-    currentColorInput.addEventListener("change", () => {
-        const newColor = currentColorInput.value;
-        callback(newColor);
-    });
-
-    currentColorSection.appendChild(currentColorLabel);
-    currentColorSection.appendChild(currentColorInput);
-    dialog.appendChild(currentColorSection);
-
-    const themeRow = document.createElement("div");
-    themeRow.style.display = "flex";
-    themeRow.style.alignItems = "center";
-    themeRow.style.justifyContent = "space-between";
-    themeRow.style.margin = "4px 0 8px";
-
-    const themeLabel = document.createElement("span");
-    themeLabel.textContent = t("themeSwitcherLabel");
-    themeLabel.style.fontSize = "12px";
-    themeLabel.style.opacity = "0.75";
-    themeRow.appendChild(themeLabel);
-
-    const themeButtonsWrapper = document.createElement("div");
-    themeButtonsWrapper.style.display = "flex";
-    themeButtonsWrapper.style.gap = "6px";
-
-    const createThemeButton = (themeKey, label) => {
-        const btn = document.createElement("button");
-        btn.textContent = label;
-        btn.style.padding = "4px 10px";
-        btn.style.borderRadius = "6px";
-        btn.style.border = `1px solid ${borderColor}`;
-        btn.style.background = "transparent";
-        btn.style.color = textColor;
-        btn.style.cursor = "pointer";
-        btn.addEventListener("click", () => {
-            if (paletteTheme === themeKey) return;
-            paletteTheme = themeKey;
-            syncThemeButtons();
-            recommendedTitle.textContent = t("recommendedSection", paletteTheme);
-            renderRecommended();
-        });
-        return btn;
-    };
-
-    const lightButton = createThemeButton("light", t("themeLight"));
-    const darkButton = createThemeButton("dark", t("themeDark"));
-
-    function syncThemeButtons() {
-        [lightButton, darkButton].forEach(btn => {
-            const isActive = (btn === lightButton && paletteTheme === "light") || (btn === darkButton && paletteTheme === "dark");
-            btn.style.background = isActive ? (isDarkTheme ? "#3C5A78" : "#E0ECFF") : "transparent";
-            btn.style.borderColor = isActive ? (isDarkTheme ? "#5DA0FF" : "#5C8DFF") : borderColor;
-        });
-    }
-    syncThemeButtons();
-
-    themeButtonsWrapper.appendChild(lightButton);
-    themeButtonsWrapper.appendChild(darkButton);
-    themeRow.appendChild(themeButtonsWrapper);
-    dialog.appendChild(themeRow);
-
-    const recommendedWrapper = document.createElement("div");
-    recommendedWrapper.style.margin = "8px 0 16px";
-    recommendedWrapper.style.border = `1px dashed ${borderColor}`;
-    recommendedWrapper.style.borderRadius = "6px";
-    recommendedWrapper.style.padding = "8px";
-
-    const recommendedTitle = document.createElement("div");
-    recommendedTitle.textContent = t("recommendedSection", paletteTheme);
-    recommendedTitle.style.fontSize = "12px";
-    recommendedTitle.style.opacity = "0.85";
-    recommendedTitle.style.marginBottom = "6px";
-    recommendedWrapper.appendChild(recommendedTitle);
-
-    const recommendedList = document.createElement("div");
-    recommendedList.style.display = "flex";
-    recommendedList.style.flexWrap = "wrap";
-    recommendedList.style.gap = "6px";
-    recommendedWrapper.appendChild(recommendedList);
-    dialog.appendChild(recommendedWrapper);
-
-    const createSwatchButton = (color, titleText, size = 28) => {
-        const swatch = document.createElement("button");
-        swatch.style.width = `${size}px`;
-        swatch.style.height = `${size}px`;
-        swatch.style.borderRadius = "6px";
-        swatch.style.border = `1px solid ${borderColor}`;
-        swatch.style.background = color;
-        swatch.style.cursor = "pointer";
-        swatch.title = titleText || color;
-        swatch.addEventListener("click", () => {
-            callback(color);
-            // 同步更新当前颜色输入框的值
-            currentColorInput.value = color;
-        });
-        return swatch;
-    };
-
-    function renderRecommended() {
-        recommendedList.innerHTML = "";
-        const seen = new Set();
-        const presetSets = getBuiltinColorSets(paletteTheme);
-        presetSets.forEach(set => {
-            const value = colorType === "content" ? set.content : set.title;
-            if (!value || seen.has(value)) return;
-            seen.add(value);
-            recommendedList.appendChild(
-                createSwatchButton(value, `${resolveLabel(set.name)} · ${value}`)
-            );
-        });
-
-        const paletteColors = getPickerColors(paletteTheme);
-        paletteColors.forEach(color => {
-            if (seen.has(color)) return;
-            seen.add(color);
-            recommendedList.appendChild(createSwatchButton(color));
-        });
-
-        const monoColors = getMonochromeColors(paletteTheme);
-        monoColors.forEach(color => {
-            if (seen.has(color)) return;
-            seen.add(color);
-            recommendedList.appendChild(createSwatchButton(color, color, 32));
-        });
-
-        if (!recommendedList.childElementCount) {
-            const empty = document.createElement("div");
-            empty.textContent = t("recommendedEmpty");
-            empty.style.fontSize = "12px";
-            empty.style.opacity = "0.7";
-            recommendedList.appendChild(empty);
-        }
-    }
-    renderRecommended();
-
-
-    document.body.appendChild(dialog);
-}
-
-function openColorSetDialog(node) {
+async function openColorSetDialog(node) {
     const isDarkTheme = document.body.classList.contains("dark-theme");
     const backgroundColor = isDarkTheme ? "#2E2E2E" : "#FFFFFF";
     const textColor = isDarkTheme ? "#FFFFFF" : "#333333";
@@ -802,11 +593,14 @@ function openColorSetDialog(node) {
     themeRow.appendChild(themeButtonsWrapper);
     dialog.appendChild(themeRow);
 
-    const formContainer = document.createElement("div");
-    formContainer.style.display = "grid";
-    formContainer.style.gridTemplateColumns = "repeat(auto-fit, minmax(180px, 1fr))";
-    formContainer.style.gap = "12px";
-    formContainer.style.marginBottom = "12px";
+    const swatchGrid = document.createElement("div");
+    swatchGrid.style.display = "grid"; // 保持Grid布局（核心）
+    // 关键修改：固定3列，每列宽度平均分配（1fr = 剩余空间等分）
+    swatchGrid.style.gridTemplateColumns = "repeat(3, 1fr)"; 
+    swatchGrid.style.gap = "12px"; // 保持列/行间距12px（避免元素拥挤）
+    swatchGrid.style.flex = "1 1 0"; // 保持在Flex父容器中的自适应（可选，看整体布局）
+    // 可选补充：防止元素换行（确保“单行”）
+    swatchGrid.style.gridAutoFlow = "row nowrap"; 
 
     const titleColorLabel = document.createElement("label");
     titleColorLabel.style.fontSize = "13px";
@@ -828,9 +622,27 @@ function openColorSetDialog(node) {
     contentColorInput.style.height = "38px";
     contentColorLabel.appendChild(contentColorInput);
 
-    formContainer.appendChild(titleColorLabel);
-    formContainer.appendChild(contentColorLabel);
-    dialog.appendChild(formContainer);
+    swatchGrid.appendChild(titleColorLabel);
+    swatchGrid.appendChild(contentColorLabel);
+
+    const saveButton = document.createElement("button");
+    saveButton.textContent = t("saveButton");
+    saveButton.style.minWidth = "140px";
+    saveButton.style.padding = "8px 16px";
+    saveButton.style.border = "none";
+    saveButton.style.borderRadius = "4px";
+    saveButton.style.cursor = "pointer";
+    saveButton.style.background = buttonBg;
+    saveButton.style.color = textColor;
+
+    const swatchRow = document.createElement("div");
+    swatchRow.style.display = "flex";
+    swatchRow.style.alignItems = "flex-start";
+    swatchRow.style.gap = "12px";
+    swatchRow.style.flexWrap = "wrap";
+    swatchRow.style.marginBottom = "12px";
+    swatchRow.appendChild(swatchGrid);
+    dialog.appendChild(swatchRow);
 
     const paletteHint = document.createElement("div");
     paletteHint.style.fontSize = "12px";
@@ -843,71 +655,65 @@ function openColorSetDialog(node) {
     nameInput.type = "text";
     nameInput.placeholder = t("presetNamePlaceholder");
     nameInput.style.width = "100%";
+    nameInput.style.flex = "1 1 auto";
     nameInput.style.padding = "8px";
-    nameInput.style.marginBottom = "12px";
     nameInput.style.border = `1px solid ${borderColor}`;
     nameInput.style.borderRadius = "4px";
     nameInput.style.background = "transparent";
     nameInput.style.color = textColor;
-    dialog.appendChild(nameInput);
+
+    const nameRow = document.createElement("div");
+    nameRow.style.display = "flex";
+    nameRow.style.alignItems = "center";
+    nameRow.style.gap = "8px";
+    nameRow.style.marginBottom = "12px";
+    nameRow.appendChild(nameInput);
+    nameRow.appendChild(saveButton);
+    dialog.appendChild(nameRow);
 
     const applyThemeDefaultsToInputs = () => {
         titleColorInput.value = getDefaultColor("titleColor", presetTheme);
         contentColorInput.value = getDefaultColor("contentColor", presetTheme);
     };
 
-    const buttonRow = document.createElement("div");
-    buttonRow.style.display = "flex";
-    buttonRow.style.flexWrap = "wrap";
-    buttonRow.style.gap = "8px";
-    buttonRow.style.marginBottom = "16px";
+    let savedSets = [];
 
-    const applyButton = document.createElement("button");
-    applyButton.textContent = t("applyButton");
-    applyButton.style.flex = "1 1 140px";
-    applyButton.style.padding = "8px";
-    applyButton.style.border = "none";
-    applyButton.style.borderRadius = "4px";
-    applyButton.style.cursor = "pointer";
-    applyButton.style.background = "#4CAF50";
-    applyButton.style.color = "#FFFFFF";
-    applyButton.addEventListener("click", async () => {
-        await applyColorSetToNodes(getTargetNodes(node), {
-            title: titleColorInput.value,
-            content: contentColorInput.value
-        });
-        updateSelectionInfo();
-    });
+    const refreshSavedSets = async () => {
+        savedSets = await loadSavedColorSets();
+        renderCustomSets();
+    };
 
-    const saveButton = document.createElement("button");
-    saveButton.textContent = t("saveButton");
-    saveButton.style.flex = "1 1 120px";
-    saveButton.style.padding = "8px";
-    saveButton.style.border = "none";
-    saveButton.style.borderRadius = "4px";
-    saveButton.style.cursor = "pointer";
-    saveButton.style.background = buttonBg;
-    saveButton.style.color = textColor;
-
-    const savedSets = loadSavedColorSets();
-
-    saveButton.addEventListener("click", () => {
+    saveButton.addEventListener("click", async () => {
         const name = nameInput.value.trim() || t("customPresetName", savedSets.length + 1);
         const newSet = {
             id: `custom-${Date.now()}`,
             name,
             title: titleColorInput.value,
-            content: contentColorInput.value
+            content: contentColorInput.value,
+            theme: presetTheme
         };
         savedSets.push(newSet);
-        saveColorSets(savedSets);
+        savedSets = await persistColorSets(savedSets);
         nameInput.value = "";
         renderCustomSets();
     });
 
-    buttonRow.appendChild(applyButton);
-    buttonRow.appendChild(saveButton);
-    dialog.appendChild(buttonRow);
+    const applyCurrentColors = async () => {
+        await applyColorSetToNodes(getTargetNodes(node), {
+            title: titleColorInput.value,
+            content: contentColorInput.value
+        });
+        updateSelectionInfo();
+    };
+
+    const scheduleAutoApply = () => {
+        applyCurrentColors().catch(error => {
+            console.error("[XISER] Auto-applying colors failed:", error);
+        });
+    };
+
+    titleColorInput.addEventListener("input", scheduleAutoApply);
+    contentColorInput.addEventListener("input", scheduleAutoApply);
 
     const defaultSectionTitle = document.createElement("h4");
     defaultSectionTitle.textContent = `${t("defaultSection")} · ${presetTheme === "light" ? t("themeLight") : t("themeDark")}`;
@@ -931,6 +737,9 @@ function openColorSetDialog(node) {
     customList.style.display = "flex";
     customList.style.flexDirection = "column";
     customList.style.gap = "4px";
+    customList.style.maxHeight = "260px";
+    customList.style.overflowY = "auto";
+    customList.style.paddingRight = "4px";
     dialog.appendChild(customList);
 
     function createColorSetRow(colorSet, allowDelete) {
@@ -941,16 +750,14 @@ function openColorSetDialog(node) {
         row.style.padding = "6px 8px";
         row.style.border = `1px solid ${borderColor}`;
         row.style.borderRadius = "6px";
-        row.style.cursor = allowDelete ? "default" : "pointer";
-        if (!allowDelete) {
-            row.addEventListener("click", async () => {
-                await applyColorSetToNodes(getTargetNodes(node), {
-                    title: colorSet.title,
-                    content: colorSet.content
-                });
-                updateSelectionInfo();
+        row.style.cursor = "pointer";
+        row.addEventListener("click", async () => {
+            await applyColorSetToNodes(getTargetNodes(node), {
+                title: colorSet.title,
+                content: colorSet.content
             });
-        }
+            updateSelectionInfo();
+        });
 
         const info = document.createElement("div");
         info.style.display = "flex";
@@ -1003,11 +810,12 @@ function openColorSetDialog(node) {
             deleteButton.style.cursor = "pointer";
             deleteButton.style.background = "transparent";
             deleteButton.style.color = textColor;
-            deleteButton.addEventListener("click", () => {
+            deleteButton.addEventListener("click", async (event) => {
+                event.stopPropagation();
                 const index = savedSets.findIndex(set => set.id === colorSet.id);
                 if (index >= 0) {
                     savedSets.splice(index, 1);
-                    saveColorSets(savedSets);
+                    savedSets = await persistColorSets(savedSets);
                     renderCustomSets();
                 }
             });
@@ -1048,41 +856,8 @@ function openColorSetDialog(node) {
     }
 
     renderDefaultSets();
-    renderCustomSets();
+    refreshSavedSets();
     document.body.appendChild(dialog);
-}
-
-function buildColorMenuOptions(node) {
-    return [
-        {
-            content: t("changeTitleBg"),
-            callback: () => {
-                return new Promise((resolve) => {
-                    createColorPickerDialog("title", async (color) => {
-                        await applyColorToNodes(getTargetNodes(node), color, "title");
-                        resolve();
-                    }, node.color || getDefaultColor("titleColor"));
-                });
-            }
-        },
-        {
-            content: t("changeContentBg"),
-            callback: () => {
-                return new Promise((resolve) => {
-                    createColorPickerDialog("content", async (color) => {
-                        await applyColorToNodes(getTargetNodes(node), color, "content");
-                        resolve();
-                    }, node.bgcolor || getDefaultColor("contentColor"));
-                });
-            }
-        },
-        {
-            content: t("managePresets"),
-            callback: () => {
-                openColorSetDialog(node);
-            }
-        }
-    ];
 }
 
 app.registerExtension({
@@ -1117,13 +892,12 @@ app.registerExtension({
             const options = getNodeMenuOptions.call(this, node);
             const hasColorMenu = options.some(opt => typeof opt?.content === "string" && opt.content.includes("XISER"));
             if (hasColorMenu) {
-                console.log("[XISER] Existing color menu found, adding XISER submenu");
+                console.log("[XISER] Existing color menu found, adding XISER entry");
             }
             options.push({
                 content: t("manageMenu"),
-                has_submenu: true,
-                submenu: {
-                    options: buildColorMenuOptions(node),
+                callback: () => {
+                    openColorSetDialog(node);
                 },
             });
             return options;
