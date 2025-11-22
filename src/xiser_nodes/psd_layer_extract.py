@@ -58,7 +58,7 @@ class XIS_PSDLayerExtractor:
         @param {boolean} crop_by_canvas - If true, crops images to canvas size; if false, outputs full layer images
         @returns {tuple} (pack_images, file_data)
         @returns {list} pack_images - List of image tensors (XIS_IMAGES format)
-        @returns {dict} file_data - Metadata including canvas size and layer information
+        @returns {dict} file_data - Metadata including canvas size and layer information (width, height, position, transform)
         @throws {ValueError} If file is invalid or no valid layers are found
         """
         if not uploaded_file:
@@ -113,6 +113,29 @@ class XIS_PSDLayerExtractor:
         }
         canvas_width, canvas_height = psd.width, psd.height
 
+        # 生成空白画布图片（用于前端auto_size参考）
+        try:
+            # 创建透明空白图片张量
+            blank_image_tensor = torch.zeros((canvas_height, canvas_width, 4), dtype=torch.float32)
+            normalized_images.append(blank_image_tensor)
+
+            # 在file_data中添加空白画布图层信息
+            canvas_layer_info = {
+                "name": "Canvas Background",
+                "width": canvas_width,
+                "height": canvas_height,
+                "offset_x": 0,
+                "offset_y": 0,
+                "rotation": 0.0,
+                "scale_x": 1.0,
+                "scale_y": 1.0,
+                "is_canvas_background": True  # 标记为画布背景
+            }
+            file_data["layers"].insert(0, canvas_layer_info)
+            logger.info(f"Generated blank canvas image and layer info: {canvas_width}x{canvas_height}")
+        except Exception as e:
+            logger.warning(f"Failed to generate blank canvas image and layer info: {str(e)}")
+
         # 遍历图层
         for layer in psd:
             if not layer.is_visible() or not layer.has_pixels():
@@ -136,6 +159,8 @@ class XIS_PSDLayerExtractor:
                 # 初始化图层信息
                 layer_info = {
                     "name": layer.name,
+                    "width": layer_width,      # 图层实际宽度
+                    "height": layer_height,    # 图层实际高度
                     "offset_x": offset_x,
                     "offset_y": offset_y,
                     "rotation": 0.0,  # 默认旋转角度

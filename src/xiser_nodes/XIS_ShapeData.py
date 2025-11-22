@@ -54,6 +54,12 @@ class XIS_ShapeData:
 
                 # 其他属性接口 - 线宽值列表
                 "stroke_width": ("LIST", {"forceInput": True}),
+
+                # 新增控制接口 - 透明背景、模式、类型与参数
+                "transparent_bg": ("LIST", {"forceInput": True}),
+                "mode_selection": ("LIST", {"forceInput": True}),
+                "shape_type": ("LIST", {"forceInput": True}),
+                "shape_params": ("LIST", {"forceInput": True}),
             }
         }
 
@@ -151,7 +157,17 @@ class XIS_ShapeData:
         processed_properties = {}
 
         # 处理简单属性
-        simple_properties = ["rotation", "shape_color", "bg_color", "stroke_color", "stroke_width"]
+        simple_properties = [
+            "rotation",
+            "shape_color",
+            "bg_color",
+            "stroke_color",
+            "stroke_width",
+            "transparent_bg",
+            "mode_selection",
+            "shape_type",
+            "shape_params"
+        ]
 
         for prop_name in simple_properties:
             input_data = kwargs.get(prop_name)
@@ -230,8 +246,12 @@ class XIS_ShapeData:
             for prop_name in simple_properties:
                 value = processed_properties[prop_name][i]
                 if value is not None:
-                    shape_props[prop_name] = value
-                    logger.info(f"  - {prop_name}: {value}")
+                    if prop_name == "transparent_bg":
+                        coerced_value = bool(value)
+                    else:
+                        coerced_value = value
+                    shape_props[prop_name] = coerced_value
+                    logger.info(f"  - {prop_name}: {coerced_value}")
 
             shape_data_list.append(shape_props)
 

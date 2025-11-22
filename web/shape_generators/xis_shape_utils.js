@@ -1,6 +1,6 @@
 /**
  * @file xis_shape_utils.js
- * @description XIS_CreateShape 节点工具函数模块
+ * @description XIS_ShapeAndText 节点工具函数模块
  * @author grinlau18
  */
 
@@ -16,6 +16,51 @@ export const log = {
   warning: (...args) => { if (LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.warn(...args); },
   error: (...args) => { if (LOG_LEVEL === "error" || LOG_LEVEL === "warning" || LOG_LEVEL === "info") console.error(...args); }
 };
+
+export const DEFAULT_MODE_SELECTION = "circle, sector, doughnut";
+
+const MODE_TO_SHAPE_MAP = new Map([
+  ["circle, sector, doughnut", "circle"],
+  ["circle", "circle"],
+  ["polygon", "polygon"],
+  ["star", "star"],
+  ["heart", "heart"],
+  ["flower", "flower"],
+  ["spiral", "spiral"],
+  ["sunburst", "sunburst"],
+  ["square", "polygon"],
+  ["text", "text"]
+]);
+
+const SHAPE_TO_MODE_MAP = new Map([
+  ["circle", "circle, sector, doughnut"],
+  ["polygon", "polygon"],
+  ["star", "star"],
+  ["heart", "heart"],
+  ["flower", "flower"],
+  ["spiral", "spiral"],
+  ["sunburst", "sunburst"],
+  ["text", "text"]
+]);
+
+export function modeToShapeType(modeValue) {
+  if (modeValue === undefined || modeValue === null) return "circle";
+  const key = String(modeValue).trim();
+  if (!key) return "circle";
+  const normalizedKey = key.toLowerCase();
+  const mapped = MODE_TO_SHAPE_MAP.get(normalizedKey) || MODE_TO_SHAPE_MAP.get(key) || normalizedKey;
+  if (!MODE_TO_SHAPE_MAP.has(normalizedKey) && !SHAPE_TO_MODE_MAP.has(mapped)) {
+    return "circle";
+  }
+  return mapped;
+}
+
+export function shapeTypeToMode(shapeType) {
+  if (!shapeType) return DEFAULT_MODE_SELECTION;
+  const key = String(shapeType).trim();
+  const normalizedKey = key.toLowerCase();
+  return SHAPE_TO_MODE_MAP.get(normalizedKey) || SHAPE_TO_MODE_MAP.get(key) || DEFAULT_MODE_SELECTION;
+}
 
 /**
  * 十六进制颜色转 RGB

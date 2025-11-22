@@ -1,0 +1,1641 @@
+{
+  "id": "ccd9af21-18a1-4939-b651-f8fa11e45a9f",
+  "revision": 0,
+  "last_node_id": 43,
+  "last_link_id": 74,
+  "nodes": [
+    {
+      "id": 27,
+      "type": "XIS_CurveEditor",
+      "pos": [
+        670,
+        330
+      ],
+      "size": [
+        560,
+        594
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "curve_editor",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "start_value",
+          "type": "STRING",
+          "widget": {
+            "name": "start_value"
+          },
+          "link": 61
+        },
+        {
+          "name": "end_value",
+          "type": "STRING",
+          "widget": {
+            "name": "end_value"
+          },
+          "link": 54
+        },
+        {
+          "name": "point_count",
+          "type": "INT",
+          "widget": {
+            "name": "point_count"
+          },
+          "link": 52
+        }
+      ],
+      "outputs": [
+        {
+          "name": "int",
+          "shape": 6,
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "float",
+          "shape": 6,
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "hex",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "list",
+          "type": "LIST",
+          "links": [
+            51
+          ]
+        }
+      ],
+      "properties": {
+        "curve_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.2,
+            "y": 0.1
+          },
+          {
+            "x": 0.5,
+            "y": 0.5
+          },
+          {
+            "x": 0.8,
+            "y": 0.9
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "node_size": [
+          560,
+          594
+        ],
+        "data_type": "FLOAT",
+        "start_value": "0",
+        "end_value": "1",
+        "point_count": 16,
+        "color_interpolation": "HSV",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_CurveEditor",
+        "interpolation_algorithm": "catmull_rom",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        "HEX",
+        "#000000",
+        "#456789",
+        16,
+        "HSV",
+        {
+          "curve_points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.2,
+              "y": 0.1
+            },
+            {
+              "x": 0.5,
+              "y": 0.5
+            },
+            {
+              "x": 0.8,
+              "y": 0.9
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ],
+          "distribution_values": [
+            0.0137939453125,
+            0.0361328125,
+            0.0853271484375,
+            0.14930555555555555,
+            0.22802734375,
+            0.31814236111111116,
+            0.4115125868055556,
+            0.49999999999999994,
+            0.5884874131944444,
+            0.6818576388888888,
+            0.77197265625,
+            0.8506944444444444,
+            0.9146728515625,
+            0.9638671875,
+            0.9862060546874999,
+            1
+          ],
+          "distribution_t_values": [
+            {
+              "index": 1,
+              "t": 0.0625,
+              "transformed_t": 0.0137939453125
+            },
+            {
+              "index": 2,
+              "t": 0.125,
+              "transformed_t": 0.0361328125
+            },
+            {
+              "index": 3,
+              "t": 0.1875,
+              "transformed_t": 0.0853271484375
+            },
+            {
+              "index": 4,
+              "t": 0.25,
+              "transformed_t": 0.14930555555555555
+            },
+            {
+              "index": 5,
+              "t": 0.3125,
+              "transformed_t": 0.22802734375
+            },
+            {
+              "index": 6,
+              "t": 0.375,
+              "transformed_t": 0.31814236111111116
+            },
+            {
+              "index": 7,
+              "t": 0.4375,
+              "transformed_t": 0.4115125868055556
+            },
+            {
+              "index": 8,
+              "t": 0.5,
+              "transformed_t": 0.49999999999999994
+            },
+            {
+              "index": 9,
+              "t": 0.5625,
+              "transformed_t": 0.5884874131944444
+            },
+            {
+              "index": 10,
+              "t": 0.625,
+              "transformed_t": 0.6818576388888888
+            },
+            {
+              "index": 11,
+              "t": 0.6875,
+              "transformed_t": 0.77197265625
+            },
+            {
+              "index": 12,
+              "t": 0.75,
+              "transformed_t": 0.8506944444444444
+            },
+            {
+              "index": 13,
+              "t": 0.8125,
+              "transformed_t": 0.9146728515625
+            },
+            {
+              "index": 14,
+              "t": 0.875,
+              "transformed_t": 0.9638671875
+            },
+            {
+              "index": 15,
+              "t": 0.9375,
+              "transformed_t": 0.9862060546874999
+            },
+            {
+              "index": 16,
+              "t": 1,
+              "transformed_t": 1
+            }
+          ],
+          "data_type": "HEX",
+          "start_value": "#000000",
+          "end_value": "#456789",
+          "point_count": 16,
+          "interpolation_algorithm": "catmull_rom",
+          "color_interpolation": "HSV",
+          "node_size": [
+            560,
+            594
+          ],
+          "node_id": "27"
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 31,
+      "type": "XIS_SetColor",
+      "pos": [
+        -230,
+        470
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            54
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#3400c2"
+        },
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        {
+          "color": "#3400c2"
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 12,
+      "type": "XIS_ShapeData",
+      "pos": [
+        1260,
+        330
+      ],
+      "size": [
+        315,
+        338
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "position_x",
+          "shape": 7,
+          "type": "LIST",
+          "link": 66
+        },
+        {
+          "name": "position_y",
+          "shape": 7,
+          "type": "LIST",
+          "link": 67
+        },
+        {
+          "name": "rotation",
+          "shape": 7,
+          "type": "LIST",
+          "link": 26
+        },
+        {
+          "name": "scale_x",
+          "shape": 7,
+          "type": "LIST",
+          "link": 59
+        },
+        {
+          "name": "scale_y",
+          "shape": 7,
+          "type": "LIST",
+          "link": 60
+        },
+        {
+          "name": "skew_x",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "skew_y",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "shape": 7,
+          "type": "LIST",
+          "link": 51
+        },
+        {
+          "name": "bg_color",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "stroke_color",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "stroke_width",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "transparent_bg",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "mode_selection",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_type",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_params",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "count",
+          "type": "INT",
+          "widget": {
+            "name": "count"
+          },
+          "link": 53
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_data",
+          "type": "LIST",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_ShapeData",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        16
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 33,
+      "type": "XIS_SetColor",
+      "pos": [
+        -230,
+        600
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            61
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#a55072"
+        },
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        {
+          "color": "#a55072"
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 14,
+      "type": "XIS_CurveEditor",
+      "pos": [
+        70,
+        330
+      ],
+      "size": [
+        560,
+        594
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "curve_editor",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "point_count",
+          "type": "INT",
+          "widget": {
+            "name": "point_count"
+          },
+          "link": 50
+        }
+      ],
+      "outputs": [
+        {
+          "name": "int",
+          "shape": 6,
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "float",
+          "shape": 6,
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "hex",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "list",
+          "type": "LIST",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "curve_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.2,
+            "y": 0.1
+          },
+          {
+            "x": 0.5,
+            "y": 0.5
+          },
+          {
+            "x": 0.8,
+            "y": 0.9
+          },
+          {
+            "x": 1,
+            "y": 1
+          }
+        ],
+        "node_size": [
+          560,
+          594
+        ],
+        "data_type": "FLOAT",
+        "start_value": "0",
+        "end_value": "1",
+        "point_count": 16,
+        "color_interpolation": "HSV",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_CurveEditor",
+        "interpolation_algorithm": "catmull_rom",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        "FLOAT",
+        "0",
+        "570",
+        16,
+        "HSV",
+        {
+          "curve_points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.2,
+              "y": 0.1
+            },
+            {
+              "x": 0.5,
+              "y": 0.5
+            },
+            {
+              "x": 0.8,
+              "y": 0.9
+            },
+            {
+              "x": 1,
+              "y": 1
+            }
+          ],
+          "distribution_values": [
+            7.862548828125,
+            20.595703125,
+            48.636474609375,
+            85.10416666666667,
+            129.9755859375,
+            181.34114583333337,
+            234.56217447916669,
+            284.99999999999994,
+            335.4378255208333,
+            388.65885416666663,
+            440.0244140625,
+            484.8958333333333,
+            521.363525390625,
+            549.404296875,
+            562.1374511718749,
+            570
+          ],
+          "distribution_t_values": [
+            {
+              "index": 1,
+              "t": 0.0625,
+              "transformed_t": 0.0137939453125
+            },
+            {
+              "index": 2,
+              "t": 0.125,
+              "transformed_t": 0.0361328125
+            },
+            {
+              "index": 3,
+              "t": 0.1875,
+              "transformed_t": 0.0853271484375
+            },
+            {
+              "index": 4,
+              "t": 0.25,
+              "transformed_t": 0.14930555555555555
+            },
+            {
+              "index": 5,
+              "t": 0.3125,
+              "transformed_t": 0.22802734375
+            },
+            {
+              "index": 6,
+              "t": 0.375,
+              "transformed_t": 0.31814236111111116
+            },
+            {
+              "index": 7,
+              "t": 0.4375,
+              "transformed_t": 0.4115125868055556
+            },
+            {
+              "index": 8,
+              "t": 0.5,
+              "transformed_t": 0.49999999999999994
+            },
+            {
+              "index": 9,
+              "t": 0.5625,
+              "transformed_t": 0.5884874131944444
+            },
+            {
+              "index": 10,
+              "t": 0.625,
+              "transformed_t": 0.6818576388888888
+            },
+            {
+              "index": 11,
+              "t": 0.6875,
+              "transformed_t": 0.77197265625
+            },
+            {
+              "index": 12,
+              "t": 0.75,
+              "transformed_t": 0.8506944444444444
+            },
+            {
+              "index": 13,
+              "t": 0.8125,
+              "transformed_t": 0.9146728515625
+            },
+            {
+              "index": 14,
+              "t": 0.875,
+              "transformed_t": 0.9638671875
+            },
+            {
+              "index": 15,
+              "t": 0.9375,
+              "transformed_t": 0.9862060546874999
+            },
+            {
+              "index": 16,
+              "t": 1,
+              "transformed_t": 1
+            }
+          ],
+          "data_type": "FLOAT",
+          "start_value": "0",
+          "end_value": "570",
+          "point_count": 16,
+          "interpolation_algorithm": "catmull_rom",
+          "color_interpolation": "HSV",
+          "node_size": [
+            560,
+            594
+          ],
+          "node_id": "14"
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 26,
+      "type": "PrimitiveInt",
+      "pos": [
+        -230,
+        330
+      ],
+      "size": [
+        270,
+        82
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            50,
+            52,
+            53,
+            56,
+            68
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "PrimitiveInt",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        64,
+        "fixed"
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 36,
+      "type": "XIS_CoordinatePath",
+      "pos": [
+        70,
+        1000
+      ],
+      "size": [
+        560,
+        590
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "path_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "path_segments",
+          "type": "INT",
+          "widget": {
+            "name": "path_segments"
+          },
+          "link": 68
+        }
+      ],
+      "outputs": [
+        {
+          "name": "x_coordinate",
+          "shape": 6,
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "y_coordinate",
+          "shape": 6,
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "x_percent",
+          "shape": 6,
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "y_percent",
+          "shape": 6,
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "x_list",
+          "type": "LIST",
+          "links": [
+            66
+          ]
+        },
+        {
+          "name": "y_list",
+          "type": "LIST",
+          "links": [
+            67
+          ]
+        }
+      ],
+      "properties": {
+        "node_size": [
+          560,
+          590
+        ],
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_CoordinatePath",
+        "control_points": [
+          {
+            "x": 0.050014657597807315,
+            "y": 0.6863712971277951
+          },
+          {
+            "x": 0.2066969702855148,
+            "y": 0.8269846658853826
+          },
+          {
+            "x": 0.4022273999124607,
+            "y": 0.903599142897152
+          },
+          {
+            "x": 0.6113099083868117,
+            "y": 0.917406784544525
+          },
+          {
+            "x": 0.8005868441606021,
+            "y": 0.8285541234362461
+          },
+          {
+            "x": 0.9332682851585039,
+            "y": 0.6669072986580226
+          },
+          {
+            "x": 0.9728888852641508,
+            "y": 0.4613451765452925
+          },
+          {
+            "x": 0.9333253354195685,
+            "y": 0.2560179224624543
+          },
+          {
+            "x": 0.790716636979024,
+            "y": 0.10367206698911198
+          },
+          {
+            "x": 0.5924140351225152,
+            "y": 0.03769889676934613
+          },
+          {
+            "x": 0.38639360295876496,
+            "y": 0.07158530418624189
+          },
+          {
+            "x": 0.22860968114713992,
+            "y": 0.20776054567611835
+          },
+          {
+            "x": 0.1704408130790857,
+            "y": 0.408064780405174
+          },
+          {
+            "x": 0.2177159691334125,
+            "y": 0.6104998970349368
+          },
+          {
+            "x": 0.3887427323267296,
+            "y": 0.7280181581736034
+          },
+          {
+            "x": 0.5965703217344643,
+            "y": 0.7290639320714731
+          },
+          {
+            "x": 0.7592950165506649,
+            "y": 0.6006134056132588
+          },
+          {
+            "x": 0.7979975828167684,
+            "y": 0.39808551331715075
+          },
+          {
+            "x": 0.6611170897518805,
+            "y": 0.24631170854806797
+          },
+          {
+            "x": 0.4644305754331697,
+            "y": 0.2989093533265645
+          },
+          {
+            "x": 0.4134293249332621,
+            "y": 0.5007978499777757
+          }
+        ],
+        "width": 512,
+        "height": 512,
+        "path_mode": "curve",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        512,
+        512,
+        5,
+        "curve",
+        "uniform",
+        {
+          "control_points": [
+            {
+              "x": 0.050014657597807315,
+              "y": 0.6863712971277951
+            },
+            {
+              "x": 0.2066969702855148,
+              "y": 0.8269846658853826
+            },
+            {
+              "x": 0.4022273999124607,
+              "y": 0.903599142897152
+            },
+            {
+              "x": 0.6113099083868117,
+              "y": 0.917406784544525
+            },
+            {
+              "x": 0.8005868441606021,
+              "y": 0.8285541234362461
+            },
+            {
+              "x": 0.9332682851585039,
+              "y": 0.6669072986580226
+            },
+            {
+              "x": 0.9728888852641508,
+              "y": 0.4613451765452925
+            },
+            {
+              "x": 0.9333253354195685,
+              "y": 0.2560179224624543
+            },
+            {
+              "x": 0.790716636979024,
+              "y": 0.10367206698911198
+            },
+            {
+              "x": 0.5924140351225152,
+              "y": 0.03769889676934613
+            },
+            {
+              "x": 0.38639360295876496,
+              "y": 0.07158530418624189
+            },
+            {
+              "x": 0.22860968114713992,
+              "y": 0.20776054567611835
+            },
+            {
+              "x": 0.1704408130790857,
+              "y": 0.408064780405174
+            },
+            {
+              "x": 0.2177159691334125,
+              "y": 0.6104998970349368
+            },
+            {
+              "x": 0.3887427323267296,
+              "y": 0.7280181581736034
+            },
+            {
+              "x": 0.5965703217344643,
+              "y": 0.7290639320714731
+            },
+            {
+              "x": 0.7592950165506649,
+              "y": 0.6006134056132588
+            },
+            {
+              "x": 0.7979975828167684,
+              "y": 0.39808551331715075
+            },
+            {
+              "x": 0.6611170897518805,
+              "y": 0.24631170854806797
+            },
+            {
+              "x": 0.4644305754331697,
+              "y": 0.2989093533265645
+            },
+            {
+              "x": 0.4134293249332621,
+              "y": 0.5007978499777757
+            }
+          ],
+          "width": 512,
+          "height": 512,
+          "path_mode": "curve",
+          "distribution_mode": "uniform",
+          "node_size": [
+            560,
+            590
+          ]
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 25,
+      "type": "ImageListToImageBatch",
+      "pos": [
+        1720,
+        1090
+      ],
+      "size": [
+        202.54061889648438,
+        26
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 47
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-impact-pack",
+        "ver": "8.14.2",
+        "Node name for S&R": "ImageListToImageBatch",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 32,
+      "type": "XIS_CurveEditor",
+      "pos": [
+        670,
+        1000
+      ],
+      "size": [
+        560,
+        594
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "curve_editor",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "point_count",
+          "type": "INT",
+          "widget": {
+            "name": "point_count"
+          },
+          "link": 56
+        }
+      ],
+      "outputs": [
+        {
+          "name": "int",
+          "shape": 6,
+          "type": "INT",
+          "links": null
+        },
+        {
+          "name": "float",
+          "shape": 6,
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "hex",
+          "shape": 6,
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "list",
+          "type": "LIST",
+          "links": [
+            59,
+            60
+          ]
+        }
+      ],
+      "properties": {
+        "curve_points": [
+          {
+            "x": 0,
+            "y": 0
+          },
+          {
+            "x": 0.25,
+            "y": 0.7250737259256987
+          },
+          {
+            "x": 0.5,
+            "y": 1
+          },
+          {
+            "x": 0.75,
+            "y": 0.751336815604687
+          },
+          {
+            "x": 1,
+            "y": 0
+          }
+        ],
+        "node_size": [
+          560,
+          594
+        ],
+        "data_type": "FLOAT",
+        "start_value": "0",
+        "end_value": "1",
+        "point_count": 16,
+        "color_interpolation": "HSV",
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_CurveEditor",
+        "interpolation_algorithm": "catmull_rom",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        "FLOAT",
+        "0",
+        "1",
+        16,
+        "HSV",
+        {
+          "curve_points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 0.25,
+              "y": 0.7250737259256987
+            },
+            {
+              "x": 0.5,
+              "y": 1
+            },
+            {
+              "x": 0.75,
+              "y": 0.751336815604687
+            },
+            {
+              "x": 1,
+              "y": 0
+            }
+          ],
+          "distribution_values": [
+            0.14083701603004112,
+            0.3453539708332055,
+            0.5584623717011918,
+            0.7250737259256987,
+            0.837727915085457,
+            0.9233954198579126,
+            0.9786336461828365,
+            1,
+            0.9864305009312861,
+            0.9398098509072801,
+            0.8611184793308061,
+            0.7513368156046871,
+            0.5812373947821895,
+            0.36012695877763645,
+            0.14678724728543685,
+            -1.1102230246251565e-16
+          ],
+          "distribution_t_values": [
+            {
+              "index": 1,
+              "t": 0.0625,
+              "transformed_t": 0.14083701603004112
+            },
+            {
+              "index": 2,
+              "t": 0.125,
+              "transformed_t": 0.3453539708332055
+            },
+            {
+              "index": 3,
+              "t": 0.1875,
+              "transformed_t": 0.5584623717011918
+            },
+            {
+              "index": 4,
+              "t": 0.25,
+              "transformed_t": 0.7250737259256987
+            },
+            {
+              "index": 5,
+              "t": 0.3125,
+              "transformed_t": 0.837727915085457
+            },
+            {
+              "index": 6,
+              "t": 0.375,
+              "transformed_t": 0.9233954198579126
+            },
+            {
+              "index": 7,
+              "t": 0.4375,
+              "transformed_t": 0.9786336461828365
+            },
+            {
+              "index": 8,
+              "t": 0.5,
+              "transformed_t": 1
+            },
+            {
+              "index": 9,
+              "t": 0.5625,
+              "transformed_t": 0.9864305009312861
+            },
+            {
+              "index": 10,
+              "t": 0.625,
+              "transformed_t": 0.9398098509072801
+            },
+            {
+              "index": 11,
+              "t": 0.6875,
+              "transformed_t": 0.8611184793308061
+            },
+            {
+              "index": 12,
+              "t": 0.75,
+              "transformed_t": 0.7513368156046871
+            },
+            {
+              "index": 13,
+              "t": 0.8125,
+              "transformed_t": 0.5812373947821895
+            },
+            {
+              "index": 14,
+              "t": 0.875,
+              "transformed_t": 0.36012695877763645
+            },
+            {
+              "index": 15,
+              "t": 0.9375,
+              "transformed_t": 0.14678724728543685
+            },
+            {
+              "index": 16,
+              "t": 1,
+              "transformed_t": -1.1102230246251565e-16
+            }
+          ],
+          "data_type": "FLOAT",
+          "start_value": "0",
+          "end_value": "1",
+          "point_count": 16,
+          "interpolation_algorithm": "catmull_rom",
+          "color_interpolation": "HSV",
+          "node_size": [
+            560,
+            594
+          ],
+          "node_id": "32"
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 10,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        1600,
+        330
+      ],
+      "size": [
+        404,
+        663
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": 11
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            47,
+            74
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "heart",
+        "shape_type": "heart",
+        "shape_params": "{\"content\":\"A\",\"font_file\":\"\",\"font_family\":\"\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"normal\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":true,\"text_align\":\"center\",\"angle\":105,\"inner_radius\":56,\"shape_rotation\":0,\"sides\":5,\"corner_radius\":25,\"points\":5,\"petals\":9,\"pointsPerTurn\":96,\"ray_count\":7,\"start_width\":-20,\"end_width\":100,\"ray_length\":1.35,\"path_offset\":-0.4}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 511,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0.004097516505400245,\"y\":0.01510396636831546},\"rotation\":0,\"scale\":{\"x\":1.1,\"y\":1.1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":383}}",
+        "shape_state": "{\"position\":{\"x\":0.004097516505400245,\"y\":0.01510396636831546},\"rotation\":0,\"scale\":{\"x\":1.1,\"y\":1.1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":383}}",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [
+        512,
+        511.703125,
+        "heart",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "heart",
+          "shape_type": "heart",
+          "shape_params": "{\"content\":\"A\",\"font_file\":\"\",\"font_family\":\"\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"normal\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":true,\"text_align\":\"center\",\"angle\":105,\"inner_radius\":56,\"shape_rotation\":0,\"sides\":5,\"corner_radius\":25,\"points\":5,\"petals\":9,\"pointsPerTurn\":96,\"ray_count\":7,\"start_width\":-20,\"end_width\":100,\"ray_length\":1.35,\"path_offset\":-0.4}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 511,
+          "position": {
+            "x": 0.004097516505400245,
+            "y": 0.01510396636831546
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1.1,
+            "y": 1.1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0.004097516505400245,\"y\":0.01510396636831546},\"rotation\":0,\"scale\":{\"x\":1.1,\"y\":1.1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":383}}",
+          "has_shape_data_input": true,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    },
+    {
+      "id": 43,
+      "type": "PreviewImage",
+      "pos": [
+        2040,
+        330
+      ],
+      "size": [
+        710,
+        1270
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 74
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "PreviewImage",
+        "xiser_title_color": "#00c2b2",
+        "xiser_content_color": "#444546"
+      },
+      "widgets_values": [],
+      "color": "#00c2b2",
+      "bgcolor": "#444546"
+    }
+  ],
+  "links": [
+    [
+      11,
+      12,
+      0,
+      10,
+      1,
+      "LIST"
+    ],
+    [
+      26,
+      14,
+      3,
+      12,
+      2,
+      "LIST"
+    ],
+    [
+      47,
+      10,
+      0,
+      25,
+      0,
+      "IMAGE"
+    ],
+    [
+      50,
+      26,
+      0,
+      14,
+      1,
+      "INT"
+    ],
+    [
+      51,
+      27,
+      3,
+      12,
+      7,
+      "LIST"
+    ],
+    [
+      52,
+      26,
+      0,
+      27,
+      3,
+      "INT"
+    ],
+    [
+      53,
+      26,
+      0,
+      12,
+      15,
+      "INT"
+    ],
+    [
+      54,
+      31,
+      0,
+      27,
+      2,
+      "STRING"
+    ],
+    [
+      56,
+      26,
+      0,
+      32,
+      1,
+      "INT"
+    ],
+    [
+      59,
+      32,
+      3,
+      12,
+      3,
+      "LIST"
+    ],
+    [
+      60,
+      32,
+      3,
+      12,
+      4,
+      "LIST"
+    ],
+    [
+      61,
+      33,
+      0,
+      27,
+      1,
+      "STRING"
+    ],
+    [
+      66,
+      36,
+      4,
+      12,
+      0,
+      "LIST"
+    ],
+    [
+      67,
+      36,
+      5,
+      12,
+      1,
+      "LIST"
+    ],
+    [
+      68,
+      26,
+      0,
+      36,
+      1,
+      "INT"
+    ],
+    [
+      74,
+      10,
+      0,
+      43,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Group",
+      "bounding": [
+        -270,
+        226.39999389648438,
+        3060,
+        1413.5999755859375
+      ],
+      "color": "#444",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6727499949325657,
+      "offset": [
+        613.2244010626222,
+        -137.73762848808104
+      ]
+    },
+    "frontendVersion": "1.27.10",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

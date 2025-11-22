@@ -66,7 +66,7 @@ export class WavyGenerator {
         // Wave count control
         const waveCountDiv = document.createElement("div");
         waveCountDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">波浪数量:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Wave Count:</label>
             <input type="range" min="2" max="30" step="1"
                    value="${shapeParams.wave_count || 8}"
                    style="width: 100%;"
@@ -84,7 +84,7 @@ export class WavyGenerator {
         const amplitudeDiv = document.createElement("div");
         amplitudeDiv.style.marginTop = "8px";
         amplitudeDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">波浪幅度:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Wave Amplitude:</label>
             <input type="range" min="0.05" max="0.5" step="0.01"
                    value="${shapeParams.wave_amplitude || 0.2}"
                    style="width: 100%;"

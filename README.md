@@ -21,8 +21,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 4. **Interactive Editing**: Use the canvas interface to position, scale, and rotate layers
 5. **Generate Output**: Connect the output to your workflow for further processing
 
-### Getting Started with XIS_CreateShape
-1. **Add XIS_CreateShape Node**: Located in `XISER_Nodes/Visual_Editing`
+### Getting Started with XIS_ShapeAndText
+1. **Add XIS_ShapeAndText Node**: Located in `XISER_Nodes/Visual_Editing`
 2. **Choose Shape Type**: Select from circle, polygon, star, heart, etc.
 3. **Customize Appearance**: Set colors, stroke, and transparency
 4. **Apply Transformations**: Use the interactive canvas for positioning and scaling
@@ -51,6 +51,15 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 4. Look for nodes under the `XISER_Nodes` category in the ComfyUI interface
 
 **Dependencies**: Requires `torch`, `PIL`, `numpy`, `opencv-python`, and ComfyUI core libraries.
+
+### Cutout Model Setup
+The new cutout button in the canvas helper uses [BiRefNet](https://github.com/tamzi/bi-ref-net) to compute alpha masks. Follow these steps to activate it:
+
+1. Download the `BiRefNet-general-epoch_244.pth` checkpoint and place it in `ComfyUI/models/BiRefNet/pth/`. You can retrieve the file from the official mirrors:
+   - https://pan.baidu.com/s/12z3qUuqag3nqpN2NJ5pSzg?pwd=ek65
+   - https://drive.google.com/drive/folders/1s2Xe0cjq-2ctnJBR24563yMSCOu4CcxM
+2. Install the inference dependencies (if not already available) with `pip install kornia==0.7.2 timm` inside your ComfyUI environment.
+3. Restart ComfyUI; the canvas cutout button will now call BiRefNet and preserve the trimmed result in both the UI and node outputs.
 
 ---
 
@@ -83,6 +92,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Customizable canvas dimensions, borders, and background colors
   - Drag, scale, and rotate image operations with real-time preview
   - Layer management with automatic top positioning and stacking order
+  - Visible/hidden control for each layer plus manual reorder buttons for precise stacking
+  - One-click cutout tool powered by BiRefNet for generating masked composites before execution
   - Mask generation for precise image compositing
   - Undo/Redo functionality with 20-step history
   - Auto-size feature to match canvas dimensions to first image
@@ -90,10 +101,10 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - PSD file import support with layer extraction
   - Real-time transformation controls with independent scaling
   - Mouse wheel scaling and Alt+wheel rotation for precise control
-
 ![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
 ![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
 ![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
+![XIS_Canvas图像合成](img/XIS_Canvas_4.jpeg)
 
 #### XIS_CoordinatePath
 - **Function**: Generate coordinate paths based on control points
@@ -123,10 +134,11 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
-#### XIS_CreateShape
+#### XIS_ShapeAndText
 - **Function**: Generate geometric shapes with interactive controls
 - **Features**:
-  - Multiple shape types: circle, polygon, star, heart, flower, spiral, sunburst, square
+  - Multiple shape types: circle / sector / doughnut, polygon (with rounded corners), star, heart, flower, spiral, sunburst, text
+  - **Text mode**: convert custom text into vector shapes using fonts from `custom_nodes/ComfyUI_XISER_Nodes/fonts`, with controls for content, font, spacing, weight, italic, and underline
   - Configurable colors, stroke, transparency, and background
   - Advanced transformations: rotation, scaling, skewing, positioning
   - Batch shape creation with shape data input
@@ -134,8 +146,13 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Separate shape image, mask, and background outputs
   - Real-time preview with interactive canvas widget
 
-![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
-![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
+![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
+![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
+
+##### Text Mode & Fonts
+- Switch the shape type to **Text** to unlock a dedicated control panel with content input, font selection, letter/line spacing, bold, italic, underline and uppercase toggles.
+- Place `.ttf/.otf/.ttc` files in `custom_nodes/ComfyUI_XISER_Nodes/fonts`, then click **刷新字体** / **Refresh Fonts** in the panel to load them. Fonts are mapped to in-browser `@font-face` rules automatically.
+- All text settings are serialized through `shape_params` and honoured in both the interactive preview and backend rendering, including batch mode via the `shape_data` input.
 
 ### 🖼️ Image Processing Nodes
 
@@ -211,6 +228,13 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
   - Float and integer sliders
   - Configurable ranges and step sizes
 
+#### CreatePointsString
+- **Function**: Serialize six frame/intensity pairs into a multi-line shorthand string
+- **Features**:
+  - Accepts six `frame`/`intensity` pairs with configurable ranges
+  - Outputs a formatted string that can be reused for time-based intensity lists
+  - Useful for workflows that drive keyframe-style prompts or mask intensities
+
 ### 🔧 Utility Nodes
 
 #### XIS_ResizeToDivisible
@@ -221,6 +245,14 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 #### XIS_InvertMask
 - **Function**: Mask inversion
+
+---
+
+## Acknowledgements
+
+- The interactive canvas uses [Konva](https://konvajs.org/) under the hood; thanks to the Konva contributors for the full-featured 2D drawing API.
+- The one-click cutout leverages [BiRefNet](https://github.com/tamzi/bi-ref-net) (thanks to the original authors and the community contributions such as the tin2tin/2D_Asset_Generator project) along with `kornia` and `timm` for the preprocessing/backbone support.
+- Any additional inspiration for layer handling came from community-built ComfyUI extensions—big thanks to the ComfyUI and custom node author communities for keeping the ecosystem so vibrant.
 - **Features**:
   - Boolean switch control support
   - Automatic value range handling
@@ -254,7 +286,8 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 - **Usage**: Right-click on node, select "Change Node Color"
 - **Features**: Modify background colors for node title and content areas separately
 
-![Node Color Customization](img/changeNodeColor.jpeg)
+![Node Color Customization](img/changeNodeColor_1.jpeg)
+![Node Color Customization](img/changeNodeColor_2.jpeg)
 
 ### Text Label with HTML Support
 - **Function**: Text labels with HTML support
@@ -293,10 +326,10 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 - **PSD Import**: Import PSD files with layer extraction
 - **Real-time Preview**: See transformations immediately
 
-### XIS_CreateShape Operation Guide
+### XIS_ShapeAndText Operation Guide
 
 **Shape Creation:**
-- **Shape Types**: Circle, polygon, star, heart, flower, spiral, sunburst, square
+- **Shape Types**: Circle / sector / doughnut, polygon (supports rounded corners), star, heart, flower, spiral, sunburst, text
 - **Interactive Canvas**: Real-time preview with interactive widget
 - **Batch Processing**: Create multiple shapes with shape data input
 
@@ -327,7 +360,7 @@ Using visual editing nodes:
 1. Generate coordinate paths with XIS_CoordinatePath
 2. Create distribution curves with XIS_CurveEditor
 3. Generate gradients with XIS_MultiPointGradient
-4. Create geometric shapes with XIS_CreateShape
+4. Create geometric shapes with XIS_ShapeAndText
 
 ---
 

@@ -48,6 +48,117 @@ function catmullRom(points, segmentIndex, t) {
   return { x, y };
 }
 
+function generateCurveSamples(controlPoints, width, height) {
+  if (controlPoints.length < 2) return [];
+  const points = controlPoints.map(p => ({ x: p.x * width, y: p.y * height }));
+  let curvePoints = [...points];
+  if (curvePoints.length === 2) {
+    curvePoints = [curvePoints[0], curvePoints[0], curvePoints[1], curvePoints[1]];
+  } else if (curvePoints.length === 3) {
+    curvePoints = [curvePoints[0], curvePoints[0], curvePoints[1], curvePoints[2], curvePoints[2]];
+  } else {
+    curvePoints = [curvePoints[0], ...curvePoints, curvePoints[curvePoints.length - 1]];
+  }
+
+  const samples = [];
+  const numSegments = curvePoints.length - 3;
+  const samplesPerSegment = 40;
+  for (let seg = 0; seg < numSegments; seg++) {
+    for (let j = 0; j <= samplesPerSegment; j++) {
+      const t = j / samplesPerSegment;
+      samples.push(catmullRom(curvePoints, seg, t));
+    }
+  }
+  return samples;
+}
+
+function optimizeControlPoints(node) {
+  const controlPoints = node.properties?.control_points || [];
+  if (controlPoints.length < 2) return controlPoints;
+
+  const width = node.properties?.width || node.canvas?.width || 512;
+  const height = node.properties?.height || node.canvas?.height || 512;
+  const pathMode = node.properties?.path_mode || "linear";
+
+  const sampled = samplePath(controlPoints, width, height, pathMode);
+  if (sampled.length < 2) return controlPoints;
+
+  const distances = [0];
+  for (let i = 1; i < sampled.length; i++) {
+    const dx = sampled[i].x - sampled[i - 1].x;
+    const dy = sampled[i].y - sampled[i - 1].y;
+    distances.push(distances[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const total = distances[distances.length - 1];
+  if (total <= 0) return controlPoints;
+
+  const targetCount = Math.max(2, controlPoints.length);
+  const step = total / (targetCount - 1);
+  const resampled = [];
+  for (let i = 0; i < targetCount; i++) {
+    const target = i * step;
+    const idx = distances.findIndex(d => d >= target);
+    if (idx <= 0) {
+      resampled.push(sampled[0]);
+      continue;
+    }
+    const d0 = distances[idx - 1];
+    const d1 = distances[idx];
+    const t = (target - d0) / (d1 - d0 || 1);
+    const p0 = sampled[idx - 1];
+    const p1 = sampled[idx];
+    resampled.push({
+      x: p0.x + (p1.x - p0.x) * t,
+      y: p0.y + (p1.y - p0.y) * t
+    });
+  }
+
+  resampled[0] = { x: controlPoints[0].x * width, y: controlPoints[0].y * height };
+  resampled[resampled.length - 1] = {
+    x: controlPoints[controlPoints.length - 1].x * width,
+    y: controlPoints[controlPoints.length - 1].y * height
+  };
+
+  return resampled.map(p => ({
+    x: Math.max(0, Math.min(1, p.x / width)),
+    y: Math.max(0, Math.min(1, p.y / height))
+  }));
+}
+
+function applyOptimization(node) {
+  if (!node) return;
+  node.properties.control_points = optimizeControlPoints(node);
+  updateDisplay(node);
+  if (node.setDirtyCanvas) {
+    node.setDirtyCanvas(true, true);
+  }
+  if (node.onWidgetChange) {
+    node.onWidgetChange();
+  }
+  log.info(`Node ${node.id} optimized control points`);
+}
+
+function samplePath(controlPoints, width, height, pathMode) {
+  if (controlPoints.length < 2) return [];
+  if (pathMode === "curve") {
+    return generateCurveSamples(controlPoints, width, height);
+  }
+  const samples = [];
+  const samplesPerSegment = 20;
+  for (let i = 0; i < controlPoints.length - 1; i++) {
+    const p1 = controlPoints[i];
+    const p2 = controlPoints[i + 1];
+    for (let j = 0; j <= samplesPerSegment; j++) {
+      const t = j / samplesPerSegment;
+      samples.push({
+        x: (p1.x + (p2.x - p1.x) * t) * width,
+        y: (p1.y + (p2.y - p1.y) * t) * height
+      });
+    }
+  }
+  return samples;
+}
+
 /**
  * 生成曲线路径点用于检测点击
  * @param {Array} controlPoints - 控制点数组
@@ -138,7 +249,7 @@ export function setupCanvas(node) {
     justify-content: center;
     overflow: hidden;
     position: relative;
-    background: rgba(90, 90, 90, 0.15);
+    background: rgba(90, 90, 90, 0);
     border-radius: 4px;
   `;
 
@@ -153,6 +264,38 @@ export function setupCanvas(node) {
     object-fit: contain;
   `;
   canvasContainer.appendChild(node.canvas);
+
+  // 自动优化按钮（右上角）
+  const optimizeBtn = document.createElement("button");
+  optimizeBtn.innerHTML = `
+    <span style="display:flex;align-items:center;gap:6px;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M17.2903 4.14004L17.2203 7.93004C17.2103 8.45004 17.5403 9.14004 17.9603 9.45004L20.4403 11.33C22.0303 12.53 21.7703 14 19.8703 14.6L16.6403 15.61C16.1003 15.78 15.5303 16.37 15.3903 16.92L14.6203 19.86C14.0103 22.18 12.4903 22.41 11.2303 20.37L9.47027 17.52C9.15027 17 8.39027 16.61 7.79027 16.64L4.45027 16.81C2.06027 16.93 1.38027 15.55 2.94027 13.73L4.92027 11.43C5.29027 11 5.46027 10.2 5.29027 9.66004L4.27027 6.42004C3.68027 4.52004 4.74027 3.47004 6.63027 4.09004L9.58027 5.06004C10.0803 5.22004 10.8303 5.11004 11.2503 4.80004L14.3303 2.58004C16.0003 1.39004 17.3303 2.09004 17.2903 4.14004Z" fill="#fff"></path>
+        <path d="M21.4403 20.4702L18.4103 17.4402C18.1203 17.1502 17.6403 17.1502 17.3503 17.4402C17.0603 17.7302 17.0603 18.2102 17.3503 18.5002L20.3803 21.5302C20.5303 21.6802 20.7203 21.7502 20.9103 21.7502C21.1003 21.7502 21.2903 21.6802 21.4403 21.5302C21.7303 21.2402 21.7303 20.7602 21.4403 20.4702Z" fill="#fff"></path>
+      </svg>
+      <span style="font-size:11px;color:#fff;">Optimize</span>
+    </span>
+  `;
+  optimizeBtn.style.cssText = `
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.15);
+    color: #fff;
+    border: 1px solid #888;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  `;
+  optimizeBtn.addEventListener("click", () => {
+    applyOptimization(node);
+  });
+  canvasContainer.appendChild(optimizeBtn);
   mainContainer.appendChild(canvasContainer);
   node.ctx = node.canvas.getContext("2d");
 
@@ -164,11 +307,11 @@ export function setupCanvas(node) {
     font-size: 12px;
     text-align: center;
     padding: 4px;
-    background: rgba(90, 90, 90, 0.15);
+    background: rgba(90, 90, 90, 0);
     border-radius: 4px;
     margin-top: 8px;
   `;
-  infoDiv.textContent = "左键点击添加控制点 | 右键菜单操作";
+  infoDiv.textContent = "LMB: add point | RMB: menu";
   mainContainer.appendChild(infoDiv);
 
   // 注册画布控件
@@ -285,84 +428,81 @@ export function setupCanvas(node) {
  */
 export function updateDisplay(node, message) {
   if (!node || !node.canvas || !node.ctx) return;
+  if (node._updateScheduled) return;
+  node._updateScheduled = true;
 
-  const canvas = node.canvas;
-  const ctx = node.ctx;
-  const width = canvas.width;
-  const height = canvas.height;
+  requestAnimationFrame(() => {
+    node._updateScheduled = false;
 
-  // 清除画布
-  ctx.clearRect(0, 0, width, height);
+    const canvas = node.canvas;
+    const ctx = node.ctx;
+    const width = canvas.width;
+    const height = canvas.height;
 
-  // 获取控制点数据
-  const controlPoints = node.properties?.control_points || [
-    { x: 125.0 / 512, y: 125.0 / 512 },
-    { x: 387.0 / 512, y: 387.0 / 512 }
-  ];
+    ctx.clearRect(0, 0, width, height);
 
-  // 绘制网格背景
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+    const controlPoints = node.properties?.control_points || [
+      { x: 125.0 / 512, y: 125.0 / 512 },
+      { x: 387.0 / 512, y: 387.0 / 512 }
+    ];
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
   ctx.lineWidth = 1;
-  for (let i = 0; i <= width; i += 50) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, height);
-    ctx.stroke();
+  ctx.beginPath();
+  const cols = 10;
+  const rows = 10;
+  const xStep = width / cols;
+  const yStep = height / rows;
+  for (let i = 0; i <= cols; i++) {
+    const x = Math.round(i * xStep) + 0.5;
+    ctx.moveTo(x, 0.5);
+    ctx.lineTo(x, height - 0.5);
   }
-  for (let i = 0; i <= height; i += 50) {
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(width, i);
-    ctx.stroke();
+  for (let i = 0; i <= rows; i++) {
+    const y = Math.round(i * yStep) + 0.5;
+    ctx.moveTo(0.5, y);
+    ctx.lineTo(width - 0.5, y);
   }
+  ctx.rect(0.5, 0.5, width - 1, height - 1);
+  ctx.stroke();
 
-  // 绘制控制点和连线
-  if (controlPoints.length > 0) {
-    // 绘制连线
-    ctx.strokeStyle = "#4CAF50";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    const pathMode = node.properties?.path_mode || "linear";
-    
-    if (pathMode === "curve" && controlPoints.length >= 2) {
-      // 曲线模式 - 使用 Catmull-Rom 样条曲线
-      const points = controlPoints.map(p => ({
-        x: p.x * width,
-        y: p.y * height
-      }));
+    if (controlPoints.length > 0) {
+      ctx.strokeStyle = "#4CAF50";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
       
-      // 为 Catmull-Rom 添加平滑的虚拟端点
-      let curvePoints = [...points];
-      if (curvePoints.length === 2) {
-        // 对于2个点，创建更平滑的虚拟端点
-        const p0 = { x: curvePoints[0].x - 0.2 * (curvePoints[1].x - curvePoints[0].x),
-                    y: curvePoints[0].y - 0.2 * (curvePoints[1].y - curvePoints[0].y) };
-        const p3 = { x: curvePoints[1].x + 0.2 * (curvePoints[1].x - curvePoints[0].x),
-                    y: curvePoints[1].y + 0.2 * (curvePoints[1].y - curvePoints[0].y) };
-        curvePoints = [p0, curvePoints[0], curvePoints[1], p3];
-      } else if (curvePoints.length === 3) {
-        // 对于3个点，创建更平滑的虚拟端点
-        const p0 = { x: curvePoints[0].x - 0.15 * (curvePoints[1].x - curvePoints[0].x),
-                    y: curvePoints[0].y - 0.15 * (curvePoints[1].y - curvePoints[0].y) };
-        const p4 = { x: curvePoints[2].x + 0.15 * (curvePoints[2].x - curvePoints[1].x),
-                    y: curvePoints[2].y + 0.15 * (curvePoints[2].y - curvePoints[1].y) };
-        curvePoints = [p0, curvePoints[0], curvePoints[1], curvePoints[2], p4];
-      } else {
-        // 对于4个及以上控制点，添加平滑的虚拟端点
-        const p0 = { x: curvePoints[0].x - 0.1 * (curvePoints[1].x - curvePoints[0].x),
-                    y: curvePoints[0].y - 0.1 * (curvePoints[1].y - curvePoints[0].y) };
-        const p_end = { x: curvePoints[curvePoints.length - 1].x + 0.1 * (curvePoints[curvePoints.length - 1].x - curvePoints[curvePoints.length - 2].x),
-                      y: curvePoints[curvePoints.length - 1].y + 0.1 * (curvePoints[curvePoints.length - 1].y - curvePoints[curvePoints.length - 2].y) };
-        curvePoints = [p0, ...curvePoints, p_end];
-      }
+      const pathMode = node.properties?.path_mode || "linear";
       
-      // 绘制 Catmull-Rom 曲线
-      const numSegments = curvePoints.length - 3;
-      if (numSegments > 0) {
+      if (pathMode === "curve" && controlPoints.length >= 2) {
+        const points = controlPoints.map(p => ({
+          x: p.x * width,
+          y: p.y * height
+        }));
+        
+        let curvePoints = [...points];
+        if (curvePoints.length === 2) {
+          const p0 = { x: curvePoints[0].x - 0.2 * (curvePoints[1].x - curvePoints[0].x),
+                      y: curvePoints[0].y - 0.2 * (curvePoints[1].y - curvePoints[0].y) };
+          const p3 = { x: curvePoints[1].x + 0.2 * (curvePoints[1].x - curvePoints[0].x),
+                      y: curvePoints[1].y + 0.2 * (curvePoints[1].y - curvePoints[0].y) };
+          curvePoints = [p0, curvePoints[0], curvePoints[1], p3];
+        } else if (curvePoints.length === 3) {
+          const p0 = { x: curvePoints[0].x - 0.15 * (curvePoints[1].x - curvePoints[0].x),
+                      y: curvePoints[0].y - 0.15 * (curvePoints[1].y - curvePoints[0].y) };
+          const p4 = { x: curvePoints[2].x + 0.15 * (curvePoints[2].x - curvePoints[1].x),
+                      y: curvePoints[2].y + 0.15 * (curvePoints[2].y - curvePoints[1].y) };
+          curvePoints = [p0, curvePoints[0], curvePoints[1], curvePoints[2], p4];
+        } else {
+          const p0 = { x: curvePoints[0].x - 0.1 * (curvePoints[1].x - curvePoints[0].x),
+                      y: curvePoints[0].y - 0.1 * (curvePoints[1].y - curvePoints[0].y) };
+          const p_end = { x: curvePoints[curvePoints.length - 1].x + 0.1 * (curvePoints[curvePoints.length - 1].x - curvePoints[curvePoints.length - 2].x),
+                        y: curvePoints[curvePoints.length - 1].y + 0.1 * (curvePoints[curvePoints.length - 1].y - curvePoints[curvePoints.length - 2].y) };
+          curvePoints = [p0, ...curvePoints, p_end];
+        }
+        
+        const numSegments = curvePoints.length - 3;
         for (let seg = 0; seg < numSegments; seg++) {
-          // 增加采样密度以提高平滑度
-          const samplesPerSegment = 40; // 从20增加到40个采样点
+          const samplesPerSegment = 40;
           for (let j = 0; j <= samplesPerSegment; j++) {
             const t = j / samplesPerSegment;
             const point = catmullRom(curvePoints, seg, t);
@@ -373,70 +513,56 @@ export function updateDisplay(node, message) {
             }
           }
         }
+      } else {
+        for (let i = 0; i < controlPoints.length; i++) {
+          const point = controlPoints[i];
+          const x = point.x * width;
+          const y = point.y * height;
+          
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
       }
-    } else {
-      // 线性模式 - 直接连接控制点
+      ctx.stroke();
+
       for (let i = 0; i < controlPoints.length; i++) {
         const point = controlPoints[i];
         const x = point.x * width;
         const y = point.y * height;
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+        ctx.fillStyle = "#0e8420ff";
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = "#FFF";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        ctx.fillStyle = "#FFF";
+        ctx.font = "13px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText((i + 1).toString(), x, y+1);
       }
     }
-    ctx.stroke();
 
-    // 绘制控制点
-    for (let i = 0; i < controlPoints.length; i++) {
-      const point = controlPoints[i];
-      const x = point.x * width;
-      const y = point.y * height;
-
-      // 控制点圆圈
-      ctx.fillStyle = "#0e8420ff";
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, 2 * Math.PI);
-      ctx.fill();
-
-      // 控制点边框
-      ctx.strokeStyle = "#FFF";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, 10, 0, 2 * Math.PI);
-      ctx.stroke();
-
-      // 控制点编号
-      ctx.fillStyle = "#FFF";
-      ctx.font = "13px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText((i + 1).toString(), x, y+1);
+    const infoDiv = node.canvas.parentElement?.parentElement?.querySelector(`.xiser-coordinate-info`);
+    if (infoDiv) {
+      const pathMode = node.properties?.path_mode || "linear";
+      const distributionMode = node.properties?.distribution_mode || "uniform";
+      const distributionModeText = {
+        "uniform": "Uniform",
+        "ease_in": "Ease In",
+        "ease_out": "Ease Out",
+        "ease_in_out": "Ease In-Out",
+        "ease_out_in": "Ease Out-In"
+      }[distributionMode] || "Uniform";
+      infoDiv.textContent = `Points: ${controlPoints.length} | Path: ${pathMode === "curve" ? "Curve" : "Line"} | Distribution: ${distributionModeText}`;
     }
-  }
-
-  // 更新信息显示
-  const infoDiv = node.canvas.parentElement?.parentElement?.querySelector(`.xiser-coordinate-info`);
-  if (infoDiv) {
-    const pathMode = node.properties?.path_mode || "linear";
-    const distributionMode = node.properties?.distribution_mode || "uniform";
-
-    // 分布模式的中文描述
-    const distributionModeText = {
-      "uniform": "均匀",
-      "ease_in": "缓进",
-      "ease_out": "缓出",
-      "ease_in_out": "缓进缓出",
-      "ease_out_in": "缓出缓进"
-    }[distributionMode] || "均匀";
-
-    infoDiv.textContent = `控制点: ${controlPoints.length} | 路径: ${pathMode === "curve" ? "曲线" : "线性"} | 分布: ${distributionModeText} | 左键添加 | 右键菜单`;
-  }
-
-  log.info(`Display updated for node ${node.id}`);
+  });
 }
 
 /**
@@ -915,9 +1041,9 @@ function showContextMenu(node, x, y, pointIndex) {
 
   // 菜单选项
   const options = [
-    { text: "复制坐标", action: () => copyCoordinates(node, pointIndex) },
-    { text: "删除控制点", action: () => deleteControlPoint(node, pointIndex) },
-    { text: "清空所有点", action: () => clearAllPoints(node) }
+    { text: "Copy", action: () => copyCoordinates(node, pointIndex) },
+    { text: "Delete", action: () => deleteControlPoint(node, pointIndex) },
+    { text: "Clear All", action: () => clearAllPoints(node) }
   ];
 
   options.forEach(option => {
@@ -1087,7 +1213,6 @@ app.registerExtension({
     const style = document.createElement("style");
     style.textContent = `
       .xiser-coordinate-node {
-        background: rgba(30, 30, 30, 0.6);
         border-radius: 8px;
         resize: both;
         overflow: hidden;

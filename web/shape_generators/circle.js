@@ -120,7 +120,7 @@ export class CircleGenerator {
         // Angle control
         const angleDiv = document.createElement("div");
         angleDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">角度:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Angle:</label>
             <input type="range" min="0" max="360" step="1"
                    value="${shapeParams.angle || 360}"
                    style="width: 100%;"
@@ -138,7 +138,7 @@ export class CircleGenerator {
         const innerRadiusDiv = document.createElement("div");
         innerRadiusDiv.style.marginTop = "8px";
         innerRadiusDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">内圆半径 (%):</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Inner Radius (%):</label>
             <input type="range" min="0" max="100" step="1"
                    value="${shapeParams.inner_radius || 0}"
                    style="width: 100%;"

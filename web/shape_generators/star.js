@@ -52,7 +52,7 @@ export class StarGenerator {
     static getParameterControls(container, shapeParams, onParamChange) {
         const pointsDiv = document.createElement("div");
         pointsDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">星形角数:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Star Points:</label>
             <input type="range" min="3" max="20" step="1"
                    value="${shapeParams.points || 5}"
                    style="width: 100%;"
@@ -68,7 +68,7 @@ export class StarGenerator {
         const ratioDiv = document.createElement("div");
         ratioDiv.style.marginTop = "8px";
         ratioDiv.innerHTML = `
-            <label style="display: block; margin-bottom: 4px; color: #ccc;">内径比例:</label>
+            <label style="display: block; margin-bottom: 4px; color: #ccc;">Inner Radius Ratio:</label>
             <input type="range" min="0.1" max="0.9" step="0.05"
                    value="${shapeParams.inner_ratio || 0.4}"
                    style="width: 100%;"

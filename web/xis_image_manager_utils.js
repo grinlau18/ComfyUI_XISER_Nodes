@@ -8,7 +8,7 @@
  * @type {Object}
  */
 const log = {
-  level: "info",
+  level: "error",
   /**
    * Logs a debug message if the log level is 'debug' or 'info'.
    * @param {...any} args - Arguments to log.

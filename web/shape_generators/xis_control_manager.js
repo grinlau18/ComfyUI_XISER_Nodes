@@ -1,10 +1,10 @@
 /**
  * @file xis_control_manager.js
- * @description XIS_CreateShape 节点控件管理模块
+ * @description XIS_ShapeAndText 节点控件管理模块
  * @author grinlau18
  */
 
-import { log, normalizeColor } from './xis_shape_utils.js';
+import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from './xis_shape_utils.js';
 import { updateKonvaShape } from './xis_shape_creator.js';
 import { updateCanvasBackground } from './xis_state_manager.js';
 
@@ -14,7 +14,7 @@ import { updateCanvasBackground } from './xis_state_manager.js';
  */
 export function setupInputListeners(node) {
   const widgets = node.widgets || [];
-  const shapeTypeWidget = widgets.find(w => w.name === "shape_type");
+  const modeWidget = widgets.find(w => w.name === "mode_selection") || widgets.find(w => w.name === "shape_type");
   const shapeColorWidget = widgets.find(w => w.name === "shape_color");
   const bgColorWidget = widgets.find(w => w.name === "bg_color");
   const transparentWidget = widgets.find(w => w.name === "transparent_bg");
@@ -23,13 +23,15 @@ export function setupInputListeners(node) {
   const widthWidget = widgets.find(w => w.name === "width");
   const heightWidget = widgets.find(w => w.name === "height");
 
-  if (shapeTypeWidget) {
-    shapeTypeWidget.callback = () => {
-      node.properties.shape_type = shapeTypeWidget.value;
+  if (modeWidget) {
+    modeWidget.callback = () => {
+      const selectedMode = modeWidget.value || DEFAULT_MODE_SELECTION;
+      node.properties.mode_selection = selectedMode;
+      node.properties.shape_type = modeToShapeType(selectedMode);
       updateKonvaShape(node);
       updateCanvasSize(node);
       node.setDirtyCanvas(true, true);
-      log.info(`Node ${node.id} shape_type updated to: ${node.properties.shape_type}`);
+      log.info(`Node ${node.id} mode_selection updated to: ${selectedMode}, shape_type=${node.properties.shape_type}`);
     };
   }
 
@@ -160,13 +162,19 @@ export function setupInputListeners(node) {
  */
 export function setupParametricControls(node, container) {
   const updateParametricControls = () => {
+    if (!container) return;
     container.innerHTML = '';
-    const shapeType = node.properties.shape_type || "circle";
+    const modeSelection = node.properties.mode_selection || shapeTypeToMode(node.properties.shape_type) || DEFAULT_MODE_SELECTION;
+    const shapeType = modeToShapeType(modeSelection);
     let shapeParams = {};
     try {
       shapeParams = JSON.parse(node.properties.shape_params || "{}");
     } catch (e) {
       log.error(`Error parsing shape_params: ${e}`);
+    }
+
+    if (node.konvaState?.paramsTitle) {
+      node.konvaState.paramsTitle.textContent = shapeType === "text" ? "Text Settings" : "Shape Settings";
     }
 
     // 使用模块化参数控件
@@ -177,24 +185,38 @@ export function setupParametricControls(node, container) {
       node.setDirtyCanvas(true, true);
     };
 
-    ShapeRegistry.getParameterControls(shapeType, container, shapeParams, onParamChange);
+    // 通用旋转角度控制（仅适用于非文字模式）
+    if (shapeType !== "text") {
+      const rotationWrapper = document.createElement("div");
+      rotationWrapper.innerHTML = `
+        <label style="display:flex; justify-content:space-between; align-items:center; color:#ccc;">
+          <span>Shape Rotation (°)</span>
+          <span class="xiser-rotation-value" style="min-width:40px; text-align:right;">${shapeParams.shape_rotation ?? 0}</span>
+        </label>
+        <input type="range" min="-180" max="180" step="1" value="${shapeParams.shape_rotation ?? 0}" style="width:100%;">
+      `;
+      const rotationInput = rotationWrapper.querySelector("input");
+      const rotationValue = rotationWrapper.querySelector(".xiser-rotation-value");
+      rotationInput.addEventListener("input", () => {
+        const val = parseFloat(rotationInput.value);
+        rotationValue.textContent = val.toFixed(0);
+        shapeParams.shape_rotation = val;
+        onParamChange(shapeParams);
+      });
+      container.appendChild(rotationWrapper);
+    }
 
-    // 立即更新尺寸以确保参数控件可见
-    setTimeout(() => {
-      updateCanvasSize(node);
-      // 确保参数容器完全显示
-      if (container.children.length > 0) {
-        container.style.display = "block";
-      } else {
-        container.style.display = "none";
-      }
-    }, 50);
+    ShapeRegistry.getParameterControls(shapeType, container, shapeParams, onParamChange);
   };
 
-  const shapeTypeWidget = node.widgets.find(w => w.name === "shape_type");
-  if (shapeTypeWidget) {
-    const originalCallback = shapeTypeWidget.callback;
-    shapeTypeWidget.callback = () => {
+  if (node.konvaState) {
+    node.konvaState.refreshParams = updateParametricControls;
+  }
+
+  const modeWidget = node.widgets.find(w => w.name === "mode_selection") || node.widgets.find(w => w.name === "shape_type");
+  if (modeWidget) {
+    const originalCallback = modeWidget.callback;
+    modeWidget.callback = () => {
       if (originalCallback) originalCallback();
       updateParametricControls();
     };

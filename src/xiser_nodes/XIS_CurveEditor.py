@@ -377,6 +377,142 @@ class XIS_CurveEditor:
         else:  # FLOAT
             return float(value)
 
+    def safe_float(self, value: Any, default: float = 0.0) -> float:
+        """
+        Safely convert a value to float with fallback.
+        """
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def clamp01(self, value: float) -> float:
+        """
+        Clamp value between 0 and 1.
+        """
+        return max(0.0, min(1.0, value))
+
+    def sanitize_curve_points(self, curve_points: List[Dict[str, Any]]) -> List[Dict[str, float]]:
+        """
+        Ensure curve points are valid and sorted.
+        """
+        sanitized = []
+        for point in curve_points or []:
+            if not isinstance(point, dict):
+                continue
+            x = self.safe_float(point.get("x", 0.0), 0.0)
+            y = self.safe_float(point.get("y", 0.0), 0.0)
+            sanitized.append({
+                "x": self.clamp01(x),
+                "y": self.clamp01(y)
+            })
+
+        if len(sanitized) < 2:
+            return []
+
+        sanitized.sort(key=lambda p: p["x"])
+        return sanitized
+
+    def apply_linear_interpolation(self, t: float, points: List[Dict[str, float]]) -> float:
+        """
+        Linear interpolation between control points.
+        """
+        if not points:
+            return self.clamp01(t)
+
+        if t <= points[0]["x"]:
+            return points[0]["y"]
+        if t >= points[-1]["x"]:
+            return points[-1]["y"]
+
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+            if p2["x"] == p1["x"]:
+                continue
+            if p1["x"] <= t <= p2["x"]:
+                segment_t = (t - p1["x"]) / (p2["x"] - p1["x"])
+                return p1["y"] + (p2["y"] - p1["y"]) * segment_t
+
+        return points[-1]["y"]
+
+    def catmull_rom_interpolate(self, p0: float, p1: float, p2: float, p3: float, t: float) -> float:
+        """
+        Catmull-Rom spline interpolation.
+        """
+        t2 = t * t
+        t3 = t2 * t
+        return 0.5 * (
+            (2 * p1) +
+            (-p0 + p2) * t +
+            (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+            (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+        )
+
+    def apply_catmull_rom_curve(self, t: float, points: List[Dict[str, float]]) -> float:
+        """
+        Apply Catmull-Rom spline interpolation using sorted control points.
+        """
+        if not points:
+            return self.clamp01(t)
+
+        if t <= points[0]["x"]:
+            return points[0]["y"]
+        if t >= points[-1]["x"]:
+            return points[-1]["y"]
+
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+            if p1["x"] <= t <= p2["x"]:
+                if p2["x"] == p1["x"]:
+                    return p1["y"]
+                p0 = points[i - 1] if i > 0 else p1
+                p3 = points[i + 2] if i < len(points) - 2 else points[-1]
+                segment_t = (t - p1["x"]) / (p2["x"] - p1["x"])
+                return self.catmull_rom_interpolate(p0["y"], p1["y"], p2["y"], p3["y"], segment_t)
+
+        return points[-1]["y"]
+
+    def apply_custom_curve(self, t: float, points: List[Dict[str, float]], interpolation_algorithm: str) -> float:
+        """
+        Apply the selected interpolation algorithm to transform t.
+        """
+        if not points:
+            return self.clamp01(t)
+
+        if interpolation_algorithm == "linear":
+            return self.apply_linear_interpolation(t, points)
+        else:
+            return self.apply_catmull_rom_curve(t, points)
+
+    def compute_curve_t_values(
+        self,
+        point_count: int,
+        curve_points: List[Dict[str, float]],
+        interpolation_algorithm: str
+    ) -> List[Dict[str, float]]:
+        """
+        Compute base and transformed t values for each distribution point.
+        """
+        sanitized_points = self.sanitize_curve_points(curve_points)
+        t_values = []
+
+        for i in range(point_count):
+            base_t = (i + 1) / point_count
+            if sanitized_points:
+                transformed_t = self.apply_custom_curve(base_t, sanitized_points, interpolation_algorithm)
+            else:
+                transformed_t = base_t
+
+            t_values.append({
+                "index": i + 1,
+                "t": base_t,
+                "transformed_t": self.clamp01(transformed_t)
+            })
+
+        return t_values
+
     def execute(
         self,
         data_type: str,
@@ -401,7 +537,8 @@ class XIS_CurveEditor:
         """
         # Get custom curve points if available
         curve_points = curve_editor.get("curve_points", [])
-        use_custom_curve = len(curve_points) > 0
+        interpolation_algorithm = curve_editor.get("interpolation_algorithm", "catmull_rom")
+        curve_t_values = self.compute_curve_t_values(point_count, curve_points, interpolation_algorithm)
 
         # Initialize result lists
         int_list = []
@@ -410,25 +547,17 @@ class XIS_CurveEditor:
 
         # Process based on data type
         if data_type in ["INT", "FLOAT"]:
-            # 直接使用前端计算好的数值列表
-            if use_custom_curve and "distribution_values" in curve_editor:
-                # 前端已经计算好所有分布点的实际数值
-                distribution_values = curve_editor["distribution_values"]
-                for i in range(min(point_count, len(distribution_values))):
-                    value = distribution_values[i]
+            start_float = self.safe_float(start_value, 0.0)
+            end_float = self.safe_float(end_value, 1.0)
+            for t_info in curve_t_values:
+                transformed_t = t_info["transformed_t"]
+                value = start_float + (end_float - start_float) * transformed_t
+                if data_type == "INT":
+                    int_list.append(int(round(value)))
+                else:
                     int_list.append(int(value))
-                    float_list.append(float(value))
-                    hex_list.append("#000000")
-            else:
-                # 线性插值作为回退
-                start_num = self.parse_numeric_value(start_value, data_type)
-                end_num = self.parse_numeric_value(end_value, data_type)
-                for i in range(point_count):
-                    transformed_t = (i + 1) / point_count
-                    value = start_num + (end_num - start_num) * transformed_t
-                    int_list.append(int(value))
-                    float_list.append(float(value))
-                    hex_list.append("#000000")
+                float_list.append(float(value))
+                hex_list.append("#000000")
 
         elif data_type == "HEX":
             # Normalize HEX colors
@@ -439,19 +568,8 @@ class XIS_CurveEditor:
             start_rgb = self.hex_to_rgb(start_hex)
             end_rgb = self.hex_to_rgb(end_hex)
 
-            # 直接使用前端计算好的百分比序列值进行颜色渐变
             for i in range(point_count):
-                # 前端已经计算好所有分布点的变换后t值
-                if use_custom_curve and "distribution_t_values" in curve_editor:
-                    # 使用前端计算好的变换后t值
-                    if i < len(curve_editor["distribution_t_values"]):
-                        transformed_t = curve_editor["distribution_t_values"][i]["transformed_t"]
-                    else:
-                        # 如果前端数据不完整，使用线性插值作为回退
-                        transformed_t = (i + 1) / point_count
-                else:
-                    # 线性插值
-                    transformed_t = (i + 1) / point_count
+                transformed_t = curve_t_values[i]["transformed_t"] if i < len(curve_t_values) else (i + 1) / point_count
 
                 # 根据选择的颜色过渡方法进行插值
                 if color_interpolation == "RGB":

@@ -21,8 +21,8 @@
 4. **交互式编辑**：使用画布界面定位、缩放和旋转图层
 5. **生成输出**：将输出连接到工作流进行进一步处理
 
-### XIS_CreateShape 快速入门
-1. **添加 XIS_CreateShape 节点**：位于 `XISER_Nodes/Visual_Editing` 类别
+### XIS_ShapeAndText 快速入门
+1. **添加 XIS_ShapeAndText 节点**：位于 `XISER_Nodes/Visual_Editing` 类别
 2. **选择形状类型**：从圆形、多边形、星形、心形等选择
 3. **自定义外观**：设置颜色、描边和透明度
 4. **应用变换**：使用交互式画布进行定位和缩放
@@ -71,6 +71,15 @@
 
 **依赖项**：需要 `torch`、`PIL`、`numpy`、`opencv-python` 和 ComfyUI 核心库。
 
+### 抠图模型配置
+画布中的新抠图功能依赖 BiRefNet 蒙版模型，按以下步骤安装：
+
+1. 下载 `BiRefNet-general-epoch_244.pth` 检查点，并放入 `ComfyUI/models/BiRefNet/pth/`。可使用以下镜像：
+   - https://pan.baidu.com/s/12z3qUuqag3nqpN2NJ5pSzg?pwd=ek65
+   - https://drive.google.com/drive/folders/1s2Xe0cjq-2ctnJBR24563yMSCOu4CcxM
+2. 在 ComfyUI 所在环境中安装推理依赖：`pip install kornia==0.7.2 timm`
+3. 重启 ComfyUI，画布上的抠图按钮即可调用 BiRefNet 并将带透明区域的结果保存在界面与输出中。
+
 ---
 
 ## 节点分类概览
@@ -83,6 +92,8 @@
   - 自定义画布尺寸、边框和背景颜色
   - 拖拽、缩放、旋转图像操作，支持实时预览
   - 图层管理，自动置顶和堆叠顺序
+  - 支持图层显示/隐藏开关与手动叠放顺序调整
+  - 一键抠图（BiRefNet）允许在执行前生成带透明区域的图像
   - 精确图像合成的蒙版生成
   - 20步历史的撤销/重做功能
   - 自动尺寸功能，匹配第一张图像尺寸
@@ -123,10 +134,11 @@
 
 ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
-#### XIS_CreateShape
+#### XIS_ShapeAndText
 - **功能**：使用交互控制生成几何形状
 - **特性**：
   - 多种形状类型：圆形、多边形、星形、心形、花朵、螺旋、太阳爆发、正方形
+  - **字体模式**：Text 模式可将文本转换为矢量图形，支持 fonts 目录自定义字体、字距/行距调节以及粗体、斜体、下划线、大写等样式
   - 可配置颜色、描边、透明度和背景
   - 高级变换：旋转、缩放、倾斜、定位
   - 通过形状数据输入进行批量形状创建
@@ -134,8 +146,10 @@
   - 分离的形状图像、蒙版和背景输出
   - 带有交互画布小部件的实时预览
 
-![XIS_CreateShape形状生成](img/XIS_CreateShape_1.jpeg)
-![XIS_CreateShape形状变换](img/XIS_CreateShape_2.jpeg)
+![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
+![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
+
+> **字体使用方式**：将 `.ttf/.otf/.ttc` 文件放入 `custom_nodes/ComfyUI_XISER_Nodes/fonts` 目录，在 Text 模式面板点击「刷新字体」即可加载；所有文本参数会写入 `shape_params`，批量模式同样生效。
 
 ### 🖼️ 图像处理节点
 
@@ -211,6 +225,13 @@
   - 浮点数和整数滑块
   - 可配置范围和步长
 
+#### CreatePointsString
+- **功能**：将六组帧与强度对序列化为多行字符串
+- **特性**：
+  - 支持 frame_a~frame_f 与 intensity_a~intensity_f 的输入范围
+  - 输出格式化字符串，可用于时间轴提示或蒙版强度列表
+  - 适合快速描述关键帧型参数以在其他节点复用
+
 ### 🔧 工具节点
 
 #### XIS_ResizeToDivisible
@@ -247,6 +268,14 @@
 
 ---
 
+## 致谢
+
+- 交互画布部分基于 [Konva](https://konvajs.org/) 构建，感谢 Konva 团队提供稳定的 2D 图形 API。
+- 抠图功能依赖 [BiRefNet](https://github.com/tamzi/bi-ref-net)，感谢原作者与 tin2tin/2D_Asset_Generator 社区项目，并同时使用 `kornia` 与 `timm` 的推理支持。
+- 感谢 ComfyUI 与社区中所有自定义节点作者对多图层画布、历史记录等功能的持续投入。
+
+---
+
 ## 使用指南
 
 ### XIS_Canvas 操作指南
@@ -275,7 +304,7 @@
 - **PSD导入**：导入PSD文件并提取图层
 - **实时预览**：立即查看变换效果
 
-### XIS_CreateShape 操作指南
+### XIS_ShapeAndText 操作指南
 
 **形状创建：**
 - **形状类型**：圆形、多边形、星形、心形、花朵、螺旋、太阳爆发、正方形
@@ -309,7 +338,7 @@
 1. XIS_CoordinatePath生成坐标路径
 2. XIS_CurveEditor创建分布曲线
 3. XIS_MultiPointGradient生成渐变
-4. XIS_CreateShape创建几何形状
+4. XIS_ShapeAndText创建几何形状
 
 ---
 

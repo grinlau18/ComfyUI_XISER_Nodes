@@ -1,3 +1,5 @@
+import { saveShapeState as persistShapeState } from "./xis_state_manager.js";
+
 /**
  * Konva Wheel Interaction Module
  * Provides mouse wheel interactions for scaling and rotating shapes
@@ -166,11 +168,10 @@ class KonvaWheelInteraction {
    * 保存形状状态
    */
   saveShapeState() {
-    if (typeof this.node.properties?.shapeState !== 'undefined') {
-      // 调用节点的保存状态方法
-      if (typeof this.node.konvaState?.saveShapeState === 'function') {
-        this.node.konvaState.saveShapeState(this.node);
-      }
+    if (typeof this.node.konvaState?.saveShapeState === 'function') {
+      this.node.konvaState.saveShapeState(this.node);
+    } else {
+      persistShapeState(this.node);
     }
   }
 
