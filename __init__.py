@@ -8,7 +8,7 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 from server import PromptServer
 import json

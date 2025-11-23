@@ -600,7 +600,7 @@ class XIS_ResizeImageOrMask:
                 raise ValueError(f"Mask must be 2D [H, W] or 3D [B, H, W], got {mask.shape}")
             mask_input = mask.unsqueeze(0) if mask.dim() == 2 else mask
             batch_size, orig_h, orig_w = mask_input.shape
-            
+
             if should_resize(orig_w, orig_h, target_width, target_height):
                 w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
                 resized_mask = resize_tensor(mask_input.unsqueeze(-1), (h, w), INTERPOLATION_MODES[interpolation]).squeeze(-1)
@@ -618,12 +618,25 @@ class XIS_ResizeImageOrMask:
                 resized_mask.clamp_(0, 1)
             else:
                 resized_mask = mask_input
-            
+
             if mask.dim() == 2:
                 resized_mask = resized_mask.squeeze(0)
-            
-            # 如果没有图像输出，使用蒙版的尺寸
-            if resized_img is None:
+
+            # 确保蒙版与图像尺寸一致（如果有图像输出）
+            if resized_img is not None:
+                # 检查蒙版和图像的尺寸是否一致
+                if resized_mask.shape[-2:] != resized_img.shape[1:3]:
+                    logger.warning(f"Mask size {resized_mask.shape[-2:]} does not match image size {resized_img.shape[1:3]}, resizing mask to match")
+                    # 调整蒙版尺寸以匹配图像
+                    resized_mask = resize_tensor(
+                        resized_mask.unsqueeze(-1) if resized_mask.dim() == 2 else resized_mask,
+                        (resized_img.shape[1], resized_img.shape[2]),
+                        INTERPOLATION_MODES[interpolation]
+                    ).squeeze(-1)
+                # 更新最终尺寸为图像尺寸（确保一致性）
+                final_width, final_height = resized_img.shape[2], resized_img.shape[1]
+            else:
+                # 如果没有图像输出，使用蒙版的尺寸
                 final_width, final_height = resized_mask.shape[-1], resized_mask.shape[-2]
 
         return (resized_img, resized_mask, final_width, final_height)

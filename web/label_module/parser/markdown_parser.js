@@ -7,6 +7,9 @@ import { parseHtmlFormat } from './html_parser.js';
 
 const DEFAULT_HTML_FALLBACK = parseHtmlFormat(DEFAULT_TEXT_DATA.HTML);
 const defaultData = DEFAULT_HTML_FALLBACK;
+const MARKDOWN_EMPTY_LINE_SENTINEL = '<div data-md-empty-line="true"></div>';
+const EMBEDDED_HTML_TAGS = ["div", "section", "article", "main", "aside", "header", "footer", "center"];
+const MARKDOWN_BASE_FONT_SIZE = 18;
 
 /**
  * Parses Markdown-formatted text into structured line data.
@@ -39,7 +42,12 @@ export function parseMarkdownFormat(markdown) {
  * @returns {Object} Structured line data.
  */
 function parseMarkdownLine(line) {
-    const baseLine = { ...DEFAULT_LINE_DATA };
+    const baseLine = {
+        ...DEFAULT_LINE_DATA,
+        font_size: MARKDOWN_BASE_FONT_SIZE,
+        font_weight: "normal",
+        is_block: true
+    };
     let text = line.trim();
 
     // Parse heading levels
@@ -120,16 +128,17 @@ function getHeadingFontSize(level) {
  * @param {string} markdown - The Markdown text.
  * @returns {string} HTML string.
  */
-export function markdownToHtml(markdown) {
+export function markdownToHtml(markdown, options = {}) {
     try {
+        const preparedMarkdown = preprocessMarkdown(markdown, options);
         if (typeof window.marked !== 'undefined') {
-            return window.marked.parse(markdown);
+            return window.marked.parse(preparedMarkdown);
         }
         logger.info("Marked.js not available, using basic converter");
-        return basicMarkdownToHtml(markdown);
+        return basicMarkdownToHtml(preparedMarkdown);
     } catch (e) {
         logger.error("Failed to convert Markdown to HTML:", e);
-        return basicMarkdownToHtml(markdown);
+        return basicMarkdownToHtml(preparedMarkdown);
     }
 }
 
@@ -165,6 +174,55 @@ function basicMarkdownToHtml(markdown) {
     return html;
 }
 
+function preprocessMarkdown(markdown, options = {}) {
+    const { skipEmbedded = false } = options;
+    let text = markdown;
+    if (!skipEmbedded) {
+        text = normalizeEmbeddedHtmlBlocks(text);
+    }
+    return preserveMarkdownEmptyLines(text);
+}
+
+function normalizeEmbeddedHtmlBlocks(markdown) {
+    const blockRegex = new RegExp(
+        `<(${EMBEDDED_HTML_TAGS.join("|")})([^>]*)>([\\s\\S]*?)<\\/\\1>`,
+        "gi"
+    );
+
+    return markdown.replace(blockRegex, (match, tag, attrs = "", inner = "") => {
+        const trimmedInner = inner.trim();
+        if (!trimmedInner) {
+            return match;
+        }
+
+        const convertedInner = markdownToHtml(trimmedInner, { skipEmbedded: true });
+        const attributePart = attrs || "";
+        return `<${tag}${attributePart}>${convertedInner}</${tag}>`;
+    });
+}
+
+function preserveMarkdownEmptyLines(markdown) {
+    const lines = markdown.split(/\r?\n/);
+    let inFence = false;
+    const fenceRegex = /^(```|~~~)/;
+
+    const transformed = lines.map((line) => {
+        const trimmed = line.trim();
+        if (fenceRegex.test(trimmed)) {
+            inFence = !inFence;
+            return line;
+        }
+
+        if (!inFence && trimmed.length === 0) {
+            return `${MARKDOWN_EMPTY_LINE_SENTINEL}\n`;
+        }
+
+        return line;
+    });
+
+    return transformed.join("\n");
+}
+
 /**
  * Updates node's textData with Markdown content.
  * @param {Object} node - The node object.
@@ -175,6 +233,23 @@ export function updateMarkdownData(node, newMarkdown, mode) {
     // Save Markdown data separately
     node.properties.markdownData = newMarkdown;
     node.properties.parsedTextData = parseMarkdownFormat(newMarkdown);
+}
+
+/**
+ * Refreshes parsed data when background color updates.
+ * @param {Object} node - The node object.
+ */
+export function updateMarkdownBackground(node) {
+    if (!node?.properties) {
+        node.properties = {};
+    }
+    let markdownText = node.properties.markdownData || node.properties.textData || DEFAULT_TEXT_DATA.MARKDOWN;
+    if (!markdownText || typeof markdownText !== "string") {
+        markdownText = DEFAULT_TEXT_DATA.MARKDOWN;
+    }
+    node.properties.markdownData = markdownText;
+    node.properties.parsedTextData = parseMarkdownFormat(markdownText);
+    return node.properties.parsedTextData;
 }
 
 /**

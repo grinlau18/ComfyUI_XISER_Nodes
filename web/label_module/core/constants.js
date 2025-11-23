@@ -38,6 +38,7 @@ export const DEFAULT_LINE_DATA = {
     font_size: 24,
     color: "#FFFFFF",
     font_weight: "bold",
+    font_style: "normal",
     text_decoration: "none",
     text_align: "left",
     margin_left: 0,

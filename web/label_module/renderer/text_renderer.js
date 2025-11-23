@@ -10,6 +10,13 @@ const SCROLLBAR_WIDTH = 6;
 const SCROLLBAR_MIN_THUMB = 24;
 const MIN_LINE_GAP = 3;
 const MIN_PARAGRAPH_GAP = 6;
+const MIN_CONTENT_WIDTH = 40;
+const CONTENT_SCROLLBAR_GAP = 8;
+const DEFAULT_FONT_COLOR = "#FFFFFF";
+const DEFAULT_FONT_FAMILY = "'Consolas', 'Monaco', monospace";
+const DEFAULT_FONT_STYLE = "normal";
+const DEFAULT_FONT_WEIGHT = "normal";
+const DEFAULT_FONT_SIZE = 24;
 
 /**
  * Text renderer for drawing text on canvas.
@@ -37,11 +44,13 @@ export class TextRenderer {
                 margin = SCROLL_MARGIN,
                 lineHeightFactor = 1.2,
                 alpha = 1.0,
-                backgroundColor = node.color || node.properties.color || "#333355"
+                backgroundColor = node.color || node.properties.color || "#333355",
+                contentPaddingRight = SCROLLBAR_WIDTH + CONTENT_SCROLLBAR_GAP
             } = options;
 
             const textAreaTop = margin - TITLE_OFFSET;
-            const maxWidth = node.size[0] - 2 * margin;
+            const effectivePaddingRight = Math.max(0, contentPaddingRight);
+            const maxWidth = Math.max(node.size[0] - 2 * margin - effectivePaddingRight, MIN_CONTENT_WIDTH);
             const viewportHeight = Math.max(node.size[1] + TITLE_OFFSET - margin * 2, MIN_VIEWPORT_HEIGHT);
             const scrollOffset = Math.max(0, node.properties?.scrollOffset || 0);
 
@@ -68,8 +77,8 @@ export class TextRenderer {
                 const lineMarginTop = Math.max(line.margin_top || 0, MIN_LINE_GAP);
                 currentY += lineMarginTop;
 
-                if (!line.text) {
-                    const emptyHeight = (line.font_size || 24) * lineHeightFactor;
+                if (!this.hasRenderableContent(line)) {
+                    const emptyHeight = (line.font_size || DEFAULT_FONT_SIZE) * lineHeightFactor;
                     currentY += emptyHeight;
                     const emptyGap = Math.max(line.margin_bottom || 0, MIN_PARAGRAPH_GAP);
                     currentY += emptyGap;
@@ -77,27 +86,25 @@ export class TextRenderer {
                     return;
                 }
 
-                this.setupFont(ctx, line);
+                const wrappedLines = this.wrapLineSegments(ctx, line, maxWidth);
+                const lineInlineGap = this.getLineInlineGap(line);
 
-                const wrappedLines = this.wrapText(ctx, line.text, maxWidth, line);
-
-                const lineInlineGap = Math.max(line.inline_gap || MIN_LINE_GAP, MIN_LINE_GAP);
-                wrappedLines.forEach((wrappedText, index) => {
+                wrappedLines.forEach((wrappedLine, index) => {
                     const isLastLine = index === wrappedLines.length - 1;
-                    const textWidth = ctx.measureText(wrappedText).width;
+                    const textWidth = wrappedLine.width;
                     let xPos = margin + (line.margin_left || 0);
 
-                    xPos = this.calculateTextPosition(xPos, textWidth, maxWidth, line, isLastLine, ctx, wrappedText);
+                    xPos = this.calculateTextPosition(xPos, textWidth, maxWidth, line, isLastLine, wrappedLine.text);
 
-                    this.drawTextDecoration(ctx, wrappedText, xPos, currentY, line, textWidth);
+                    this.drawTextDecoration(ctx, wrappedLine.text, xPos, currentY, line, textWidth);
+                    this.drawSegments(ctx, wrappedLine.segments, xPos, currentY, line);
 
-                    ctx.fillText(wrappedText, xPos, currentY);
-                    currentY += (line.font_size || 24) * lineHeightFactor;
+                    currentY += (line.font_size || DEFAULT_FONT_SIZE) * lineHeightFactor;
 
                     if (isLastLine) {
                         const lineMarginBottom = Math.max(line.margin_bottom || 0, line.is_block ? MIN_PARAGRAPH_GAP : MIN_LINE_GAP);
                         currentY += lineMarginBottom;
-                    } else {
+                    } else if (lineInlineGap > 0) {
                         currentY += lineInlineGap;
                     }
                     maxContentY = Math.max(maxContentY, currentY);
@@ -150,54 +157,197 @@ export class TextRenderer {
         ctx.fillRect(trackX, thumbY, SCROLLBAR_WIDTH, thumbHeight);
     }
 
-    /**
-     * Wraps text to fit within max width.
-     * @param {CanvasRenderingContext2D} ctx - The canvas context.
-     * @param {string} text - The text to wrap.
-     * @param {number} maxWidth - Maximum width for wrapping.
-     * @param {Object} line - Line styling information.
-     * @returns {string[]} Array of wrapped lines.
-     */
-    wrapText(ctx, text, maxWidth, line) {
-        const words = text.match(/(\S+|\s+)/g) || [];
-        let currentLine = "";
-        let currentWidth = 0;
-        const wrappedLines = [];
+    hasRenderableContent(line) {
+        if (Array.isArray(line?.segments)) {
+            return line.segments.some(segment => typeof segment.text === "string" && segment.text.trim() !== "");
+        }
+        return typeof line?.text === "string" && line.text.trim() !== "";
+    }
 
-        for (const word of words) {
-            const wordWidth = ctx.measureText(word).width;
-            if (currentWidth + wordWidth <= maxWidth) {
-                currentLine += word;
-                currentWidth += wordWidth;
-            } else {
-                if (currentLine) wrappedLines.push(currentLine.trim());
-                if (wordWidth > maxWidth) {
-                    // Break long words
-                    let tempWord = "";
-                    let tempWidth = 0;
-                    for (const char of word) {
-                        const charWidth = ctx.measureText(char).width;
-                        if (tempWidth + charWidth <= maxWidth) {
-                            tempWord += char;
-                            tempWidth += charWidth;
-                        } else {
-                            if (tempWord) wrappedLines.push(tempWord);
-                            tempWord = char;
-                            tempWidth = charWidth;
-                        }
-                    }
-                    if (tempWord) wrappedLines.push(tempWord);
-                    currentLine = "";
-                    currentWidth = 0;
-                } else {
-                    currentLine = word;
-                    currentWidth = wordWidth;
-                }
-            }
+    getLineInlineGap(line) {
+        if (typeof line.inline_gap === "number") {
+            return Math.max(line.inline_gap, 0);
+        }
+        return line.is_block ? 0 : MIN_LINE_GAP;
+    }
+
+    prepareLineSegments(line) {
+        if (Array.isArray(line?.segments) && line.segments.length) {
+            return line.segments
+                .filter(segment => typeof segment.text === "string")
+                .map(segment => ({
+                    text: segment.text,
+                    color: segment.color || line.color,
+                    font_weight: segment.font_weight || line.font_weight,
+                    font_style: segment.font_style || line.font_style,
+                    font_size: segment.font_size || line.font_size,
+                    font_family: segment.font_family || line.font_family,
+                    text_decoration: segment.text_decoration || line.text_decoration
+                }));
         }
 
-        if (currentLine.trim()) wrappedLines.push(currentLine.trim());
+        if (typeof line?.text === "string" && line.text.length) {
+            return [{
+                text: line.text,
+                color: line.color,
+                font_weight: line.font_weight,
+                font_style: line.font_style,
+                font_size: line.font_size,
+                font_family: line.font_family,
+                text_decoration: line.text_decoration
+            }];
+        }
+
+        return [];
+    }
+
+    wrapLineSegments(ctx, line, maxWidth) {
+        const baseSegments = this.prepareLineSegments(line);
+        if (!baseSegments.length) {
+            return [{
+                text: "",
+                width: 0,
+                segments: []
+            }];
+        }
+
+        const wrappedLines = [];
+        let currentSegments = [];
+        let currentWidth = 0;
+        let currentText = "";
+
+        const pushLine = () => {
+            wrappedLines.push({
+                text: currentText,
+                width: currentWidth,
+                segments: currentSegments
+            });
+            currentSegments = [];
+            currentWidth = 0;
+            currentText = "";
+        };
+
+        const appendRun = (textValue, baseSegment, measurement) => {
+            const run = {
+                text: textValue,
+                width: measurement.width,
+                font: measurement.font,
+                font_weight: measurement.fontWeight,
+                font_style: measurement.fontStyle,
+                font_size: measurement.fontSize,
+                font_family: measurement.fontFamily,
+                color: baseSegment.color || line.color || "#FFFFFF"
+            };
+            currentSegments.push(run);
+            currentWidth += measurement.width;
+            currentText += textValue;
+        };
+
+        const pushToken = (tokenValue, baseSegment) => {
+            if (!tokenValue) return;
+            const isWhitespace = /^\s+$/.test(tokenValue);
+            if (isWhitespace && !currentSegments.length) {
+                return;
+            }
+
+            const measurement = this.measureSegment(ctx, tokenValue, line, baseSegment);
+
+            if (currentWidth + measurement.width <= maxWidth) {
+                appendRun(tokenValue, baseSegment, measurement);
+                return;
+            }
+
+            if (measurement.width > maxWidth) {
+                const characters = Array.from(tokenValue);
+                characters.forEach((char) => {
+                    const charMeasurement = this.measureSegment(ctx, char, line, baseSegment);
+                    if (currentWidth + charMeasurement.width > maxWidth && currentWidth > 0) {
+                        pushLine();
+                    }
+                    appendRun(char, baseSegment, charMeasurement);
+                });
+                return;
+            }
+
+            if (currentSegments.length || currentText) {
+                pushLine();
+            }
+            appendRun(tokenValue, baseSegment, measurement);
+        };
+
+        baseSegments.forEach((segment) => {
+            const tokens = this.tokenizeSegmentText(segment.text);
+            tokens.forEach((token) => {
+                if (token.type === "newline") {
+                    pushLine();
+                    return;
+                }
+                pushToken(token.value, segment);
+            });
+        });
+
+        if (currentSegments.length || currentText || !wrappedLines.length) {
+            pushLine();
+        }
+
         return wrappedLines;
+    }
+
+    tokenizeSegmentText(text = "") {
+        const tokens = [];
+        const parts = String(text).split(/(\r?\n)/);
+
+        parts.forEach((part) => {
+            if (part === "\r" || part === "\n" || part === "\r\n") {
+                tokens.push({ type: "newline" });
+                return;
+            }
+
+            if (!part) return;
+
+            const subTokens = part.match(/(\S+|\s+)/g) || [];
+            subTokens.forEach((token) => tokens.push({ type: "text", value: token }));
+        });
+
+        return tokens;
+    }
+
+    drawSegments(ctx, segments, startX, yPos, line) {
+        if (!segments?.length) {
+            return;
+        }
+
+        let cursorX = startX;
+        segments.forEach((segment) => {
+            if (!segment.text) return;
+            const fillColor = segment.color || line.color || DEFAULT_FONT_COLOR;
+            if (segment.font) {
+                ctx.font = segment.font;
+            } else {
+                const fontConfig = this.setupFont(ctx, line, segment);
+                segment.font = fontConfig.font;
+                segment.width = segment.width || ctx.measureText(segment.text).width;
+            }
+            ctx.fillStyle = fillColor;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "top";
+            ctx.fillText(segment.text, cursorX, yPos);
+            cursorX += segment.width || 0;
+        });
+    }
+
+    measureSegment(ctx, text, line, overrides = {}) {
+        const fontConfig = this.setupFont(ctx, line, overrides);
+        const width = ctx.measureText(text).width;
+        return {
+            width,
+            font: fontConfig.font,
+            fontWeight: fontConfig.fontWeight,
+            fontStyle: fontConfig.fontStyle,
+            fontSize: fontConfig.fontSize,
+            fontFamily: fontConfig.fontFamily,
+            color: overrides.color || line.color || DEFAULT_FONT_COLOR
+        };
     }
 
     /**
@@ -211,27 +361,13 @@ export class TextRenderer {
      * @param {string} wrappedText - The text to position.
      * @returns {number} Calculated x position.
      */
-    calculateTextPosition(xPos, textWidth, maxWidth, line, isLastLine, ctx, wrappedText) {
+    calculateTextPosition(xPos, textWidth, maxWidth, line) {
         const margin = 20;
 
         if (line.text_align === "center") {
             xPos = (maxWidth + 2 * margin - textWidth) / 2;
         } else if (line.text_align === "right") {
             xPos = maxWidth + 2 * margin - textWidth - margin - (line.margin_left || 0);
-        } else if (line.text_align === "justify" && !isLastLine) {
-            const wordsInLine = wrappedText.match(/(\S+)/g) || [wrappedText];
-            if (wordsInLine.length > 1) {
-                const totalWordWidth = wordsInLine.reduce((sum, word) => sum + ctx.measureText(word).width, 0);
-                const spaceCount = wordsInLine.length - 1;
-                const extraSpace = (maxWidth - totalWordWidth) / spaceCount;
-                let currentX = margin + (line.margin_left || 0);
-                wordsInLine.forEach((word, wordIndex) => {
-                    ctx.fillText(word, currentX, 0); // Y position will be set later
-                    currentX += ctx.measureText(word).width + (wordIndex < wordsInLine.length - 1 ? extraSpace : 0);
-                });
-                // Return original position since we handled positioning internally
-                return margin + (line.margin_left || 0);
-            }
         }
 
         return Math.max(margin, Math.min(xPos, maxWidth + 2 * margin - textWidth));
@@ -247,12 +383,13 @@ export class TextRenderer {
      * @param {number} textWidth - Width of the text.
      */
     drawTextDecoration(ctx, text, xPos, yPos, line, textWidth) {
-        if ((line.text_decoration || "none").includes("underline") && text) {
+        if ((line.text_decoration || "none").includes("underline") && text && textWidth > 0) {
             ctx.beginPath();
-            ctx.strokeStyle = line.color || "#FFFFFF";
+            ctx.strokeStyle = line.color || DEFAULT_FONT_COLOR;
             ctx.lineWidth = 1;
-            ctx.moveTo(xPos, yPos + line.font_size);
-            ctx.lineTo(xPos + textWidth, yPos + line.font_size);
+            const underlineOffset = (line.font_size || DEFAULT_FONT_SIZE);
+            ctx.moveTo(xPos, yPos + underlineOffset);
+            ctx.lineTo(xPos + textWidth, yPos + underlineOffset);
             ctx.stroke();
         }
     }
@@ -262,13 +399,19 @@ export class TextRenderer {
      * @param {CanvasRenderingContext2D} ctx - The canvas context.
      * @param {Object} line - Line styling information.
      */
-    setupFont(ctx, line) {
-        const fontWeight = line.font_weight === "bold" || parseInt(line.font_weight) >= 700 ? "bold" : "normal";
-        const fontKey = `${fontWeight}_${line.font_size}`;
+    setupFont(ctx, line, overrides = {}) {
+        const fontWeightValue = overrides.font_weight || line.font_weight || DEFAULT_FONT_WEIGHT;
+        const fontStyleValue = overrides.font_style || line.font_style || DEFAULT_FONT_STYLE;
+        const sizeValue = overrides.font_size ?? line.font_size ?? DEFAULT_FONT_SIZE;
+        const numericSize = typeof sizeValue === "number" ? sizeValue : parseFloat(sizeValue);
+        const fontSizeValue = Number.isFinite(numericSize) ? numericSize : DEFAULT_FONT_SIZE;
+        const fontFamilyValue = overrides.font_family || line.font_family || DEFAULT_FONT_FAMILY;
+        const normalizedWeight = this.normalizeFontWeight(fontWeightValue);
+        const fontKey = `${fontStyleValue}_${normalizedWeight}_${fontSizeValue}_${fontFamilyValue}`;
 
         let font = this.fontCache.get(fontKey);
         if (!font) {
-            font = `${fontWeight} ${line.font_size}px 'Consolas', 'Monaco', monospace`;
+            font = `${fontStyleValue} ${normalizedWeight} ${fontSizeValue}px ${fontFamilyValue}`;
             this.fontCache.set(fontKey, font);
 
             // Limit cache size
@@ -280,7 +423,31 @@ export class TextRenderer {
         ctx.font = font;
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.fillStyle = line.color || "#FFFFFF";
+        return {
+            font,
+            fontWeight: normalizedWeight,
+            fontStyle: fontStyleValue,
+            fontSize: fontSizeValue,
+            fontFamily: fontFamilyValue
+        };
+    }
+
+    normalizeFontWeight(value) {
+        if (value === undefined || value === null) {
+            return DEFAULT_FONT_WEIGHT;
+        }
+
+        const stringValue = value.toString().trim().toLowerCase();
+        if (stringValue === "bold" || stringValue === "normal") {
+            return stringValue;
+        }
+
+        const parsedWeight = parseInt(stringValue, 10);
+        if (!isNaN(parsedWeight) && parsedWeight >= 100 && parsedWeight <= 900) {
+            return parsedWeight.toString();
+        }
+
+        return DEFAULT_FONT_WEIGHT;
     }
 
     /**
