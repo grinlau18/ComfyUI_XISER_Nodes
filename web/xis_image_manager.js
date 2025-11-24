@@ -267,6 +267,119 @@ function computeOutputHash(imagePreviews, imageState) {
   });
 }
 
+function getNormalizedNodeSize(size) {
+  return Array.isArray(size) && size.length === 2 ? size : [360, 360];
+}
+
+function arraysShallowEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function imageStatesEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i] || {};
+    const right = b[i] || {};
+    if (
+      left.id !== right.id ||
+      !!left.enabled !== !!right.enabled ||
+      left.source !== right.source ||
+      left.filename !== right.filename ||
+      left.originalFilename !== right.originalFilename ||
+      left.width !== right.width ||
+      left.height !== right.height ||
+      left.index !== right.index ||
+      (left.contentHash ?? left.content_hash ?? null) !== (right.contentHash ?? right.content_hash ?? null)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getSerializedImageStateValue(node, imageState, nodeIdOverride = null) {
+  if (!node) return serializeImageState(imageState, nodeIdOverride || "unknown");
+  const cache = node._serializedImageStateCache;
+  const resolvedNodeId = nodeIdOverride || node.properties?.node_id || node.id;
+  if (cache && cache.stateRef === imageState && cache.nodeId === resolvedNodeId) {
+    return cache.value;
+  }
+  const serialized = serializeImageState(imageState, resolvedNodeId);
+  node._serializedImageStateCache = { stateRef: imageState, nodeId: resolvedNodeId, value: serialized };
+  return serialized;
+}
+
+function cacheNodeState(node, state) {
+  if (!node) return;
+  node._xisCachedState = {
+    imagePreviews: Array.isArray(state.imagePreviews) ? state.imagePreviews : [],
+    imageState: Array.isArray(state.imageState) ? state.imageState : [],
+    isReversed: !!state.isReversed,
+    isSingleMode: !!state.isSingleMode,
+    nodeSize: getNormalizedNodeSize(state.nodeSize)
+  };
+}
+
+const pendingNodeRegistry = new Map();
+
+function finalizePendingNode(node, entry, resolvedId) {
+  if (entry.timeoutId) {
+    clearTimeout(entry.timeoutId);
+    entry.timeoutId = null;
+  }
+  pendingNodeRegistry.delete(node);
+  try {
+    entry.callback(resolvedId);
+  } catch (error) {
+    log.error(`Failed to initialize pending node ${resolvedId}: ${error}`);
+  }
+}
+
+function tryResolvePendingNode(node, entry) {
+  if (!node) return false;
+  const resolvedId = node.id > 0 && app.graph.getNodeById(node.id) ? node.id : null;
+  if (!resolvedId) return false;
+  finalizePendingNode(node, entry, resolvedId);
+  log.info(`Node initialized after pending resolution: ID ${resolvedId}, type ${node.type}, title ${node.title || "undefined"}`);
+  return true;
+}
+
+function schedulePendingRetry(node, entry) {
+  entry.timeoutId = setTimeout(() => {
+    if (tryResolvePendingNode(node, entry)) return;
+    if (entry.retries <= 0) {
+      const fallbackId = node && node.id > 0 ? node.id : Math.abs(node?.id || 0) || Date.now();
+      log.warning(`Node ID ${node?.id || "undefined"} not assigned after max retries. Using fallback ID ${fallbackId}.`);
+      finalizePendingNode(node, entry, fallbackId);
+      return;
+    }
+    entry.retries -= 1;
+    schedulePendingRetry(node, entry);
+  }, entry.delay);
+}
+
+function registerPendingNode(node, callback, retries = 20, delay = 200) {
+  const entry = { callback, retries, delay, timeoutId: null };
+  pendingNodeRegistry.set(node, entry);
+  if (!tryResolvePendingNode(node, entry)) {
+    schedulePendingRetry(node, entry);
+  }
+}
+
+function processPendingNodes() {
+  pendingNodeRegistry.forEach((entry, pendingNode) => {
+    tryResolvePendingNode(pendingNode, entry);
+  });
+}
+
 /**
  * Updates node widgets with frontend state and ensures serialization only when necessary.
  * @param {Object} node - The node instance.
@@ -286,6 +399,16 @@ function computeOutputHash(imagePreviews, imageState) {
  * @returns {Object} Current state object
  */
 function getStateFromNode(node) {
+  if (node?._xisCachedState) {
+    const cached = node._xisCachedState;
+    return {
+      imagePreviews: cached.imagePreviews || [],
+      imageState: cached.imageState || [],
+      isReversed: !!cached.isReversed,
+      isSingleMode: !!cached.isSingleMode,
+      nodeSize: getNormalizedNodeSize(cached.nodeSize)
+    };
+  }
   try {
     const nodeSizeData = JSON.parse(node.widgets[3].value || "[360, 360]");
     const reversedData = JSON.parse(node.widgets[4].value || "{}");
@@ -314,23 +437,26 @@ function getStateFromNode(node) {
 
     const previews = node.properties.image_previews || [];
     const reconciledState = reconcileImageState(previews, imageStateData);
-
-    return {
+    const normalizedState = {
       imagePreviews: previews,
       imageState: reconciledState,
       isReversed: !!(reversedData.reversed ?? reversedData),
       isSingleMode: !!(singleModeData.single_mode ?? singleModeData),
-      nodeSize: Array.isArray(nodeSizeData) && nodeSizeData.length === 2 ? nodeSizeData : [360, 360]
+      nodeSize: getNormalizedNodeSize(nodeSizeData)
     };
+    cacheNodeState(node, normalizedState);
+    return normalizedState;
   } catch (e) {
     log.error(`Failed to get state from node ${node.id}: ${e}`);
-    return {
+    const fallbackState = {
       imagePreviews: node.properties.image_previews || [],
       imageState: [],
       isReversed: false,
       isSingleMode: false,
       nodeSize: [360, 360]
     };
+    cacheNodeState(node, fallbackState);
+    return fallbackState;
   }
 }
 
@@ -344,7 +470,15 @@ function updateState(node, state, statusText, debouncedUpdateCardList) {
   const { imageOrder, enabledLayers } = deriveOrderAndEnabled(imagePreviews, reconciledState);
   const isReversed = !!state.isReversed;
   const isSingleMode = !!state.isSingleMode;
-  const nodeSize = Array.isArray(state.nodeSize) && state.nodeSize.length === 2 ? state.nodeSize : [360, 360];
+  const nodeSize = getNormalizedNodeSize(state.nodeSize);
+
+  cacheNodeState(node, {
+    imagePreviews,
+    imageState: reconciledState,
+    isReversed,
+    isSingleMode,
+    nodeSize
+  });
 
   let stateChanged = false;
 
@@ -358,7 +492,7 @@ function updateState(node, state, statusText, debouncedUpdateCardList) {
   const newSingleModeValue = JSON.stringify({ node_id: correctNodeId, single_mode: isSingleMode });
   const newSizeValue = JSON.stringify(nodeSize);
   const newImageIdsValue = JSON.stringify({ node_id: correctNodeId, image_ids: imagePreviews.map(p => p.image_id || "") });
-  const newImageStateValue = serializeImageState(reconciledState, correctNodeId);
+  const newImageStateValue = getSerializedImageStateValue(node, reconciledState, correctNodeId);
 
   // Update widgets with latest state
   if (node.widgets[0].value !== newOrderValue) {
@@ -475,50 +609,33 @@ app.registerExtension({
 
   async nodeCreated(node) {
     if (node.comfyClass !== "XIS_ImageManager") return;
-    const pendingNodes = new WeakMap();
 
     if (!window.xisImageManagerAfterGraphConfigured) {
       window.xisImageManagerAfterGraphConfigured = true;
       app.graph.afterGraphConfigured = (function (original) {
         return function () {
           if (original) original.call(this);
-          for (const [pendingNode, callback] of pendingNodes) {
-            if (pendingNode.id > 0 && app.graph.getNodeById(pendingNode.id)) {
-              log.info(`Node registered after graph config: ID ${pendingNode.id}, type ${pendingNode.type}, title ${pendingNode.title || "undefined"}`);
-              pendingNodes.delete(pendingNode);
-              callback(pendingNode.id);
-            }
-          }
+          processPendingNodes();
         };
       })(app.graph.afterGraphConfigured || null);
     }
 
-
-    function initializeNode(node, callback, retries = 20, delay = 200) {
-      if (!node) {
+    function initializeNode(targetNode, callback, retries = 20, delay = 200) {
+      if (!targetNode) {
         log.error(`Node is null or undefined. Aborting initialization.`);
         return;
       }
-      
-      // Check if node already has a valid ID
-      if (node.id > 0 && app.graph.getNodeById(node.id)) {
-        log.info(`Node immediately initialized: ID ${node.id}, type ${node.type}, title ${node.title || "undefined"}`);
-        callback(node.id);
+
+      if (targetNode.id > 0 && app.graph.getNodeById(targetNode.id)) {
+        log.info(`Node immediately initialized: ID ${targetNode.id}, type ${targetNode.type}, title ${targetNode.title || "undefined"}`);
+        callback(targetNode.id);
         return;
       }
-      
-      // For workflow loading, nodes might start with negative IDs that get resolved later
-      // Just wait for the node to get a valid ID through normal ComfyUI processes
-      if (retries <= 0) {
-        log.warning(`Node ID ${node.id || "undefined"} not assigned after max retries. UI may show but functionality limited.`);
-        // Still proceed with initialization but use a temporary ID
-        const tempId = node.id > 0 ? node.id : Math.abs(node.id) || Date.now();
-        callback(tempId);
-        return;
-      }
-      
-      // Wait a bit and try again
-      setTimeout(() => initializeNode(node, callback, retries - 1, delay), delay);
+
+      log.info(`Node ${targetNode.title || "undefined"} pending ID assignment, queuing initialization.`);
+      registerPendingNode(targetNode, (resolvedId) => {
+        callback(resolvedId);
+      }, retries, delay);
     }
 
     initializeNode(node, async (nodeId) => {
@@ -589,7 +706,7 @@ app.registerExtension({
           if (data.node_id !== nodeId) log.warning(`Mismatched node_id: ${data.node_id}, expected ${nodeId}`);
           if (!Array.isArray(data?.order)) return;
           const validatedOrder = validateImageOrder(data.order, imagePreviews);
-          if (!validatedOrder.length || JSON.stringify(imageOrder) === JSON.stringify(validatedOrder)) return;
+          if (!validatedOrder.length || arraysShallowEqual(imageOrder, validatedOrder)) return;
           const reorderedState = reorderStateFromOrder(imagePreviews, imageState, validatedOrder);
           applyState({ imageState: reorderedState });
         } catch (error) {
@@ -616,7 +733,7 @@ app.registerExtension({
           if (isSingleMode) {
             nextState = enforceSingleModeState(nextState);
           }
-          if (JSON.stringify(nextState) === JSON.stringify(imageState)) return;
+          if (imageStatesEqual(nextState, imageState)) return;
           applyState({ imageState: nextState });
         } catch (error) {
           statusText.innerText = "Layers error";
@@ -637,7 +754,7 @@ app.registerExtension({
           if (Array.isArray(parsedSize) && parsedSize.length === 2) {
             const newSize = [Math.max(parsedSize[0], 360), Math.max(parsedSize[1], MIN_NODE_HEIGHT)];
             // Only update if size actually changed
-            if (JSON.stringify(nodeSize) !== JSON.stringify(newSize)) {
+            if (!arraysShallowEqual(nodeSize, newSize)) {
               nodeSize = newSize;
               node.setSize(nodeSize);
               // Don't call setState here to avoid circular updates
@@ -702,7 +819,7 @@ app.registerExtension({
         }
       }, { serialize: true });
 
-      const imageStateWidget = node.addWidget("hidden", "image_state", serializeImageState(imageState, nodeId), value => {
+      const imageStateWidget = node.addWidget("hidden", "image_state", getSerializedImageStateValue(node, imageState, nodeId), value => {
         try {
           const parsed = JSON.parse(value || "[]");
           let parsedState = [];
@@ -794,10 +911,10 @@ app.registerExtension({
             const nextImageState = newIsSingleMode ? enforceSingleModeState(reconciled) : reconciled;
             const stateChanged =
               JSON.stringify(imagePreviews) !== JSON.stringify(newPreviews) ||
-              JSON.stringify(imageState) !== JSON.stringify(nextImageState) ||
+              !imageStatesEqual(imageState, nextImageState) ||
               isReversed !== newIsReversed ||
               isSingleMode !== newIsSingleMode ||
-              JSON.stringify(nodeSize) !== JSON.stringify(newNodeSize);
+              !arraysShallowEqual(nodeSize, newNodeSize);
 
             if (stateChanged) {
               imagePreviews = newPreviews;
@@ -834,18 +951,18 @@ app.registerExtension({
         size[0] = Math.max(size[0], 360);
         size[1] = Math.max(size[1], MIN_NODE_HEIGHT);
         const newNodeSize = [size[0], size[1]];
-        if (JSON.stringify(nodeSize) === JSON.stringify(newNodeSize)) {
+        if (arraysShallowEqual(nodeSize, newNodeSize)) {
           log.debug(`Node ${nodeId} resize skipped: no size change`);
           return;
         }
-      nodeSize = newNodeSize;
-      node.properties.node_size = newNodeSize;
-      
-      const currentState = getStateFromNode(node);
-      currentState.nodeSize = newNodeSize;
-      applyState(currentState);
-      log.debug(`Node ${nodeId} resized: width=${size[0]}, height=${size[1]}`);
-    };
+        nodeSize = newNodeSize;
+        node.properties.node_size = newNodeSize;
+
+        const currentState = getStateFromNode(node);
+        currentState.nodeSize = newNodeSize;
+        applyState(currentState);
+        log.debug(`Node ${nodeId} resized: width=${size[0]}, height=${size[1]}`);
+      };
 
       // Handle node movement
       node.onNodeMoved = function () {

@@ -557,9 +557,14 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
           log.warning(`Node ${nodeId}: Missing image_id for preview index ${preview.index}`);
           return;
         }
-        const updatedState = imageState.map(entry =>
-          entry.id === preview.image_id ? { ...entry, enabled: toggle.checked } : entry
-        );
+        const updatedState = imageState.map(entry => {
+          if (entry.id !== preview.image_id) {
+            return isSingleMode && toggle.checked
+              ? { ...entry, enabled: false }
+              : entry;
+          }
+          return { ...entry, enabled: toggle.checked };
+        });
         setState({ imageState: updatedState });
         log.info(`Layer ${preview.index} enabled: ${toggle.checked} for node ${nodeId}`);
       });
