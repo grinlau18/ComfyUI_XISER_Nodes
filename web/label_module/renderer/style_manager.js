@@ -1,6 +1,7 @@
 /**
  * 样式管理器模块
  */
+import { DEFAULT_COLOR } from '../core/constants.js';
 import { clamp } from '../utils/common_utils.js';
 
 /**
@@ -150,7 +151,7 @@ export class StyleManager {
     getNodeStyles(node) {
         const isMuteMode = node.mode === 2;
         const isPassMode = node.mode === 4 || node.flags?.bypassed === true;
-        const baseColor = node.color || node.properties.color || "#333355";
+        const baseColor = node.color || node.properties.color || DEFAULT_COLOR;
 
         const percent = clamp(Number(node.properties?.textScalePercent ?? 50), 1, 100);
         node.properties.textScalePercent = percent;
@@ -159,5 +160,43 @@ export class StyleManager {
             alpha: isMuteMode || isPassMode ? 0.5 : 1.0,
             textScale: percent / 100
         };
+    }
+    applyNodeStyles(node) {
+        if (!node) return false;
+        node.properties = node.properties || {};
+        const snapshot = node.properties._styleSnapshot || {};
+
+        const textScalePercent = clamp(Number(node.properties.textScalePercent ?? 50), 1, 100);
+        const color = node.properties.color || node.color || DEFAULT_COLOR;
+        const backgroundAlpha = typeof node.properties.backgroundAlpha === "number"
+            ? clamp(node.properties.backgroundAlpha, 0, 1)
+            : 1;
+
+        let changed = false;
+        if (node.color !== color) {
+            node.color = color;
+            node.properties.color = color;
+            changed = true;
+        }
+        if (node.properties.textScalePercent !== textScalePercent) {
+            node.properties.textScalePercent = textScalePercent;
+            changed = true;
+        }
+
+        const snapshotChanged =
+            snapshot.color !== color ||
+            snapshot.textScalePercent !== textScalePercent ||
+            snapshot.backgroundAlpha !== backgroundAlpha;
+
+        if (snapshotChanged) {
+            node.properties._styleSnapshot = {
+                color,
+                textScalePercent,
+                backgroundAlpha
+            };
+            changed = true;
+        }
+
+        return changed;
     }
 }

@@ -244,6 +244,7 @@ function setupLabelNode() {
              */
             nodeType.prototype.onDrawForeground = function (ctx) {
                 try {
+                    styleManager.applyNodeStyles(this);
                     if (!this.properties.parsedTextData) {
                         const currentMode = this.properties.editorMode || EDITOR_MODES.HTML;
                         const sourceData = this.properties?.[currentMode === EDITOR_MODES.HTML ? "htmlData" : "markdownData"];
@@ -277,13 +278,16 @@ function setupLabelNode() {
             nodeType.prototype.onPropertyChanged = debounce(function (property, value) {
                 if (property === "color" && value) {
                     this.properties.color = value;
+                    const styleChanged = styleManager.applyNodeStyles(this);
                     parserManager.updateBackground(
                         this,
                         value,
                         this.properties.editorMode || EDITOR_MODES.HTML
                     );
-                    this.setDirtyCanvas(true, false);
-                    app.canvas.setDirty(true);
+                    if (styleChanged) {
+                        this.setDirtyCanvas(true, false);
+                        app.canvas.setDirty(true);
+                    }
                     logger.info(`Property changed: ${property} = ${value}`);
                 }
                 return true;
@@ -298,7 +302,9 @@ function setupLabelNode() {
                 if (!this.properties?.node_size || !Array.isArray(this.properties.node_size) || this.properties.node_size.length !== 2) {
                     ensureDefaultNodeSize(this);
                 }
-                this.setDirtyCanvas(true, false);
+                if (styleManager.applyNodeStyles(this)) {
+                    this.setDirtyCanvas(true, false);
+                }
             };
 
             /**
@@ -326,6 +332,7 @@ function setupLabelNode() {
                         cloned.properties = cloned.properties || {};
                         cloned.properties.node_size = [...normalizedSize];
                     }
+                    styleManager.applyNodeStyles(cloned);
                     logger.info(`[XIS_Label] clone ${this.id} -> ${cloned.id} size=${sourceSize?.join("x")}`);
                 }
                 return cloned;
@@ -398,14 +405,16 @@ async function openTextEditor(node) {
 
         const handleColorChange = (newColor) => {
             node.properties.color = newColor;
-            node.color = newColor;
+            const styleChanged = styleManager.applyNodeStyles(node);
             parserManager.updateBackground(
                 node,
                 newColor,
                 node.properties.editorMode || EDITOR_MODES.HTML
             );
-            node.setDirtyCanvas(true, false);
-            app.canvas.setDirty(true);
+            if (styleChanged) {
+                node.setDirtyCanvas(true, false);
+                app.canvas.setDirty(true);
+            }
             logger.info(`Background color updated: ${newColor}`);
         };
 
@@ -417,8 +426,10 @@ async function openTextEditor(node) {
 
         const handleTextScale = (value) => {
             node.properties.textScalePercent = value;
-            node.setDirtyCanvas(true, false);
-            app.canvas.setDirty(true);
+            if (styleManager.applyNodeStyles(node)) {
+                node.setDirtyCanvas(true, false);
+                app.canvas.setDirty(true);
+            }
         };
 
         headerControlsRef = createEditorHeaderControls({

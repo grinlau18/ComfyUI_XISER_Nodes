@@ -53,13 +53,24 @@ export class ParserManager {
             return this.parsers[EDITOR_MODES.HTML].update(node, newText);
         }
         const cacheKey = mode === EDITOR_MODES.HTML ? "htmlData" : "markdownData";
-        if (node.properties?.lastParsedSource?.[cacheKey] === newText) {
-            logger.debug(`[ParserManager] ${mode} text unchanged, skipping parse`);
-            return node.properties.parsedTextData;
-        }
-        const result = parser.update(node, newText, mode);
         node.properties.lastParsedSource = node.properties.lastParsedSource || {};
+        node.properties.lastParsedResult = node.properties.lastParsedResult || {};
+
+        if (node.properties.lastParsedSource[cacheKey] === newText) {
+            const cachedResult = node.properties.lastParsedResult[cacheKey];
+            if (cachedResult) {
+                node.properties.parsedTextData = cachedResult;
+                node.properties.parsedTextMode = mode;
+                logger.debug(`[ParserManager] ${mode} text unchanged, reused cached parsed data`);
+                return cachedResult;
+            }
+            logger.debug(`[ParserManager] ${mode} text unchanged but no cached parsed data, reparsing`);
+        }
+
+        const result = parser.update(node, newText, mode);
         node.properties.lastParsedSource[cacheKey] = newText;
+        node.properties.lastParsedResult[cacheKey] = node.properties.parsedTextData;
+        node.properties.parsedTextMode = mode;
         return result;
     }
 
