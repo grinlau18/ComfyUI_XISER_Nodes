@@ -1,0 +1,5504 @@
+{
+  "id": "1adf06bd-6553-49a3-a635-20f6aaa8fa80",
+  "revision": 0,
+  "last_node_id": 271,
+  "last_link_id": 758,
+  "nodes": [
+    {
+      "id": 207,
+      "type": "ImageCompositeMasked",
+      "pos": [
+        -4800,
+        -1960
+      ],
+      "size": [
+        270,
+        146
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 36,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "destination",
+          "type": "IMAGE",
+          "link": 739
+        },
+        {
+          "name": "source",
+          "type": "IMAGE",
+          "link": 737
+        },
+        {
+          "name": "mask",
+          "shape": 7,
+          "type": "MASK",
+          "link": 738
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            654
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "ImageCompositeMasked",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        0,
+        0,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 190,
+      "type": "EmptyImage",
+      "pos": [
+        -4660,
+        -2000
+      ],
+      "size": [
+        270,
+        130
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            622,
+            647,
+            751,
+            754
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "EmptyImage",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        932,
+        1024,
+        1,
+        0
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 247,
+      "type": "XIS_SetColor",
+      "pos": [
+        -5190,
+        -540
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#ffffff"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#ffffff"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 244,
+      "type": "XIS_SetColor",
+      "pos": [
+        -6290,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            717
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#148569"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#148569"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 246,
+      "type": "XIS_SetColor",
+      "pos": [
+        -6060,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            718
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#182435"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#182435"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 255,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -6280,
+        -160
+      ],
+      "size": [
+        788,
+        664
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 717
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 718
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            719
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "text",
+        "shape_type": "text",
+        "shape_params": "{\"content\":\"ShapeAndText\",\"font_file\":\"\",\"font_family\":\"\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"bold\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":false,\"text_align\":\"center\",\"angle\":360,\"inner_radius\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 1024,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":-0.009321633558338741,\"y\":0.022738342473416735},\"rotation\":0,\"scale\":{\"x\":0.6177051260219966,\"y\":0.6177051260219966},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":768,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":-0.009321633558338741,\"y\":0.022738342473416735},\"rotation\":0,\"scale\":{\"x\":0.6177051260219966,\"y\":0.6177051260219966},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":768,\"height\":384}}"
+      },
+      "widgets_values": [
+        1024,
+        512,
+        "text",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "text",
+          "shape_type": "text",
+          "shape_params": "{\"content\":\"ShapeAndText\",\"font_file\":\"\",\"font_family\":\"\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"bold\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":false,\"text_align\":\"center\",\"angle\":360,\"inner_radius\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 1024,
+          "height": 512,
+          "position": {
+            "x": -0.009321633558338741,
+            "y": 0.022738342473416735
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 0.6177051260219966,
+            "y": 0.6177051260219966
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":-0.009321633558338741,\"y\":0.022738342473416735},\"rotation\":0,\"scale\":{\"x\":0.6177051260219966,\"y\":0.6177051260219966},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":768,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 252,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -5150,
+        -300
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 706
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 707
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            708
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "circle, sector, doughnut",
+        "shape_type": "circle",
+        "shape_params": "{\"angle\":317,\"inner_radius\":60,\"shape_rotation\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "circle, sector, doughnut",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "circle, sector, doughnut",
+          "shape_type": "circle",
+          "shape_params": "{\"angle\":317,\"inner_radius\":60,\"shape_rotation\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 230,
+      "type": "XIS_SetColor",
+      "pos": [
+        -5370,
+        530
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            726
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#8cc5a7"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#8cc5a7"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 231,
+      "type": "XIS_SetColor",
+      "pos": [
+        -5370,
+        650
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            727
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#1d7733"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#1d7733"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 233,
+      "type": "XIS_SetColor",
+      "pos": [
+        -4660,
+        530
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            728
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#df4e81"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#df4e81"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 234,
+      "type": "XIS_SetColor",
+      "pos": [
+        -4660,
+        640
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            729
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#69213e"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#69213e"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 236,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3970,
+        530
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            730
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#2b2768"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#2b2768"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 237,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3970,
+        640
+      ],
+      "size": [
+        210,
+        70
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            731
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#5a8db5"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#5a8db5"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 217,
+      "type": "XIS_SetColor",
+      "pos": [
+        -5370,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            706
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#ff0059"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#ff0059"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 225,
+      "type": "XIS_SetColor",
+      "pos": [
+        -5370,
+        -200
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            707
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#351d77"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#351d77"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 227,
+      "type": "XIS_SetColor",
+      "pos": [
+        -4670,
+        -200
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            710
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#0b4275"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#0b4275"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 220,
+      "type": "XIS_SetColor",
+      "pos": [
+        -4670,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            709
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#0f98b3"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#0f98b3"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 223,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3960,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            712
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#601028"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#601028"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 226,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3960,
+        -200
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            713
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#dbb243"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#dbb243"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 262,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3270,
+        -300
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            740
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#601028"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#601028"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 263,
+      "type": "XIS_SetColor",
+      "pos": [
+        -3270,
+        -200
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            741
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#dbb243"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#dbb243"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 261,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -3050,
+        -300
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 740
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 741
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            742
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "flower",
+        "shape_type": "flower",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"petals\":6}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "flower",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "flower",
+          "shape_type": "flower",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"petals\":6}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 253,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -4450,
+        -300
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 709
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 710
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            711
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "star",
+        "shape_type": "star",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"inner_ratio\":0.55,\"points\":7}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "star",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "star",
+          "shape_type": "star",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"inner_ratio\":0.55,\"points\":7}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 256,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -5140,
+        530
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 726
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 727
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            732
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "spiral",
+        "shape_type": "spiral",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "spiral",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "spiral",
+          "shape_type": "spiral",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 257,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -4440,
+        530
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 728
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 729
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            733
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "sunburst",
+        "shape_type": "sunburst",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "sunburst",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "sunburst",
+          "shape_type": "sunburst",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 258,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -3740,
+        530
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 730
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 731
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            734
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "polygon",
+        "shape_type": "polygon",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"sides\":6}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "polygon",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "polygon",
+          "shape_type": "polygon",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"sides\":6}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 254,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -3740,
+        -300
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 712
+        },
+        {
+          "name": "bg_color",
+          "type": "STRING",
+          "widget": {
+            "name": "bg_color"
+          },
+          "link": 713
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            714
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "heart",
+        "shape_type": "heart",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "heart",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "heart",
+          "shape_type": "heart",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 219,
+      "type": "XIS_PackImages",
+      "pos": [
+        -3120,
+        690
+      ],
+      "size": [
+        275.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 35,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 708
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 711
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 714
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 742
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            690
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 239,
+      "type": "XIS_PackImages",
+      "pos": [
+        -2820,
+        690
+      ],
+      "size": [
+        275.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 37,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 690
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 732
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 734
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 733
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 719
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            691
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 224,
+      "type": "XISER_Canvas",
+      "pos": [
+        -2400,
+        -300
+      ],
+      "size": [
+        1352,
+        1588
+      ],
+      "flags": {},
+      "order": 39,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "link": 691
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA"
+        },
+        {
+          "name": "canvas_config",
+          "type": "CANVAS_CONFIG"
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "layer_images",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 1536,
+          "board_height": 1536,
+          "border_width": 120,
+          "canvas_color": "black",
+          "border_color": "rgb(25, 25, 25)",
+          "auto_size": "off",
+          "display_scale": 0.75,
+          "image_paths": [
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png"
+          ],
+          "layer_ids": [
+            "layer_0",
+            "layer_1",
+            "layer_2",
+            "layer_3",
+            "layer_4",
+            "layer_5",
+            "layer_6",
+            "layer_7"
+          ],
+          "image_states": [
+            {
+              "x": 376.48035590285457,
+              "y": 376.48037290346775,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 1397.3182835415369,
+              "y": 376.48033411770336,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+              "layer_id": "layer_1"
+            },
+            {
+              "x": 886.1706850859122,
+              "y": 376.48037290346775,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 2,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+              "layer_id": "layer_2"
+            },
+            {
+              "x": 374.4159758508018,
+              "y": 887.8588018560966,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 3,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+              "layer_id": "layer_3"
+            },
+            {
+              "x": 1398.4034272493136,
+              "y": 887.9644581419532,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 4,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+              "layer_id": "layer_4"
+            },
+            {
+              "x": 886.4772922449586,
+              "y": 888.7435822814579,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 5,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+              "layer_id": "layer_5"
+            },
+            {
+              "x": 1400.6456107289168,
+              "y": 1401.909545352402,
+              "scaleX": 1.009444456718702,
+              "scaleY": 1.009444456718702,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 6,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+              "layer_id": "layer_6"
+            },
+            {
+              "x": 628.2637145926468,
+              "y": 1398.6439972481417,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 7,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png",
+              "layer_id": "layer_7"
+            }
+          ],
+          "layer_order": [
+            "layer_0",
+            "layer_1",
+            "layer_2",
+            "layer_3",
+            "layer_4",
+            "layer_5",
+            "layer_6",
+            "layer_7"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 376.48035590285457,
+            "y": 376.48037290346775,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 0,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+            "layer_id": "layer_0"
+          },
+          {
+            "x": 1397.3182835415369,
+            "y": 376.48033411770336,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 1,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+            "layer_id": "layer_1"
+          },
+          {
+            "x": 886.1706850859122,
+            "y": 376.48037290346775,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 2,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+            "layer_id": "layer_2"
+          },
+          {
+            "x": 374.4159758508018,
+            "y": 887.8588018560966,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 3,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+            "layer_id": "layer_3"
+          },
+          {
+            "x": 1398.4034272493136,
+            "y": 887.9644581419532,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 4,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+            "layer_id": "layer_4"
+          },
+          {
+            "x": 886.4772922449586,
+            "y": 888.7435822814579,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 5,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+            "layer_id": "layer_5"
+          },
+          {
+            "x": 1400.6456107289168,
+            "y": 1401.909545352402,
+            "scaleX": 1.009444456718702,
+            "scaleY": 1.009444456718702,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 6,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+            "layer_id": "layer_6"
+          },
+          {
+            "x": 628.2637145926468,
+            "y": 1398.6439972481417,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 7,
+            "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png",
+            "layer_id": "layer_7"
+          }
+        ],
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        1536,
+        1536,
+        120,
+        "black",
+        0.75,
+        "off",
+        "[{\"x\":376.48035590285457,\"y\":376.48037290346775,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":0,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png\",\"layer_id\":\"layer_0\"},{\"x\":1397.3182835415369,\"y\":376.48033411770336,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":1,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png\",\"layer_id\":\"layer_1\"},{\"x\":886.1706850859122,\"y\":376.48037290346775,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":2,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png\",\"layer_id\":\"layer_2\"},{\"x\":374.4159758508018,\"y\":887.8588018560966,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":3,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png\",\"layer_id\":\"layer_3\"},{\"x\":1398.4034272493136,\"y\":887.9644581419532,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":4,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png\",\"layer_id\":\"layer_4\"},{\"x\":886.4772922449586,\"y\":888.7435822814579,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":5,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png\",\"layer_id\":\"layer_5\"},{\"x\":1400.6456107289168,\"y\":1401.909545352402,\"scaleX\":1.009444456718702,\"scaleY\":1.009444456718702,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":6,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png\",\"layer_id\":\"layer_6\"},{\"x\":628.2637145926468,\"y\":1398.6439972481417,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":7,\"filename\":\"xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png\",\"layer_id\":\"layer_7\"}]",
+        {
+          "image_states": [
+            {
+              "x": 376.48035590285457,
+              "y": 376.48037290346775,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 1397.3182835415369,
+              "y": 376.48033411770336,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+              "layer_id": "layer_1"
+            },
+            {
+              "x": 886.1706850859122,
+              "y": 376.48037290346775,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 2,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+              "layer_id": "layer_2"
+            },
+            {
+              "x": 374.4159758508018,
+              "y": 887.8588018560966,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 3,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+              "layer_id": "layer_3"
+            },
+            {
+              "x": 1398.4034272493136,
+              "y": 887.9644581419532,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 4,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+              "layer_id": "layer_4"
+            },
+            {
+              "x": 886.4772922449586,
+              "y": 888.7435822814579,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 5,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+              "layer_id": "layer_5"
+            },
+            {
+              "x": 1400.6456107289168,
+              "y": 1401.909545352402,
+              "scaleX": 1.009444456718702,
+              "scaleY": 1.009444456718702,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 6,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+              "layer_id": "layer_6"
+            },
+            {
+              "x": 628.2637145926468,
+              "y": 1398.6439972481417,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 7,
+              "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png",
+              "layer_id": "layer_7"
+            }
+          ],
+          "ui_config": {
+            "board_width": 1536,
+            "board_height": 1536,
+            "border_width": 120,
+            "canvas_color": "black",
+            "border_color": "rgb(25, 25, 25)",
+            "auto_size": "off",
+            "display_scale": 0.75,
+            "image_paths": [
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+              "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png"
+            ],
+            "layer_ids": [
+              "layer_0",
+              "layer_1",
+              "layer_2",
+              "layer_3",
+              "layer_4",
+              "layer_5",
+              "layer_6",
+              "layer_7"
+            ],
+            "image_states": [
+              {
+                "x": 376.48035590285457,
+                "y": 376.48037290346775,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 0,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+                "layer_id": "layer_0"
+              },
+              {
+                "x": 1397.3182835415369,
+                "y": 376.48033411770336,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 1,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+                "layer_id": "layer_1"
+              },
+              {
+                "x": 886.1706850859122,
+                "y": 376.48037290346775,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 2,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+                "layer_id": "layer_2"
+              },
+              {
+                "x": 374.4159758508018,
+                "y": 887.8588018560966,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 3,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+                "layer_id": "layer_3"
+              },
+              {
+                "x": 1398.4034272493136,
+                "y": 887.9644581419532,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 4,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+                "layer_id": "layer_4"
+              },
+              {
+                "x": 886.4772922449586,
+                "y": 888.7435822814579,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 5,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+                "layer_id": "layer_5"
+              },
+              {
+                "x": 1400.6456107289168,
+                "y": 1401.909545352402,
+                "scaleX": 1.009444456718702,
+                "scaleY": 1.009444456718702,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 6,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+                "layer_id": "layer_6"
+              },
+              {
+                "x": 628.2637145926468,
+                "y": 1398.6439972481417,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 7,
+                "filename": "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png",
+                "layer_id": "layer_7"
+              }
+            ],
+            "layer_order": [
+              "layer_0",
+              "layer_1",
+              "layer_2",
+              "layer_3",
+              "layer_4",
+              "layer_5",
+              "layer_6",
+              "layer_7"
+            ]
+          },
+          "image_paths": [
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_79777b2182f9442f8e926cc51735077f.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_12da2088e20f4fc38ec847ab4e93b644.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_a7c17e2e563c487fa7f60d8a23ff3895.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_223ca79d959f4e05affd8e703c185101.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c1247402b723470e90ce29c34f4441c4.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_15713490ff1d4fcaa94dd4d208001b5c.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c6f1af37f56f406f9530f083830689fc.png",
+            "xiser_canvas_79f55a9ead42475691b41e78b98669cd_c230a7bc84474b59b23f30f7fb7a8ff8.png"
+          ]
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 259,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -5050,
+        -1830
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 30,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 735
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            737
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": [
+            738
+          ]
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "polygon",
+        "shape_type": "polygon",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"sides\":3}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":-0.13051915833742442},\"rotation\":0,\"scale\":{\"x\":1.0252718826976897,\"y\":0.743203359152381},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":-0.13051915833742442},\"rotation\":0,\"scale\":{\"x\":1.0252718826976897,\"y\":0.743203359152381},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "polygon",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "polygon",
+          "shape_type": "polygon",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"sides\":3}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": -0.13051915833742442
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1.0252718826976897,
+            "y": 0.743203359152381
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":-0.13051915833742442},\"rotation\":0,\"scale\":{\"x\":1.0252718826976897,\"y\":0.743203359152381},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 197,
+      "type": "XIS_SetColor",
+      "pos": [
+        -4940,
+        -1960
+      ],
+      "size": [
+        210,
+        60
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "color_data",
+          "type": "WIDGET",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "hex_color",
+          "type": "STRING",
+          "links": [
+            735,
+            736
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XIS_SetColor",
+        "colorData": {
+          "color": "#ff0059"
+        },
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        {
+          "color": "#ff0059"
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 260,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -4630,
+        -1830
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 31,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        },
+        {
+          "name": "shape_color",
+          "type": "STRING",
+          "widget": {
+            "name": "shape_color"
+          },
+          "link": 736
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            739
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "polygon",
+        "shape_type": "polygon",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":45}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0.08637045398690946},\"rotation\":0,\"scale\":{\"x\":0.6009340763977146,\"y\":0.9946216272180392},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0.08637045398690946},\"rotation\":0,\"scale\":{\"x\":0.6009340763977146,\"y\":0.9946216272180392},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "polygon",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "polygon",
+          "shape_type": "polygon",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":45}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0.08637045398690946
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 0.6009340763977146,
+            "y": 0.9946216272180392
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0.08637045398690946},\"rotation\":0,\"scale\":{\"x\":0.6009340763977146,\"y\":0.9946216272180392},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "type": "XISER_Canvas",
+      "pos": [
+        -3450,
+        -2830
+      ],
+      "size": [
+        652,
+        888
+      ],
+      "flags": {},
+      "order": 42,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "link": 645
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA"
+        },
+        {
+          "name": "canvas_config",
+          "type": "CANVAS_CONFIG"
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "link": 641
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "layer_images",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 1024,
+          "board_height": 1024,
+          "border_width": 120,
+          "canvas_color": "black",
+          "border_color": "rgb(25, 25, 25)",
+          "auto_size": "off",
+          "display_scale": 0.5,
+          "image_paths": [
+            "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+            "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png"
+          ],
+          "layer_ids": [
+            "layer_0",
+            "layer_1"
+          ],
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "layer_order": [
+            "layer_0",
+            "layer_1"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 632,
+            "y": 632,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 0,
+            "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+            "layer_id": "layer_0"
+          },
+          {
+            "x": 631.9999999999961,
+            "y": 631.9999999999995,
+            "scaleX": 1.278462413380941,
+            "scaleY": 1.2784624133809843,
+            "rotation": -50.41884582862299,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 1,
+            "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png",
+            "layer_id": "layer_1"
+          }
+        ],
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        120,
+        "black",
+        0.5,
+        "off",
+        "[{\"x\":632,\"y\":632,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":0,\"filename\":\"xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png\",\"layer_id\":\"layer_0\"},{\"x\":631.9999999999961,\"y\":631.9999999999995,\"scaleX\":1.278462413380941,\"scaleY\":1.2784624133809843,\"rotation\":-50.41884582862299,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":1,\"filename\":\"xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png\",\"layer_id\":\"layer_1\"}]",
+        {
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "ui_config": {
+            "board_width": 1024,
+            "board_height": 1024,
+            "border_width": 120,
+            "canvas_color": "black",
+            "border_color": "rgb(25, 25, 25)",
+            "auto_size": "off",
+            "display_scale": 0.5,
+            "image_paths": [
+              "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+              "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png"
+            ],
+            "layer_ids": [
+              "layer_0",
+              "layer_1"
+            ],
+            "image_states": [
+              {
+                "x": 632,
+                "y": 632,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 0,
+                "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+                "layer_id": "layer_0"
+              },
+              {
+                "x": 631.9999999999961,
+                "y": 631.9999999999995,
+                "scaleX": 1.278462413380941,
+                "scaleY": 1.2784624133809843,
+                "rotation": -50.41884582862299,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 1,
+                "filename": "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png",
+                "layer_id": "layer_1"
+              }
+            ],
+            "layer_order": [
+              "layer_0",
+              "layer_1"
+            ]
+          },
+          "image_paths": [
+            "xiser_canvas_18201a010b714d858db74e8588bc1bb8_71435b4548444dc4b551334c936fd5db.png",
+            "xiser_canvas_18201a010b714d858db74e8588bc1bb8_0a7bded92b0544109060b7ff11312174.png"
+          ]
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 184,
+      "type": "XISER_Canvas",
+      "pos": [
+        -4140,
+        -2830
+      ],
+      "size": [
+        652,
+        888
+      ],
+      "flags": {},
+      "order": 41,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "link": 611
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA"
+        },
+        {
+          "name": "canvas_config",
+          "type": "CANVAS_CONFIG"
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "layer_images",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "links": [
+            641,
+            746,
+            747
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 1024,
+          "board_height": 1024,
+          "border_width": 120,
+          "canvas_color": "black",
+          "border_color": "rgb(25, 25, 25)",
+          "auto_size": "off",
+          "display_scale": 0.5,
+          "image_paths": [
+            "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+            "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png"
+          ],
+          "layer_ids": [
+            "layer_0",
+            "layer_1"
+          ],
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "layer_order": [
+            "layer_0",
+            "layer_1"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 632,
+            "y": 632,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 0,
+            "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+            "layer_id": "layer_0"
+          },
+          {
+            "x": 631.9999999999961,
+            "y": 631.9999999999995,
+            "scaleX": 1.278462413380941,
+            "scaleY": 1.2784624133809843,
+            "rotation": -50.41884582862299,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 1,
+            "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png",
+            "layer_id": "layer_1"
+          }
+        ],
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        120,
+        "black",
+        0.5,
+        "off",
+        "[{\"x\":632,\"y\":632,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":0,\"filename\":\"xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png\",\"layer_id\":\"layer_0\"},{\"x\":631.9999999999961,\"y\":631.9999999999995,\"scaleX\":1.278462413380941,\"scaleY\":1.2784624133809843,\"rotation\":-50.41884582862299,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":1,\"filename\":\"xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png\",\"layer_id\":\"layer_1\"}]",
+        {
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "ui_config": {
+            "board_width": 1024,
+            "board_height": 1024,
+            "border_width": 120,
+            "canvas_color": "black",
+            "border_color": "rgb(25, 25, 25)",
+            "auto_size": "off",
+            "display_scale": 0.5,
+            "image_paths": [
+              "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+              "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png"
+            ],
+            "layer_ids": [
+              "layer_0",
+              "layer_1"
+            ],
+            "image_states": [
+              {
+                "x": 632,
+                "y": 632,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 0,
+                "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+                "layer_id": "layer_0"
+              },
+              {
+                "x": 631.9999999999961,
+                "y": 631.9999999999995,
+                "scaleX": 1.278462413380941,
+                "scaleY": 1.2784624133809843,
+                "rotation": -50.41884582862299,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 1,
+                "filename": "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png",
+                "layer_id": "layer_1"
+              }
+            ],
+            "layer_order": [
+              "layer_0",
+              "layer_1"
+            ]
+          },
+          "image_paths": [
+            "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_aae3d2df8d1240f083e86e6728b24cf3.png",
+            "xiser_canvas_f44b0ed9a5ef442caef009189bcde003_a48b6a99510741c582af3a2ca84deab4.png"
+          ]
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 240,
+      "type": "XISER_Canvas",
+      "pos": [
+        -3450,
+        -1880
+      ],
+      "size": [
+        652,
+        888
+      ],
+      "flags": {},
+      "order": 44,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "link": 758
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA"
+        },
+        {
+          "name": "canvas_config",
+          "type": "CANVAS_CONFIG"
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "link": 747
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "layer_images",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 1024,
+          "board_height": 1024,
+          "border_width": 120,
+          "canvas_color": "black",
+          "border_color": "rgb(25, 25, 25)",
+          "auto_size": "off",
+          "display_scale": 0.5,
+          "image_paths": [
+            "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+            "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png"
+          ],
+          "layer_ids": [
+            "layer_0",
+            "layer_1"
+          ],
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "layer_order": [
+            "layer_0",
+            "layer_1"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 632,
+            "y": 632,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 0,
+            "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+            "layer_id": "layer_0"
+          },
+          {
+            "x": 631.9999999999961,
+            "y": 631.9999999999995,
+            "scaleX": 1.278462413380941,
+            "scaleY": 1.2784624133809843,
+            "rotation": -50.41884582862299,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 1,
+            "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png",
+            "layer_id": "layer_1"
+          }
+        ],
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        120,
+        "black",
+        0.5,
+        "off",
+        "[{\"x\":632,\"y\":632,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":0,\"filename\":\"xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png\",\"layer_id\":\"layer_0\"},{\"x\":631.9999999999961,\"y\":631.9999999999995,\"scaleX\":1.278462413380941,\"scaleY\":1.2784624133809843,\"rotation\":-50.41884582862299,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":1,\"filename\":\"xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png\",\"layer_id\":\"layer_1\"}]",
+        {
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "ui_config": {
+            "board_width": 1024,
+            "board_height": 1024,
+            "border_width": 120,
+            "canvas_color": "black",
+            "border_color": "rgb(25, 25, 25)",
+            "auto_size": "off",
+            "display_scale": 0.5,
+            "image_paths": [
+              "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+              "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png"
+            ],
+            "layer_ids": [
+              "layer_0",
+              "layer_1"
+            ],
+            "image_states": [
+              {
+                "x": 632,
+                "y": 632,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 0,
+                "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+                "layer_id": "layer_0"
+              },
+              {
+                "x": 631.9999999999961,
+                "y": 631.9999999999995,
+                "scaleX": 1.278462413380941,
+                "scaleY": 1.2784624133809843,
+                "rotation": -50.41884582862299,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 1,
+                "filename": "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png",
+                "layer_id": "layer_1"
+              }
+            ],
+            "layer_order": [
+              "layer_0",
+              "layer_1"
+            ]
+          },
+          "image_paths": [
+            "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_2c2fbb0123d94187bf8bc7bda4ed53d0.png",
+            "xiser_canvas_307e2ef6776640c69beb1032b0c4be15_58f06e84f00c4b168bcaf6b978998e19.png"
+          ]
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 209,
+      "type": "SplitImageWithAlpha",
+      "pos": [
+        -4630,
+        -1960
+      ],
+      "size": [
+        140,
+        46
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 38,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 654
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            655
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": [
+            656
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.64",
+        "Node name for S&R": "SplitImageWithAlpha",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 267,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -5470,
+        -2830
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            749
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": [
+            750
+          ]
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "heart",
+        "shape_type": "heart",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "heart",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "heart",
+          "shape_type": "heart",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1,
+            "y": 1
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1,\"y\":1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "type": "XIS_PackImages",
+      "pos": [
+        -5320,
+        -2110
+      ],
+      "size": [
+        215.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 32,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 647
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 749
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": 750
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            645
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 16,
+      "type": "XIS_PackImages",
+      "pos": [
+        -4540,
+        -2000
+      ],
+      "size": [
+        275.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 40,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 622
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 655
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": 656
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            611
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        true,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 241,
+      "type": "XISER_Canvas",
+      "pos": [
+        -4140,
+        -1880
+      ],
+      "size": [
+        652,
+        888
+      ],
+      "flags": {},
+      "order": 43,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "link": 757
+        },
+        {
+          "name": "file_data",
+          "type": "FILE_DATA"
+        },
+        {
+          "name": "canvas_config",
+          "type": "CANVAS_CONFIG"
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "link": 746
+        }
+      ],
+      "outputs": [
+        {
+          "name": "canvas_image",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "masks",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "layer_images",
+          "type": "IMAGE",
+          "links": []
+        },
+        {
+          "name": "layer_data",
+          "type": "LAYER_DATA",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "74ea8718f9496505408718933a3fdfa79c100a9a",
+        "Node name for S&R": "XISER_Canvas",
+        "ui_config": {
+          "board_width": 1024,
+          "board_height": 1024,
+          "border_width": 120,
+          "canvas_color": "black",
+          "border_color": "rgb(25, 25, 25)",
+          "auto_size": "off",
+          "display_scale": 0.5,
+          "image_paths": [
+            "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+            "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png"
+          ],
+          "layer_ids": [
+            "layer_0",
+            "layer_1"
+          ],
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "layer_order": [
+            "layer_0",
+            "layer_1"
+          ]
+        },
+        "image_states": [
+          {
+            "x": 632,
+            "y": 632,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 0,
+            "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+            "layer_id": "layer_0"
+          },
+          {
+            "x": 631.9999999999961,
+            "y": 631.9999999999995,
+            "scaleX": 1.278462413380941,
+            "scaleY": 1.2784624133809843,
+            "rotation": -50.41884582862299,
+            "skewX": 0,
+            "skewY": 0,
+            "brightness": 0,
+            "contrast": 0,
+            "saturation": 0,
+            "visible": true,
+            "locked": false,
+            "order": 1,
+            "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png",
+            "layer_id": "layer_1"
+          }
+        ],
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        120,
+        "black",
+        0.5,
+        "off",
+        "[{\"x\":632,\"y\":632,\"scaleX\":1,\"scaleY\":1,\"rotation\":0,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":0,\"filename\":\"xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png\",\"layer_id\":\"layer_0\"},{\"x\":631.9999999999961,\"y\":631.9999999999995,\"scaleX\":1.278462413380941,\"scaleY\":1.2784624133809843,\"rotation\":-50.41884582862299,\"skewX\":0,\"skewY\":0,\"brightness\":0,\"contrast\":0,\"saturation\":0,\"visible\":true,\"locked\":false,\"order\":1,\"filename\":\"xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png\",\"layer_id\":\"layer_1\"}]",
+        {
+          "image_states": [
+            {
+              "x": 632,
+              "y": 632,
+              "scaleX": 1,
+              "scaleY": 1,
+              "rotation": 0,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 0,
+              "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+              "layer_id": "layer_0"
+            },
+            {
+              "x": 631.9999999999961,
+              "y": 631.9999999999995,
+              "scaleX": 1.278462413380941,
+              "scaleY": 1.2784624133809843,
+              "rotation": -50.41884582862299,
+              "skewX": 0,
+              "skewY": 0,
+              "brightness": 0,
+              "contrast": 0,
+              "saturation": 0,
+              "visible": true,
+              "locked": false,
+              "order": 1,
+              "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png",
+              "layer_id": "layer_1"
+            }
+          ],
+          "ui_config": {
+            "board_width": 1024,
+            "board_height": 1024,
+            "border_width": 120,
+            "canvas_color": "black",
+            "border_color": "rgb(25, 25, 25)",
+            "auto_size": "off",
+            "display_scale": 0.5,
+            "image_paths": [
+              "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+              "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png"
+            ],
+            "layer_ids": [
+              "layer_0",
+              "layer_1"
+            ],
+            "image_states": [
+              {
+                "x": 632,
+                "y": 632,
+                "scaleX": 1,
+                "scaleY": 1,
+                "rotation": 0,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 0,
+                "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+                "layer_id": "layer_0"
+              },
+              {
+                "x": 631.9999999999961,
+                "y": 631.9999999999995,
+                "scaleX": 1.278462413380941,
+                "scaleY": 1.2784624133809843,
+                "rotation": -50.41884582862299,
+                "skewX": 0,
+                "skewY": 0,
+                "brightness": 0,
+                "contrast": 0,
+                "saturation": 0,
+                "visible": true,
+                "locked": false,
+                "order": 1,
+                "filename": "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png",
+                "layer_id": "layer_1"
+              }
+            ],
+            "layer_order": [
+              "layer_0",
+              "layer_1"
+            ]
+          },
+          "image_paths": [
+            "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_5ce3afa8eb534e6aaf1f08a45c8e77c8.png",
+            "xiser_canvas_ab3c1be1a4dd4e6e96e48b3fadeff63a_090ef4953a854325af161173e91e9a95.png"
+          ]
+        }
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 268,
+      "type": "XIS_PackImages",
+      "pos": [
+        -4890,
+        -2110
+      ],
+      "size": [
+        275.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 34,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 751
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 752
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": 753
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            757
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 270,
+      "type": "XIS_PackImages",
+      "pos": [
+        -4460,
+        -2110
+      ],
+      "size": [
+        275.404296875,
+        282
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 33,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 754
+        },
+        {
+          "name": "mask1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 755
+        },
+        {
+          "name": "mask2",
+          "shape": 7,
+          "type": "MASK",
+          "link": 756
+        },
+        {
+          "name": "image3",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask3",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image4",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask4",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image5",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask5",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            758
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "0c32a916ab2dbae61cf7adfcb237a2f2cf54b77b",
+        "Node name for S&R": "XIS_PackImages",
+        "xiser_title_color": "#036d65",
+        "xiser_content_color": "#292929",
+        "xiser_title_text_color": "#1E1200"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#036d65",
+      "bgcolor": "#292929"
+    },
+    {
+      "id": 271,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -4610,
+        -2830
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            755
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": [
+            756
+          ]
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "text",
+        "shape_type": "text",
+        "shape_params": "{\"content\":\"A\",\"font_file\":\"pmzd.ttf\",\"font_family\":\"xiser-font-pmzd_ttf\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"bold\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":false,\"text_align\":\"center\",\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1.8908382534129018,\"y\":1.8908382534129018},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1.8908382534129018,\"y\":1.8908382534129018},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "text",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "text",
+          "shape_type": "text",
+          "shape_params": "{\"content\":\"A\",\"font_file\":\"pmzd.ttf\",\"font_family\":\"xiser-font-pmzd_ttf\",\"font_size\":128,\"letter_spacing\":0,\"line_spacing\":1.2,\"font_weight\":\"bold\",\"font_style\":\"normal\",\"underline\":false,\"uppercase\":false,\"text_align\":\"center\",\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 1.8908382534129018,
+            "y": 1.8908382534129018
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0},\"rotation\":0,\"scale\":{\"x\":1.8908382534129018,\"y\":1.8908382534129018},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    },
+    {
+      "id": 269,
+      "type": "XIS_ShapeAndText",
+      "pos": [
+        -5040,
+        -2830
+      ],
+      "size": [
+        404,
+        664
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "shape_canvas",
+          "type": "WIDGET",
+          "link": null
+        },
+        {
+          "name": "shape_data",
+          "shape": 7,
+          "type": "LIST",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "shape_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": [
+            752
+          ]
+        },
+        {
+          "name": "shape_mask",
+          "shape": 6,
+          "type": "MASK",
+          "links": [
+            753
+          ]
+        },
+        {
+          "name": "bg_image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "mode_selection": "polygon",
+        "shape_type": "polygon",
+        "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0,\"petals\":6,\"sides\":3}",
+        "shape_color": "#0f98b3",
+        "bg_color": "#000000",
+        "transparent_bg": false,
+        "stroke_color": "#FFFFFF",
+        "stroke_width": 0,
+        "width": 512,
+        "height": 512,
+        "show_grid": true,
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "108a033d3832e651fb0e972d9047cead5a504c14",
+        "Node name for S&R": "XIS_ShapeAndText",
+        "shapeState": "{\"position\":{\"x\":0,\"y\":0.11221503620300159},\"rotation\":0,\"scale\":{\"x\":0.8838400370941419,\"y\":1.0889999999999984},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+        "shape_state": "{\"position\":{\"x\":0,\"y\":0.11221503620300159},\"rotation\":0,\"scale\":{\"x\":0.8838400370941419,\"y\":1.0889999999999984},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}"
+      },
+      "widgets_values": [
+        512,
+        512,
+        "polygon",
+        "#0f98b3",
+        "#000000",
+        false,
+        "#FFFFFF",
+        0,
+        {
+          "mode_selection": "polygon",
+          "shape_type": "polygon",
+          "shape_params": "{\"angle\":360,\"inner_radius\":0,\"shape_rotation\":0,\"petals\":6,\"sides\":3}",
+          "shape_color": "#0f98b3",
+          "bg_color": "#000000",
+          "transparent_bg": false,
+          "stroke_color": "#FFFFFF",
+          "stroke_width": 0,
+          "width": 512,
+          "height": 512,
+          "position": {
+            "x": 0,
+            "y": 0.11221503620300159
+          },
+          "rotation": 0,
+          "scale": {
+            "x": 0.8838400370941419,
+            "y": 1.0889999999999984
+          },
+          "skew": {
+            "x": 0,
+            "y": 0
+          },
+          "shape_state": "{\"position\":{\"x\":0,\"y\":0.11221503620300159},\"rotation\":0,\"scale\":{\"x\":0.8838400370941419,\"y\":1.0889999999999984},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":384}}",
+          "has_shape_data_input": false,
+          "base_shape_size": 128,
+          "canvas_scale_factor": 0.75
+        }
+      ]
+    }
+  ],
+  "links": [
+    [
+      611,
+      16,
+      0,
+      184,
+      0,
+      "IMAGE"
+    ],
+    [
+      622,
+      190,
+      0,
+      16,
+      1,
+      "IMAGE"
+    ],
+    [
+      641,
+      184,
+      3,
+      202,
+      3,
+      "LAYER_DATA"
+    ],
+    [
+      645,
+      204,
+      0,
+      202,
+      0,
+      "IMAGE"
+    ],
+    [
+      647,
+      190,
+      0,
+      204,
+      1,
+      "IMAGE"
+    ],
+    [
+      654,
+      207,
+      0,
+      209,
+      0,
+      "IMAGE"
+    ],
+    [
+      655,
+      209,
+      0,
+      16,
+      5,
+      "IMAGE"
+    ],
+    [
+      656,
+      209,
+      1,
+      16,
+      6,
+      "MASK"
+    ],
+    [
+      690,
+      219,
+      0,
+      239,
+      0,
+      "IMAGE"
+    ],
+    [
+      691,
+      239,
+      0,
+      224,
+      0,
+      "IMAGE"
+    ],
+    [
+      706,
+      217,
+      0,
+      252,
+      2,
+      "STRING"
+    ],
+    [
+      707,
+      225,
+      0,
+      252,
+      3,
+      "STRING"
+    ],
+    [
+      708,
+      252,
+      0,
+      219,
+      1,
+      "IMAGE"
+    ],
+    [
+      709,
+      220,
+      0,
+      253,
+      2,
+      "STRING"
+    ],
+    [
+      710,
+      227,
+      0,
+      253,
+      3,
+      "STRING"
+    ],
+    [
+      711,
+      253,
+      0,
+      219,
+      3,
+      "IMAGE"
+    ],
+    [
+      712,
+      223,
+      0,
+      254,
+      2,
+      "STRING"
+    ],
+    [
+      713,
+      226,
+      0,
+      254,
+      3,
+      "STRING"
+    ],
+    [
+      714,
+      254,
+      0,
+      219,
+      5,
+      "IMAGE"
+    ],
+    [
+      717,
+      244,
+      0,
+      255,
+      2,
+      "STRING"
+    ],
+    [
+      718,
+      246,
+      0,
+      255,
+      3,
+      "STRING"
+    ],
+    [
+      719,
+      255,
+      0,
+      239,
+      7,
+      "IMAGE"
+    ],
+    [
+      726,
+      230,
+      0,
+      256,
+      2,
+      "STRING"
+    ],
+    [
+      727,
+      231,
+      0,
+      256,
+      3,
+      "STRING"
+    ],
+    [
+      728,
+      233,
+      0,
+      257,
+      2,
+      "STRING"
+    ],
+    [
+      729,
+      234,
+      0,
+      257,
+      3,
+      "STRING"
+    ],
+    [
+      730,
+      236,
+      0,
+      258,
+      2,
+      "STRING"
+    ],
+    [
+      731,
+      237,
+      0,
+      258,
+      3,
+      "STRING"
+    ],
+    [
+      732,
+      256,
+      0,
+      239,
+      1,
+      "IMAGE"
+    ],
+    [
+      733,
+      257,
+      0,
+      239,
+      5,
+      "IMAGE"
+    ],
+    [
+      734,
+      258,
+      0,
+      239,
+      3,
+      "IMAGE"
+    ],
+    [
+      735,
+      197,
+      0,
+      259,
+      2,
+      "STRING"
+    ],
+    [
+      736,
+      197,
+      0,
+      260,
+      2,
+      "STRING"
+    ],
+    [
+      737,
+      259,
+      0,
+      207,
+      1,
+      "IMAGE"
+    ],
+    [
+      738,
+      259,
+      1,
+      207,
+      2,
+      "MASK"
+    ],
+    [
+      739,
+      260,
+      0,
+      207,
+      0,
+      "IMAGE"
+    ],
+    [
+      740,
+      262,
+      0,
+      261,
+      2,
+      "STRING"
+    ],
+    [
+      741,
+      263,
+      0,
+      261,
+      3,
+      "STRING"
+    ],
+    [
+      742,
+      261,
+      0,
+      219,
+      7,
+      "IMAGE"
+    ],
+    [
+      746,
+      184,
+      3,
+      241,
+      3,
+      "LAYER_DATA"
+    ],
+    [
+      747,
+      184,
+      3,
+      240,
+      3,
+      "LAYER_DATA"
+    ],
+    [
+      749,
+      267,
+      0,
+      204,
+      3,
+      "IMAGE"
+    ],
+    [
+      750,
+      267,
+      1,
+      204,
+      4,
+      "MASK"
+    ],
+    [
+      751,
+      190,
+      0,
+      268,
+      1,
+      "IMAGE"
+    ],
+    [
+      752,
+      269,
+      0,
+      268,
+      3,
+      "IMAGE"
+    ],
+    [
+      753,
+      269,
+      1,
+      268,
+      4,
+      "MASK"
+    ],
+    [
+      754,
+      190,
+      0,
+      270,
+      1,
+      "IMAGE"
+    ],
+    [
+      755,
+      271,
+      0,
+      270,
+      3,
+      "IMAGE"
+    ],
+    [
+      756,
+      271,
+      1,
+      270,
+      4,
+      "MASK"
+    ],
+    [
+      757,
+      268,
+      0,
+      241,
+      0,
+      "IMAGE"
+    ],
+    [
+      758,
+      270,
+      0,
+      240,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Group",
+      "bounding": [
+        -5510,
+        -2930,
+        2752,
+        1981.6
+      ],
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Group",
+      "bounding": [
+        -5410,
+        -400,
+        4532,
+        1851.6
+      ],
+      "color": "#444",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Group",
+      "bounding": [
+        -6330,
+        -400,
+        878,
+        947.6
+      ],
+      "color": "#444",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.21435888100000888,
+      "offset": [
+        9399.203897920665,
+        3535.1790138492297
+      ]
+    },
+    "frontendVersion": "1.28.9",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}

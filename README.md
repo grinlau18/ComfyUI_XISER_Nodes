@@ -12,24 +12,6 @@ Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [Com
 
 ---
 
-## Quick Start
-
-### Getting Started with XIS_Canvas
-1. **Add XIS_Canvas Node**: Find it under `XISER_Nodes/Visual_Editing` category
-2. **Connect Images**: Connect your image inputs to the `pack_images` port
-3. **Configure Canvas**: Set dimensions, border, and background color
-4. **Interactive Editing**: Use the canvas interface to position, scale, and rotate layers
-5. **Generate Output**: Connect the output to your workflow for further processing
-
-### Getting Started with XIS_ShapeAndText
-1. **Add XIS_ShapeAndText Node**: Located in `XISER_Nodes/Visual_Editing`
-2. **Choose Shape Type**: Select from circle, polygon, star, heart, etc.
-3. **Customize Appearance**: Set colors, stroke, and transparency
-4. **Apply Transformations**: Use the interactive canvas for positioning and scaling
-5. **Batch Processing**: Connect shape data for multiple shape generation
-
----
-
 ## Installation
 
 **Install via ComfyUI's Manager**
@@ -63,188 +45,67 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 
 ---
 
-## Key Features
 
-### 🎨 Advanced Visual Editing
-- **Interactive Canvas**: Multi-layer image editing with real-time transformations
-- **Shape Generation**: Create geometric shapes with advanced transformations
-- **Gradient Tools**: Multi-point gradient generation with various interpolation methods
+## Core Capabilities
+- Multi-layer canvas editing with PSD import, BiRefNet cutouts, layer transformations, and mask-aware history.
+- Visual toolkit comprising curve/path/gradient editors, ImageManager, shape/text generators, color controls, and label helpers.
+- Image/mask/file utilities for blending, cropping, resizing, reordering, mirroring, and PSD layer handling.
+- Data and workflow support through shape summaries, guard checks, shorthand serializers, list extractors, and divisible sizing.
 
-### 🔧 Professional Workflow Tools
-- **PSD Import**: Professional PSD file import with layer extraction
-- **Image Processing**: Advanced image adjustment, cropping, and resizing
-- **Data Management**: Efficient data flow optimization and list processing
+### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
+- **What makes it special**: the central visual playground for multi-layer composition, blending, and mask-aware editing.
+- **Highlights**:
+  - Drag, scale, rotate, hide/show, reorder, and fine-tune layers with real-time feedback plus mouse-wheel scaling and Alt+wheel rotation.
+  - Configurable canvas size, borders, background, auto-sizing, and display scaling keep the workspace flexible while the 20-step undo/redo history protects changes.
+  - BiRefNet-powered cutouts, automatic mask extraction, and PSD import with layer extraction feed downstream nodes without workarounds.
+  - Custom scrollbars, scroll offset tracking, and the companion XIS_CanvasMaskProcessor keep long labels and mask outputs synced with every edit.
 
-### 🎛️ User Experience
-- **Intuitive UI**: Collapsible panels, real-time previews, and interactive controls
-- **Customization**: Node color customization and HTML text labels
-- **History Management**: 20-step undo/redo functionality
-
----
-
-## Node Categories Overview
-
-### 🎨 Visual Editing Nodes
-
-#### XIS_Canvas (Canvas System)
-- **Function**: Interactive canvas system supporting multi-layer image management and editing
-- **Features**:
-  - Customizable canvas dimensions, borders, and background colors
-  - Drag, scale, and rotate image operations with real-time preview
-  - Layer management with automatic top positioning and stacking order
-  - Visible/hidden control for each layer plus manual reorder buttons for precise stacking
-  - One-click cutout tool powered by BiRefNet for generating masked composites before execution
-  - Mask generation for precise image compositing
-  - Undo/Redo functionality with 20-step history
-  - Auto-size feature to match canvas dimensions to first image
-  - Display scaling for better workflow visibility
-  - PSD file import support with layer extraction
-  - Real-time transformation controls with independent scaling
-  - Mouse wheel scaling and Alt+wheel rotation for precise control
+#### Node Interface
 ![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
-![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
-![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
-![XIS_Canvas图像合成](img/XIS_Canvas_4.jpeg)
+#### Workflow Example: Import PSD for Regional Redrawing
+![XIS_Canvas导入PSD进行区域重绘工作流](img/XIS_Canvas_2.jpeg)
+#### Workflow Example: Regional Redrawing After Image Layered Typesetting
+![XIS_Canvas图像合成加区域重绘工作流](img/XIS_Canvas_3.jpeg)
 
-#### XIS_CoordinatePath
-- **Function**: Generate coordinate paths based on control points
-- **Features**:
-  - Support for linear and curve path modes
-  - Configurable path segments and distribution patterns
-  - Output coordinate lists and percentage values
+### ✨ Visual + Node Toolkit
+- **XIS_CurveEditor**: Sculpt distribution curves for INT/FLOAT/HEX outputs, with a widget that exposes Bézier grips and HSV/RGB/LAB color interpolation.
+  - Emits scalar sequences and optional colored lists so downstream nodes can hook into numeric ramps or palette cues.
+  ![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)  
+  ![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
+- **XIS_CoordinatePath**: Sketch linear or curved paths with configurable segments, distribution modes, and direct exports of x/y coordinates plus progress percentages.
+  - Curve mode uses Catmull-Rom splines with virtual endpoints for smooth routing, while linear mode honors uniform or eased spacing.
+  ![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
+- **XIS_MultiPointGradient**: Generate gradient images from control points using IDW, radial, Voronoi, soft IDW, or linear interpolation.
+  - Backend weights or Voronoi regions feed torch tensors that can be used as masks, backgrounds, or texture fills.
+  ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
+- **XIS_ImageManager**: Browse, cache, and reorder uploads before emitting the preview-aware `pack_images` output.
+  - Tracks enabled layers, upload order, thumbnails, deterministic IDs, and metadata so downstream nodes see consistent image packs.
+  ![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
+- **XIS_ShapeAndText**: Produce shape or text masks with configurable fill/stroke, transparency, and batch `shape_data` inputs; it returns the shape image, mask, and background.
+  - Supports circles, polygons, stars, hearts, flowers, spirals, sunbursts, and text (with local font loading), plus spacing, stroke, transform, and skew controls.
+  ![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)  
+  ![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
+- **changeNodeColor**: Paint node titles and bodies independently to keep large graphs readable and visually organized.
+  - Choose hex colors or presets, swap between title/body adjustments, and lock palettes for quick visual grouping.
+  ![Node Color Customization](img/changeNodeColor_1.jpeg)  
+- **XIS_Label**: Double-click to open HTML/Markdown editors (CodeMirror with textarea fallback), toggle editors, adjust backgrounds and text scale, and enjoy consistent spacing, list handling, markdown conversion, and smart scrollbars across languages.
+  - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
+  ![Text Label Feature](img/XIS_Label_1.jpeg)
+### 🧰 Image, Mask & File Nodes
+- **XIS_ImageAdjustAndBlend**: Adjust brightness, contrast, saturation, hue, RGB gains, and blend modes with optional mask/background mixes.
+- **XIS_CropImage**: Crop via masks, invert masks on demand, and fill backgrounds with color or padding.
+- **XIS_ResizeImageOrMask**: Resize with multiple strategies (force, aspect ratio, canvas limit) plus interpolation choices and shrink/expand toggles.
+- **XIS_ReorderImageMaskGroups**: Reorder or insert up to five image-mask pairs so compositing stays precise.
+- **XIS_InvertMask**: Swap mask polarity quickly with a toggle.
+- **XIS_ImageMaskMirror**: Mirror image/mask sets along X or Y axes to keep symmetric compositions aligned.
+- **PSD Layer Extract** / **XIS_ReorderImages**: Pull layers out of PSDs and rearrange batches for downstream blending.
 
-![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
-
-#### XIS_CurveEditor
-- **Function**: Visual curve editor for generating distribution values
-- **Features**:
-  - Support for INT, FLOAT, HEX data types
-  - Multiple interpolation methods
-  - Color interpolation with HSV, RGB, LAB modes
-
-![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)
-![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
-
-#### XIS_MultiPointGradient
-- **Function**: Generate gradient images based on control points
-- **Features**:
-  - Multiple interpolation methods (IDW, radial, Voronoi, etc.)
-  - Linear mode with fixed start and end points
-  - Customizable gradient colors and positions
-
-![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
-
-#### XIS_ShapeAndText
-- **Function**: Generate geometric shapes with interactive controls
-- **Features**:
-  - Multiple shape types: circle / sector / doughnut, polygon (with rounded corners), star, heart, flower, spiral, sunburst, text
-  - **Text mode**: convert custom text into vector shapes using fonts from `custom_nodes/ComfyUI_XISER_Nodes/fonts`, with controls for content, font, spacing, weight, italic, and underline
-  - Configurable colors, stroke, transparency, and background
-  - Advanced transformations: rotation, scaling, skewing, positioning
-  - Batch shape creation with shape data input
-  - Anti-aliased rendering for smooth edges
-  - Separate shape image, mask, and background outputs
-  - Real-time preview with interactive canvas widget
-
-![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
-![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
-
-##### Text Mode & Fonts
-- Switch the shape type to **Text** to unlock a dedicated control panel with content input, font selection, letter/line spacing, bold, italic, underline and uppercase toggles.
-- Place `.ttf/.otf/.ttc` files in `custom_nodes/ComfyUI_XISER_Nodes/fonts`, then click **刷新字体** / **Refresh Fonts** in the panel to load them. Fonts are mapped to in-browser `@font-face` rules automatically.
-- All text settings are serialized through `shape_params` and honoured in both the interactive preview and backend rendering, including batch mode via the `shape_data` input.
-
-### 🖼️ Image Processing Nodes
-
-#### XIS_ImageManager
-- **Function**: Image manager for handling image input, upload, and preview
-- **Features**:
-  - Image preview generation and path management
-  - Support for multiple image inputs and outputs
-  - Automatic cache management
-
-![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
-
-#### XIS_ImageAdjustAndBlend
-- **Function**: Image adjustment and blending
-- **Features**:
-  - Brightness, contrast, saturation, hue adjustments
-  - RGB channel gain control
-  - Support for masks and background images
-  - Multiple blending modes
-
-#### XIS_CropImage
-- **Function**: Crop images using masks
-- **Features**:
-  - Support for mask inversion
-  - Background color filling
-  - Configurable padding margins
-
-#### XIS_ResizeImageOrMask
-- **Function**: Flexible image and mask resizing
-- **Features**:
-  - Multiple resize modes (force resize, aspect ratio, canvas limit, etc.)
-  - Support for various interpolation algorithms
-  - Configurable resize conditions (only shrink, only enlarge, always resize)
-
-#### XIS_ReorderImageMaskGroups
-- **Function**: Reorder image and mask groups
-- **Features**:
-  - Support for insertion and reordering
-  - Handles up to 5 image-mask pairs
-
-### 📊 Data Processing Nodes
-
-#### XIS_ShapeData
-- **Function**: Aggregate shape property data
-- **Features**:
-  - Support for position, rotation, scaling, skewing, color properties
-  - Multi-input port data merging
-  - Property counting and processing
-
-#### XIS_IsThereAnyData
-- **Function**: Data existence checking
-- **Features**:
-  - Check if input signals exist
-  - Support for integers, floats, boolean values
-  - Return default values when no input is provided
-
-#### XIS_FromListGet1* Series
-- **Function**: Extract single elements from lists
-- **Supported Types**: Mask, Image, Latent, Conditioning, Model, Color, String, Int, Float
-
-### 🎛️ UI Control Nodes
-
-#### XIS_PromptsWithSwitches
-- **Function**: Prompt input with switch controls
-- **Features**:
-  - Support for up to 5 prompts
-  - Independent switch control for each prompt
-  - Output enabled prompt lists
-
-#### XIS_Float_Slider / XIS_INT_Slider
-- **Function**: Slider numerical input
-- **Features**:
-  - Float and integer sliders
-  - Configurable ranges and step sizes
-
-#### CreatePointsString
-- **Function**: Serialize six frame/intensity pairs into a multi-line shorthand string
-- **Features**:
-  - Accepts six `frame`/`intensity` pairs with configurable ranges
-  - Outputs a formatted string that can be reused for time-based intensity lists
-  - Useful for workflows that drive keyframe-style prompts or mask intensities
-
-### 🔧 Utility Nodes
-
-#### XIS_ResizeToDivisible
-- **Function**: Resize to divisible dimensions
-- **Features**:
-  - Automatically calculate closest divisible dimensions
-  - Support for images and masks
-
-#### XIS_InvertMask
-- **Function**: Mask inversion
+### ⚙️ Data & Utility Helpers
+- **XIS_ShapeData**: Gather shape properties (position, rotation, scale, skew, color) for predictive pipelines.
+- **XIS_IsThereAnyData**: Guard inputs across ints, floats, booleans, and supply fallbacks when signals are missing.
+- **CreatePointsString**: Encode six frame/intensity pairs into a keyword-friendly shorthand for repeatable sequences.
+- **XIS_FromListGet1…**: Extract single masks, images, latents, conditioning, models, colors, strings, ints, or floats from lists.
+- **XIS_ResizeToDivisible**: Snap dimensions to the nearest divisible grid for downstream requirements.
 
 ---
 
@@ -276,25 +137,6 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - **Features**:
   - Rearrange images based on specified order
   - Support for batch image processing
-
----
-
-## Special Features
-
-### Node Color Customization
-- **Function**: Node color customization
-- **Usage**: Right-click on node, select "Change Node Color"
-- **Features**: Modify background colors for node title and content areas separately
-
-![Node Color Customization](img/changeNodeColor_1.jpeg)
-![Node Color Customization](img/changeNodeColor_2.jpeg)
-
-### Text Label with HTML Support
-- **Function**: Text labels with HTML support
-- **Usage**: Right-click above node, select "Edit Text"
-- **Features**: Input text and set styles using HTML language
-
-![Text Label Feature](img/XIS_Label.jpeg)
 
 ---
 
