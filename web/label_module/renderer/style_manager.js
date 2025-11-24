@@ -1,6 +1,7 @@
 /**
  * 样式管理器模块
  */
+import { clamp } from '../utils/common_utils.js';
 
 /**
  * Style manager for handling node appearance and themes.
@@ -151,9 +152,12 @@ export class StyleManager {
         const isPassMode = node.mode === 4 || node.flags?.bypassed === true;
         const baseColor = node.color || node.properties.color || "#333355";
 
+        const percent = clamp(Number(node.properties?.textScalePercent ?? 50), 1, 100);
+        node.properties.textScalePercent = percent;
         return {
             backgroundColor: isPassMode ? "rgba(128, 0, 128, 0.5)" : baseColor,
-            alpha: isMuteMode || isPassMode ? 0.5 : 1.0
+            alpha: isMuteMode || isPassMode ? 0.5 : 1.0,
+            textScale: percent / 100
         };
     }
 }

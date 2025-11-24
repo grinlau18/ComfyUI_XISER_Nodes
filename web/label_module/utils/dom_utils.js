@@ -132,6 +132,19 @@ export function createEditorStyles() {
             gap: 12px;
             padding: 10px 10px 0px 10px;
         }
+        .editor-content-area {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+            overflow: hidden;
+            padding: 10px;
+        }
+        .editor-footer {
+            padding: 10px;
+            text-align: right;
+            background: #1A1A1A;
+            border-top: 1px solid #333;
+        }
         .editor-top-bar .mode-switch {
             flex: 1;
         }
@@ -154,11 +167,83 @@ export function createEditorStyles() {
             align-items: center;
             gap: 8px;
         }
+        .editor-controls-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
         .background-label {
             font-size: 12px;
             color: #a1a9c4;
             letter-spacing: 0.5px;
             text-transform: uppercase;
+        }
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px;
+            gap: 10px;
+        }
+        .editor-header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .editor-button {
+            border: none;
+            border-radius: 6px;
+            background: #2b2f3e;
+            color: #fff;
+            padding: 6px 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .editor-button:hover {
+            background: #3a4864;
+        }
+        .text-scale-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .text-scale-label {
+            font-size: 12px;
+            color: #a1a9c4;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .text-scale-slider {
+            appearance: none;
+            width: 120px;
+            height: 4px;
+            border-radius: 4px;
+            background: #2b2f3e;
+            outline: none;
+        }
+        .text-scale-slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #5a71c2;
+            cursor: pointer;
+            box-shadow: 0 0 0 4px rgba(90, 113, 194, 0.2);
+        }
+        .text-scale-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #5a71c2;
+            cursor: pointer;
+            box-shadow: 0 0 0 4px rgba(90, 113, 194, 0.2);
+            border: none;
+        }
+        .text-scale-value {
+            font-size: 12px;
+            color: #dfe4ff;
+            min-width: 32px;
+            text-align: right;
         }
         .html-markdown-switch {
             display: inline-flex;
@@ -201,7 +286,6 @@ export function createEditorStyles() {
             color: #99b0ff;
             background-color: rgba(64, 150, 255, 0.08);
         }
-        }
         input[type="color"] {
             display: none;
         }
@@ -213,4 +297,145 @@ export function createEditorStyles() {
     style.dataset.xisLabel = "true";
 
     return style;
+}
+
+/**
+ * Creates reusable editor header controls.
+ * @param {Object} options
+ * @param {string} options.mode - current editor mode
+ * @param {string} options.color - current background color
+ * @param {number} options.textScalePercent - current text scale (1-100)
+ * @param {Function} options.onModeChange
+ * @param {Function} options.onColorChange
+ * @param {Function} options.onTextScaleChange
+ * @returns {{headerLeft: HTMLElement, headerRight: HTMLElement, updateValues: Function}}
+ */
+export function createEditorHeaderControls({
+    mode,
+    color,
+    textScalePercent,
+    onModeChange,
+    onColorChange,
+    onTextScaleChange
+}) {
+    const clampPercent = (value) => {
+        const num = Number(value);
+        if (!Number.isFinite(num)) return 50;
+        return Math.min(100, Math.max(1, Math.round(num)));
+    };
+
+    const headerLeft = document.createElement("div");
+    headerLeft.className = "editor-header-left";
+
+    const switchContainer = document.createElement("div");
+    switchContainer.className = "html-markdown-switch";
+
+    const uniqueSuffix = Math.random().toString(36).slice(-4);
+    const radioName = `xis-label-mode-${uniqueSuffix}`;
+
+    const htmlId = `html-switch-${uniqueSuffix}`;
+    const htmlRadio = document.createElement("input");
+    htmlRadio.type = "radio";
+    htmlRadio.name = radioName;
+    htmlRadio.id = htmlId;
+    htmlRadio.className = "switch-radio";
+
+    const htmlLabel = document.createElement("label");
+    htmlLabel.htmlFor = htmlId;
+    htmlLabel.className = "switch-label";
+    htmlLabel.textContent = "HTML";
+
+    const markdownId = `markdown-switch-${uniqueSuffix}`;
+    const markdownRadio = document.createElement("input");
+    markdownRadio.type = "radio";
+    markdownRadio.name = radioName;
+    markdownRadio.id = markdownId;
+    markdownRadio.className = "switch-radio";
+
+    const markdownLabel = document.createElement("label");
+    markdownLabel.htmlFor = markdownId;
+    markdownLabel.className = "switch-label";
+    markdownLabel.textContent = "Markdown";
+
+    htmlRadio.addEventListener("change", () => {
+        if (htmlRadio.checked) onModeChange?.("html");
+    });
+    markdownRadio.addEventListener("change", () => {
+        if (markdownRadio.checked) onModeChange?.("markdown");
+    });
+
+    switchContainer.appendChild(htmlRadio);
+    switchContainer.appendChild(htmlLabel);
+    switchContainer.appendChild(markdownRadio);
+    switchContainer.appendChild(markdownLabel);
+    headerLeft.appendChild(switchContainer);
+
+    const headerRight = document.createElement("div");
+    headerRight.className = "editor-controls-right";
+
+    const backgroundControl = document.createElement("div");
+    backgroundControl.className = "background-control";
+    const backgroundLabel = document.createElement("span");
+    backgroundLabel.className = "background-label";
+    backgroundLabel.textContent = "Background";
+    const colorButton = document.createElement("button");
+    colorButton.type = "button";
+    colorButton.className = "color-swatch-button";
+    const colorInput = document.createElement("input");
+    colorInput.type = "color";
+    colorInput.style.display = "none";
+    colorButton.addEventListener("click", () => colorInput.click());
+    colorInput.addEventListener("input", () => {
+        const newColor = colorInput.value;
+        colorButton.style.background = newColor;
+        onColorChange?.(newColor);
+    });
+    backgroundControl.appendChild(backgroundLabel);
+    backgroundControl.appendChild(colorButton);
+    backgroundControl.appendChild(colorInput);
+
+    const textControl = document.createElement("div");
+    textControl.className = "text-scale-control";
+    const textLabel = document.createElement("span");
+    textLabel.className = "text-scale-label";
+    textLabel.textContent = "Text Size";
+    const textSlider = document.createElement("input");
+    textSlider.type = "range";
+    textSlider.className = "text-scale-slider";
+    textSlider.min = "1";
+    textSlider.max = "100";
+    const textValue = document.createElement("span");
+    textValue.className = "text-scale-value";
+    textSlider.addEventListener("input", () => {
+        const val = clampPercent(textSlider.value);
+        textSlider.value = String(val);
+        textValue.textContent = `${val}%`;
+        onTextScaleChange?.(val);
+    });
+    textControl.appendChild(textLabel);
+    textControl.appendChild(textSlider);
+    textControl.appendChild(textValue);
+
+    headerRight.appendChild(backgroundControl);
+    headerRight.appendChild(textControl);
+
+    const updateValues = ({ mode, color, textScalePercent }) => {
+        htmlRadio.checked = mode === "html";
+        markdownRadio.checked = mode === "markdown";
+        if (typeof color === "string") {
+            colorButton.style.background = color;
+            colorInput.value = color;
+        }
+        const percent = clampPercent(textScalePercent);
+        textSlider.value = String(percent);
+        textValue.textContent = `${percent}%`;
+    };
+
+    updateValues({ mode, color, textScalePercent });
+
+    return {
+        headerLeft,
+        headerRight,
+        updateValues
+    };
 }

@@ -628,11 +628,22 @@ class XIS_ResizeImageOrMask:
                 if resized_mask.shape[-2:] != resized_img.shape[1:3]:
                     logger.warning(f"Mask size {resized_mask.shape[-2:]} does not match image size {resized_img.shape[1:3]}, resizing mask to match")
                     # 调整蒙版尺寸以匹配图像
+                    mask_for_resize = resized_mask
+                    squeeze_batch = False
+                    if mask_for_resize.dim() == 2:
+                        mask_for_resize = mask_for_resize.unsqueeze(0)
+                        squeeze_batch = True
+                    if mask_for_resize.dim() == 3:
+                        mask_for_resize = mask_for_resize.unsqueeze(-1)
+
                     resized_mask = resize_tensor(
-                        resized_mask.unsqueeze(-1) if resized_mask.dim() == 2 else resized_mask,
+                        mask_for_resize,
                         (resized_img.shape[1], resized_img.shape[2]),
                         INTERPOLATION_MODES[interpolation]
                     ).squeeze(-1)
+
+                    if squeeze_batch:
+                        resized_mask = resized_mask.squeeze(0)
                 # 更新最终尺寸为图像尺寸（确保一致性）
                 final_width, final_height = resized_img.shape[2], resized_img.shape[1]
             else:

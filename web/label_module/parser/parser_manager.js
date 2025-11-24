@@ -52,7 +52,15 @@ export class ParserManager {
             logger.warn(`Unknown parser mode: ${mode}, falling back to HTML`);
             return this.parsers[EDITOR_MODES.HTML].update(node, newText);
         }
-        return parser.update(node, newText, mode);
+        const cacheKey = mode === EDITOR_MODES.HTML ? "htmlData" : "markdownData";
+        if (node.properties?.lastParsedSource?.[cacheKey] === newText) {
+            logger.debug(`[ParserManager] ${mode} text unchanged, skipping parse`);
+            return node.properties.parsedTextData;
+        }
+        const result = parser.update(node, newText, mode);
+        node.properties.lastParsedSource = node.properties.lastParsedSource || {};
+        node.properties.lastParsedSource[cacheKey] = newText;
+        return result;
     }
 
     /**
