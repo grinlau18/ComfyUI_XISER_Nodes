@@ -4,7 +4,7 @@
 import { logger } from '../core/logger.js';
 import { EDITOR_MODES, DEFAULT_TEXT_DATA } from '../core/constants.js';
 import { parseHtmlFormat, updateTextData, updateTextDataBackground } from './html_parser.js';
-import { parseMarkdownFormat, updateMarkdownData, markdownToHtml } from './markdown_parser.js';
+import { parseMarkdownFormat, updateMarkdownData, markdownToHtml, updateMarkdownBackground } from './markdown_parser.js';
 
 /**
  * Parser manager for handling different text formats.
@@ -20,7 +20,7 @@ export class ParserManager {
             [EDITOR_MODES.MARKDOWN]: {
                 parse: parseMarkdownFormat,
                 update: updateMarkdownData,
-                updateBackground: updateTextDataBackground
+                updateBackground: updateMarkdownBackground
             }
         };
     }
@@ -52,7 +52,26 @@ export class ParserManager {
             logger.warn(`Unknown parser mode: ${mode}, falling back to HTML`);
             return this.parsers[EDITOR_MODES.HTML].update(node, newText);
         }
-        return parser.update(node, newText, mode);
+        const cacheKey = mode === EDITOR_MODES.HTML ? "htmlData" : "markdownData";
+        node.properties.lastParsedSource = node.properties.lastParsedSource || {};
+        node.properties.lastParsedResult = node.properties.lastParsedResult || {};
+
+        if (node.properties.lastParsedSource[cacheKey] === newText) {
+            const cachedResult = node.properties.lastParsedResult[cacheKey];
+            if (cachedResult) {
+                node.properties.parsedTextData = cachedResult;
+                node.properties.parsedTextMode = mode;
+                logger.debug(`[ParserManager] ${mode} text unchanged, reused cached parsed data`);
+                return cachedResult;
+            }
+            logger.debug(`[ParserManager] ${mode} text unchanged but no cached parsed data, reparsing`);
+        }
+
+        const result = parser.update(node, newText, mode);
+        node.properties.lastParsedSource[cacheKey] = newText;
+        node.properties.lastParsedResult[cacheKey] = node.properties.parsedTextData;
+        node.properties.parsedTextMode = mode;
+        return result;
     }
 
     /**
@@ -62,12 +81,32 @@ export class ParserManager {
      * @param {string} mode - The parser mode ('html' or 'markdown').
      */
     updateBackground(node, newColor, mode = EDITOR_MODES.HTML) {
-        const parser = this.parsers[mode];
-        if (!parser) {
-            logger.warn(`Unknown parser mode: ${mode}, falling back to HTML`);
-            return this.parsers[EDITOR_MODES.HTML].updateBackground(node, newColor);
+        if (!node?.properties) {
+            node.properties = {};
         }
-        return parser.updateBackground(node, newColor);
+        if (newColor) {
+            node.properties.color = newColor;
+        }
+
+        const normalizedMode = this.isValidMode(mode) ? mode : EDITOR_MODES.HTML;
+        const parser = this.parsers[normalizedMode];
+        if (!parser) {
+            logger.warn(`Unknown parser mode: ${mode}, using HTML parser for refresh`);
+            const fallbackText = node.properties.htmlData || this.getDefaultText(EDITOR_MODES.HTML);
+            const parsed = this.parsers[EDITOR_MODES.HTML].parse(fallbackText);
+            node.properties.parsedTextData = parsed;
+            return parsed;
+        }
+
+        if (typeof parser.updateBackground === "function") {
+            return parser.updateBackground(node, newColor);
+        }
+
+        const dataKey = normalizedMode === EDITOR_MODES.MARKDOWN ? "markdownData" : "htmlData";
+        const text = node.properties?.[dataKey] || this.getDefaultText(normalizedMode);
+        const parsed = parser.parse(text);
+        node.properties.parsedTextData = parsed;
+        return parsed;
     }
 
     /**

@@ -15,14 +15,13 @@ export const EDITOR_MODES = {
 };
 
 const DEFAULT_HTML_TEXT =
-    '<div style="font-size: 20px; font-weight: bold;">小贴纸</div>' +
-    '<div style="font-size: 16px; font-weight: normal;">使用鼠标左键双击打开编辑器</div>' +
-    '<div style="font-size: 16px; font-weight: normal; color: #B0C4FF;">Double-click with the left mouse button to open the editor</div>';
+    '<div style="font-size: 32px; font-weight: bold;">小贴纸</div>' +
+    '<div style="font-size: 24px; font-weight: normal;">使用鼠标左键双击打开编辑器</div>' +
+    '<div style="font-size: 20px; font-weight: normal; color: #B0C4FF;">Double-click with the left mouse button to open the editor</div>';
 const DEFAULT_MARKDOWN_TEXT =
     '# 小贴纸\n\n' +
     '使用鼠标左键双击打开编辑器\n\n' +
-    '# Label Node\n\n' +
-    'Double-click with the left mouse button to open the editor';
+    '## Double-click with the left mouse button to open the editor';
 
 export const DEFAULT_TEXT_DATA = {
     html: DEFAULT_HTML_TEXT,
@@ -38,6 +37,7 @@ export const DEFAULT_LINE_DATA = {
     font_size: 24,
     color: "#FFFFFF",
     font_weight: "bold",
+    font_style: "normal",
     text_decoration: "none",
     text_align: "left",
     margin_left: 0,
@@ -64,7 +64,7 @@ export const CODEMIRROR_FALLBACKS = {
 export const MARKED_SCRIPT = "/extensions/ComfyUI_XISER_Nodes/lib/codemirror/marked.min.js";
 export const MARKED_FALLBACK = "https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js";
 
-export const DEFAULT_NODE_SIZE = [360, 360];
+export const DEFAULT_NODE_SIZE = [360, 180];
 
 export const BLOCK_TAGS = [
     "P",

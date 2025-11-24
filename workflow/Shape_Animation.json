@@ -112,8 +112,8 @@
         "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
         "Node name for S&R": "XIS_CurveEditor",
         "interpolation_algorithm": "catmull_rom",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         "HEX",
@@ -257,8 +257,8 @@
           "node_id": "27"
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 31,
@@ -297,16 +297,16 @@
         "colorData": {
           "color": "#3400c2"
         },
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         {
           "color": "#3400c2"
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 12,
@@ -435,14 +435,14 @@
         "cnr_id": "ComfyUI_XISER_Nodes",
         "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
         "Node name for S&R": "XIS_ShapeData",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         16
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 33,
@@ -481,16 +481,16 @@
         "colorData": {
           "color": "#a55072"
         },
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         {
           "color": "#a55072"
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 14,
@@ -586,8 +586,8 @@
         "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
         "Node name for S&R": "XIS_CurveEditor",
         "interpolation_algorithm": "catmull_rom",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         "FLOAT",
@@ -731,8 +731,8 @@
           "node_id": "14"
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 26,
@@ -766,15 +766,15 @@
         "cnr_id": "comfy-core",
         "ver": "0.3.64",
         "Node name for S&R": "PrimitiveInt",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         64,
         "fixed"
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 36,
@@ -942,8 +942,8 @@
         "width": 512,
         "height": 512,
         "path_mode": "curve",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         512,
@@ -1048,8 +1048,8 @@
           ]
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 25,
@@ -1059,7 +1059,7 @@
         1090
       ],
       "size": [
-        202.54061889648438,
+        202.540625,
         26
       ],
       "flags": {},
@@ -1083,12 +1083,12 @@
         "cnr_id": "comfyui-impact-pack",
         "ver": "8.14.2",
         "Node name for S&R": "ImageListToImageBatch",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 32,
@@ -1183,8 +1183,8 @@
         "ver": "4533a9aa303ac54b45e3403b8f699d4ad451b3c4",
         "Node name for S&R": "XIS_CurveEditor",
         "interpolation_algorithm": "catmull_rom",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         "FLOAT",
@@ -1328,8 +1328,8 @@
           "node_id": "32"
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 10,
@@ -1398,8 +1398,8 @@
         "Node name for S&R": "XIS_ShapeAndText",
         "shapeState": "{\"position\":{\"x\":0.004097516505400245,\"y\":0.01510396636831546},\"rotation\":0,\"scale\":{\"x\":1.1,\"y\":1.1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":383}}",
         "shape_state": "{\"position\":{\"x\":0.004097516505400245,\"y\":0.01510396636831546},\"rotation\":0,\"scale\":{\"x\":1.1,\"y\":1.1},\"skew\":{\"x\":0,\"y\":0},\"canvasDimensions\":{\"width\":384,\"height\":383}}",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [
         512,
@@ -1440,8 +1440,8 @@
           "canvas_scale_factor": 0.75
         }
       ],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     },
     {
       "id": 43,
@@ -1469,12 +1469,12 @@
         "cnr_id": "comfy-core",
         "ver": "0.3.64",
         "Node name for S&R": "PreviewImage",
-        "xiser_title_color": "#00c2b2",
-        "xiser_content_color": "#444546"
+        "xiser_title_color": "#00695c",
+        "xiser_content_color": "#383839"
       },
       "widgets_values": [],
-      "color": "#00c2b2",
-      "bgcolor": "#444546"
+      "color": "#00695c",
+      "bgcolor": "#383839"
     }
   ],
   "links": [
@@ -1613,7 +1613,7 @@
       "title": "Group",
       "bounding": [
         -270,
-        226.39999389648438,
+        230,
         3060,
         1413.5999755859375
       ],
@@ -1625,13 +1625,13 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.6727499949325657,
+      "scale": 0.6115909044841507,
       "offset": [
-        613.2244010626222,
-        -137.73762848808104
+        832.4737523982326,
+        19.67597358948575
       ]
     },
-    "frontendVersion": "1.27.10",
+    "frontendVersion": "1.28.9",
     "VHS_latentpreview": false,
     "VHS_latentpreviewrate": 0,
     "VHS_MetadataImage": true,

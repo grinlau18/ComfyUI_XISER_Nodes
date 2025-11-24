@@ -42,8 +42,10 @@ class XIS_Label:
         self.properties["editorMode"] = "html"
         # 默认节点颜色
         self.color = "#333355"
-        # 默认节点尺寸
-        self.properties.setdefault("node_size", [360, 360])
+        # 只有在没有设置节点大小时才设置默认尺寸
+        # 避免在复制节点时覆盖已继承的大小
+        if "node_size" not in self.properties:
+            self.properties["node_size"] = [360, 360]
 
 
 # 导出节点类映射

@@ -108,10 +108,16 @@ class XIS_PackImages:
                     if single_mask.shape == (64, 64) and torch.all(single_mask == 0):
                         alpha = None  # 视为无蒙版输入
                     else:
-                        # 确保蒙版尺寸与图像匹配（除非是 64x64 全 0）
+                        # 自动调整蒙版尺寸以匹配图像尺寸（除非是 64x64 全 0）
                         if single_mask.shape != single_img.shape[:2]:
-                            logger.error(f"Mask size {single_mask.shape} does not match image size {single_img.shape[:2]}")
-                            raise ValueError("Mask size must match image size")
+                            logger.info(f"Resizing mask from {single_mask.shape} to match image size {single_img.shape[:2]}")
+                            # 使用双线性插值调整蒙版尺寸
+                            single_mask = F.interpolate(
+                                single_mask.unsqueeze(0).unsqueeze(0),  # 转换为 (1, 1, H, W)
+                                size=single_img.shape[:2],
+                                mode='bilinear',
+                                align_corners=False
+                            ).squeeze(0).squeeze(0)  # 转换回 (H, W)
                         
                         # 规范化蒙版为单通道
                         alpha = single_mask.unsqueeze(-1)  # (H, W, 1)
@@ -182,7 +188,7 @@ class XIS_MergePackImages:
         pack_images_3: Optional[List[torch.Tensor]] = None,
         pack_images_4: Optional[List[torch.Tensor]] = None,
         pack_images_5: Optional[List[torch.Tensor]] = None,
-    ) -> Tuple[List[torch.Tensor], torch.Tensor]:
+    ) -> Tuple[List[torch.Tensor],]:
         """
         Merge multiple pack_images inputs into a single pack_images output.
 
@@ -192,7 +198,6 @@ class XIS_MergePackImages:
         Returns:
             A tuple containing:
             - List of merged torch.Tensor images (IMAGE).
-            - torch.Tensor of merged images (IMAGE) if all images have the same size, else empty tensor.
         """
         logger.debug(f"Instance {self.instance_id} - Merging pack_images inputs")
 

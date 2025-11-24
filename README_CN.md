@@ -12,43 +12,6 @@
 
 ---
 
-## 快速开始
-
-### XIS_Canvas 快速入门
-1. **添加 XIS_Canvas 节点**：在 `XISER_Nodes/Visual_Editing` 类别中找到
-2. **连接图像**：将图像输入连接到 `pack_images` 端口
-3. **配置画布**：设置尺寸、边框和背景颜色
-4. **交互式编辑**：使用画布界面定位、缩放和旋转图层
-5. **生成输出**：将输出连接到工作流进行进一步处理
-
-### XIS_ShapeAndText 快速入门
-1. **添加 XIS_ShapeAndText 节点**：位于 `XISER_Nodes/Visual_Editing` 类别
-2. **选择形状类型**：从圆形、多边形、星形、心形等选择
-3. **自定义外观**：设置颜色、描边和透明度
-4. **应用变换**：使用交互式画布进行定位和缩放
-5. **批量处理**：连接形状数据进行多形状生成
-
----
-
-## 核心功能
-
-### 🎨 高级视觉编辑
-- **交互式画布**：支持实时变换的多图层图像编辑
-- **形状生成**：创建具有高级变换功能的几何形状
-- **渐变工具**：多种插值方法的多点渐变生成
-
-### 🔧 专业工作流工具
-- **PSD导入**：专业的PSD文件导入与图层提取
-- **图像处理**：高级图像调整、裁剪和缩放
-- **数据管理**：高效的数据流优化和列表处理
-
-### 🎛️ 用户体验
-- **直观界面**：可折叠面板、实时预览和交互控制
-- **自定义功能**：节点颜色自定义和HTML文本标签
-- **历史管理**：20步撤销/重做功能
-
----
-
 ## 安装
 
 **通过 ComfyUI 管理器安装**
@@ -82,189 +45,76 @@
 
 ---
 
-## 节点分类概览
+## 核心能力
+- 多图层画布编辑，支持 PSD 导入、BiRefNet 抠图、图层变换与蒙版历史管理。
+- 可视化节点套件包含曲线/路径/渐变编辑器、图像管理、形状/文本生成、节点配色与标签助手。
+- 图像/蒙版/文件工具涵盖调色、裁剪、缩放、重新排序、镜像与 PSD 图层处理。
+- 数据与工作流支持包括形状摘要、信号检测、简写序列化、列表抽取与可整除尺寸修正。
 
-### 🎨 视觉编辑节点
+### 🖼️ 多图层画布枢纽（XIS_Canvas）
+- **精华**：集成 BiRefNet 抠图、PSD 导入、图层变换、蒙版生成与 20 步历史的主控画布。
+- **亮点**：
+  - 拖拽、缩放、旋转、显隐、叠放与 Alt+滚轮旋转，实时预览画布中每一层。
+  - 支持自定义画布尺寸、边框、背景、自动适配、显示缩放以及滚动内容的自定义滚动条，长内容依然流畅可读。
+  - BiRefNet 抠图、蒙版生成和 PSD 多图层提取紧密衔接，XIS_CanvasMaskProcessor 保持蒙版与画布状态同步。
+  - 只需一键即可输出带透明层的剪裁结果，省去手动裁切流程。
 
-#### XIS_Canvas (画布系统)
-- **功能**：交互式画布系统，支持多图层图像管理和编辑
-- **特性**：
-  - 自定义画布尺寸、边框和背景颜色
-  - 拖拽、缩放、旋转图像操作，支持实时预览
-  - 图层管理，自动置顶和堆叠顺序
-  - 支持图层显示/隐藏开关与手动叠放顺序调整
-  - 一键抠图（BiRefNet）允许在执行前生成带透明区域的图像
-  - 精确图像合成的蒙版生成
-  - 20步历史的撤销/重做功能
-  - 自动尺寸功能，匹配第一张图像尺寸
-  - 显示缩放，改善工作流可见性
-  - PSD文件导入支持与图层提取
-  - 实时变换控制，支持独立缩放
-  - 鼠标滚轮缩放和Alt+滚轮旋转精确控制
+#### 节点界面
+![XIS_Canvas节点展示](img/XIS_Canvas_1.jpeg)
+#### 导入PSD进行区域重绘的工作流示例
+![XIS_Canvas导入PSD进行区域重绘工作流](img/XIS_Canvas_2.jpeg)
+#### 图像分层排版后进行区域重绘的工作流示例
+![XIS_Canvas图像合成加区域重绘工作流](img/XIS_Canvas_3.jpeg)
 
-![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
-![XIS_Canvas图层管理](img/XIS_Canvas_2.jpeg)
-![XIS_Canvas图像合成](img/XIS_Canvas_3.jpeg)
+### ✨ 可视节点工具包
+- **XIS_CurveEditor**：编辑 INT/FLOAT/HEX 曲线，提供可调的贝塞尔点以及 HSV/RGB/LAB 颜色插值。
+  - 输出标量序列及可选的彩色列表，以便下游节点复用数值斜坡或调色提示。
+  ![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)  
+  ![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
 
-#### XIS_CoordinatePath
-- **功能**：基于控制点生成坐标路径
-- **特性**：
-  - 支持线性和曲线路径模式
-  - 可配置路径段数和分布模式
-  - 输出坐标列表和百分比值
+- **XIS_CoordinatePath**：绘制线性或曲线路径，可设置段数、分布模式，并直接导出 x/y 坐标与百分比进度列表。
+  - 曲线模式通过带虚拟端点的 Catmull-Rom 样条生成平滑轨迹，线性模式支持均匀或缓动间距。
+  ![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
 
-![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
+- **XIS_MultiPointGradient**：使用 IDW、径向、Voronoi、软 IDW 或线性插值从控制点生成渐变图像。
+  - 后端计算像素权重或 Voronoi 区域，输出可直接用作蒙版、背景或纹理填充的 torch 张量。
+  ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
 
-#### XIS_CurveEditor
-- **功能**：可视化曲线编辑器，生成分布值
-- **特性**：
-  - 支持INT、FLOAT、HEX数据类型
-  - 多种插值方法
-  - 颜色插值支持HSV、RGB、LAB模式
+- **XIS_ImageManager**：管理并重排上传图像，最终输出带预览的 `pack_images`。
+  - 记录启用状态、上传顺序、缩略图、确定性 ID 与元数据，确保下游节点看到一致的图像包。
+  ![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
 
-![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)
-![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
+- **XIS_ShapeAndText**：生成形状或文本蒙版，支持填充/描边、透明度以及 `shape_data` 批量输入；返回形状图、蒙版与背景。
+  - 支持圆、多边形、星、心、花、螺旋、太阳爆发与文本（可加载本地字体），并可调节字距/行距、描边、变换与倾斜。
+  ![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)  
+  ![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
 
-#### XIS_MultiPointGradient
-- **功能**：基于控制点生成渐变图像
-- **特性**：
-  - 多种插值方法（IDW、径向、Voronoi等）
-  - 线性模式支持固定首尾点
-  - 可自定义渐变颜色和位置
+- **changeNodeColor**：可独立修改节点标题与内容的颜色，提升大型流程可读性。
+  - 支持输入十六进制或预设色块，可在标题/内容间切换，并锁定配色方案以快速区分。
 
-![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
+  ![Node Color Customization](img/changeNodeColor_1.jpeg)  
 
-#### XIS_ShapeAndText
-- **功能**：使用交互控制生成几何形状
-- **特性**：
-  - 多种形状类型：圆形、多边形、星形、心形、花朵、螺旋、太阳爆发、正方形
-  - **字体模式**：Text 模式可将文本转换为矢量图形，支持 fonts 目录自定义字体、字距/行距调节以及粗体、斜体、下划线、大写等样式
-  - 可配置颜色、描边、透明度和背景
-  - 高级变换：旋转、缩放、倾斜、定位
-  - 通过形状数据输入进行批量形状创建
-  - 抗锯齿渲染，边缘平滑
-  - 分离的形状图像、蒙版和背景输出
-  - 带有交互画布小部件的实时预览
+- **XIS_Label**：双击编辑 HTML/Markdown，切换编辑器、调整背景与文本缩放，并享受统一段距、列表重新换行与智能滚动条。
+  - Markdown 支持标题、列表、加粗/斜体、行内代码与链接，解析后渲染出一致的段落与滚动行为。
+  ![文本标签功能](img/XIS_Label_1.jpeg)
 
-![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)
-![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
+---
 
-> **字体使用方式**：将 `.ttf/.otf/.ttc` 文件放入 `custom_nodes/ComfyUI_XISER_Nodes/fonts` 目录，在 Text 模式面板点击「刷新字体」即可加载；所有文本参数会写入 `shape_params`，批量模式同样生效。
+### 🧰 图像、蒙版与文件节点
+- **XIS_ImageAdjustAndBlend**：调节亮度/对比/饱和/色相、RGB 增益与混合模式，可混入蒙版和背景。
+- **XIS_CropImage**：使用蒙版裁剪，支持蒙版反转与背景色填充，并可设定边距。
+- **XIS_ResizeImageOrMask**：多种缩放策略（强制、等比、画布限制）与插值器，支持只放/只缩等条件。
+- **XIS_ReorderImageMaskGroups**：最多 5 组图像/蒙版对，支持插入与重新排序。
+- **XIS_InvertMask**：一键切换蒙版正负向。
+- **XIS_ImageMaskMirror**：沿 X/Y 轴镜像图像与蒙版，保持布局对称。
+- **PSD Layer Extract / XIS_ReorderImages**：提取 PSD 图层并排序，辅助图像批量处理。
 
-### 🖼️ 图像处理节点
-
-#### XIS_ImageManager
-- **功能**：图像管理器，处理图像输入、上传和预览
-- **特性**：
-  - 图像预览生成和路径管理
-  - 支持多图像输入和输出
-  - 自动缓存管理
-
-![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
-
-#### XIS_ImageAdjustAndBlend
-- **功能**：图像调整和混合
-- **特性**：
-  - 亮度、对比度、饱和度、色相调整
-  - RGB通道增益控制
-  - 支持蒙版和背景图像
-  - 多种混合模式
-
-#### XIS_CropImage
-- **功能**：使用蒙版裁剪图像
-- **特性**：
-  - 支持蒙版反转
-  - 背景颜色填充
-  - 可配置边距
-
-#### XIS_ResizeImageOrMask
-- **功能**：灵活缩放图像和蒙版
-- **特性**：
-  - 多种缩放模式（强制缩放、等比缩放、画布限制等）
-  - 支持多种插值算法
-  - 可配置缩放条件（仅缩小、仅放大、始终缩放）
-
-#### XIS_ReorderImageMaskGroups
-- **功能**：重新排序图像和蒙版组
-- **特性**：
-  - 支持插入和重新排列
-  - 最多处理5组图像蒙版对
-
-### 📊 数据处理节点
-
-#### XIS_ShapeData
-- **功能**：聚合形状属性数据
-- **特性**：
-  - 支持位置、旋转、缩放、倾斜、颜色等属性
-  - 多输入端口数据合并
-  - 属性计数处理
-
-#### XIS_IsThereAnyData
-- **功能**：数据存在性检查
-- **特性**：
-  - 检查输入信号是否存在
-  - 支持整数、浮点数、布尔值
-  - 无输入时返回默认值
-
-#### XIS_FromListGet1* 系列
-- **功能**：从列表中提取单个元素
-- **支持类型**：Mask, Image, Latent, Conditioning, Model, Color, String, Int, Float
-
-### 🎛️ UI 控制节点
-
-#### XIS_PromptsWithSwitches
-- **功能**：带开关控制的提示词输入
-- **特性**：
-  - 最多支持5个提示词
-  - 每个提示词独立开关控制
-  - 输出启用的提示词列表
-
-#### XIS_Float_Slider / XIS_INT_Slider
-- **功能**：滑块数值输入
-- **特性**：
-  - 浮点数和整数滑块
-  - 可配置范围和步长
-
-#### CreatePointsString
-- **功能**：将六组帧与强度对序列化为多行字符串
-- **特性**：
-  - 支持 frame_a~frame_f 与 intensity_a~intensity_f 的输入范围
-  - 输出格式化字符串，可用于时间轴提示或蒙版强度列表
-  - 适合快速描述关键帧型参数以在其他节点复用
-
-### 🔧 工具节点
-
-#### XIS_ResizeToDivisible
-- **功能**：缩放到可整除尺寸
-- **特性**：
-  - 自动计算最接近的可整除尺寸
-  - 支持图像和蒙版
-
-#### XIS_InvertMask
-- **功能**：蒙版反转
-- **特性**：
-  - 支持布尔开关控制
-  - 自动处理值域范围
-
-#### XIS_ImageMaskMirror
-- **功能**：图像和蒙版镜像翻转
-- **特性**：
-  - 支持X轴和Y轴翻转
-  - 可启用/禁用翻转操作
-
-### 📁 文件处理节点
-
-#### PSD Layer Extract
-- **功能**：PSD图层提取
-- **特性**：
-  - 从PSD文件中提取图层
-  - 支持图层蒙版和透明度
-
-#### XIS_ReorderImages
-- **功能**：图像重新排序
-- **特性**：
-  - 基于指定顺序重新排列图像
-  - 支持批量图像处理
+### ⚙️ 数据与工具助手
+- **XIS_ShapeData**：收集位置、旋转、缩放、倾斜、颜色等形状属性，供后续节点复用。
+- **XIS_IsThereAnyData**：检查整数/浮点/布尔信号是否存在，没有时返回默认。
+- **CreatePointsString**：将六组帧与强度串成多行 shorthand，方便在提示词或蒙版中复用。
+- **XIS_FromListGet1…**：从列表中取出单个 Mask/Image/Latent/Conditioning/Model/Color/String/Int/Float。
+- **XIS_ResizeToDivisible**：将尺寸修正到可整除格，适配下游需求。
 
 ---
 
@@ -341,22 +191,6 @@
 4. XIS_ShapeAndText创建几何形状
 
 ---
-
-## 特殊功能
-
-### 节点颜色自定义
-- **功能**：节点颜色自定义
-- **使用方法**：右键点击节点，选择"Change Node Color"
-- **特性**：可分别修改节点标题和内容区域的背景颜色
-
-![节点颜色自定义](img/changeNodeColor.jpeg)
-
-### 支持HTML的文本标签
-- **功能**：支持HTML的文本标签
-- **使用方法**：右键点击节点上方，选择"Edit Text"
-- **特性**：使用HTML语言输入文字和设置样式
-
-![文本标签功能](img/XIS_Label.jpeg)
 
 ---
 

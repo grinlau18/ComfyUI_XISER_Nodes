@@ -10,13 +10,12 @@ import { EditorManager } from './editor/editor_manager.js';
 import { TextRenderer } from './renderer/text_renderer.js';
 import { StyleManager } from './renderer/style_manager.js';
 import { debounce } from './utils/debounce.js';
-import { createModal, createButton, createEditorStyles } from './utils/dom_utils.js';
+import { createModal, createButton, createEditorStyles, createEditorHeaderControls } from './utils/dom_utils.js';
 
 const SCROLL_MARGIN = 20;
 const TITLE_OFFSET = 30;
 const MIN_VIEWPORT_HEIGHT = 120;
 const SCROLL_STEP = 16;
-const SCROLLBAR_WIDTH = 6;
 const SCROLLBAR_MIN_THUMB = 24;
 
 let wheelHandlerAttached = false;
@@ -45,8 +44,18 @@ function ensureDefaultNodeSize(node) {
         : DEFAULT_NODE_SIZE;
     const targetSize = normalizeNodeSize(storedSize || fallbackSize);
     node.properties = node.properties || {};
-    node.properties.node_size = targetSize;
-    node.setSize([...targetSize]);
+
+    // 只有在没有设置节点大小时才设置默认大小
+    // 避免在复制节点时覆盖已继承的大小
+    if (!node.properties.node_size || !Array.isArray(node.properties.node_size) || node.properties.node_size.length !== 2) {
+        node.properties.node_size = targetSize;
+        node.setSize([...targetSize]);
+    } else {
+        // 如果已经有节点大小，确保使用正确的大小
+        const normalizedSize = normalizeNodeSize(node.properties.node_size);
+        node.setSize([...normalizedSize]);
+    }
+
     node.properties.htmlData = node.properties.htmlData || parserManager.getDefaultText(EDITOR_MODES.HTML);
     node.properties.markdownData = node.properties.markdownData || parserManager.getDefaultText(EDITOR_MODES.MARKDOWN);
 }
@@ -103,19 +112,17 @@ function handlePointerDown(event) {
     const maxScroll = Math.max(contentHeight - viewportHeight, 0);
     if (maxScroll <= 0) return;
 
+    const rect = node.properties?.scrollbarRect;
     const localX = event.canvasX - node.pos[0];
     const localY = event.canvasY - node.pos[1];
-    const trackXStart = node.size[0] - SCROLL_MARGIN - SCROLLBAR_WIDTH;
-    const trackXEnd = node.size[0] - SCROLL_MARGIN;
-    const trackY = SCROLL_MARGIN - TITLE_OFFSET;
-    const trackHeight = viewportHeight;
-
-    if (localX < trackXStart || localX > trackXEnd || localY < trackY || localY > trackY + trackHeight) {
+    if (!rect) {
+        return;
+    }
+    if (localX < rect.x || localX > rect.x + rect.width || localY < rect.y || localY > rect.y + rect.height) {
         return;
     }
 
-    const thumbHeight = Math.max((viewportHeight / contentHeight) * trackHeight, SCROLLBAR_MIN_THUMB);
-    const scrollableTrack = Math.max(trackHeight - thumbHeight, 1);
+    const scrollableTrack = Math.max(rect.height - (rect.thumbHeight || SCROLLBAR_MIN_THUMB), 1);
 
     scrollDragState = {
         node,
@@ -237,6 +244,7 @@ function setupLabelNode() {
              */
             nodeType.prototype.onDrawForeground = function (ctx) {
                 try {
+                    styleManager.applyNodeStyles(this);
                     if (!this.properties.parsedTextData) {
                         const currentMode = this.properties.editorMode || EDITOR_MODES.HTML;
                         const sourceData = this.properties?.[currentMode === EDITOR_MODES.HTML ? "htmlData" : "markdownData"];
@@ -270,13 +278,16 @@ function setupLabelNode() {
             nodeType.prototype.onPropertyChanged = debounce(function (property, value) {
                 if (property === "color" && value) {
                     this.properties.color = value;
+                    const styleChanged = styleManager.applyNodeStyles(this);
                     parserManager.updateBackground(
                         this,
                         value,
                         this.properties.editorMode || EDITOR_MODES.HTML
                     );
-                    this.setDirtyCanvas(true, false);
-                    app.canvas.setDirty(true);
+                    if (styleChanged) {
+                        this.setDirtyCanvas(true, false);
+                        app.canvas.setDirty(true);
+                    }
                     logger.info(`Property changed: ${property} = ${value}`);
                 }
                 return true;
@@ -284,10 +295,16 @@ function setupLabelNode() {
 
             /**
              * Ensures node is redrawn after being added.
+             * Only ensures default size if node doesn't already have a valid size.
              */
             nodeType.prototype.onAdded = function () {
-                ensureDefaultNodeSize(this);
-                this.setDirtyCanvas(true, false);
+                // Only ensure default size if the node doesn't already have a valid size
+                if (!this.properties?.node_size || !Array.isArray(this.properties.node_size) || this.properties.node_size.length !== 2) {
+                    ensureDefaultNodeSize(this);
+                }
+                if (styleManager.applyNodeStyles(this)) {
+                    this.setDirtyCanvas(true, false);
+                }
             };
 
             /**
@@ -315,6 +332,7 @@ function setupLabelNode() {
                         cloned.properties = cloned.properties || {};
                         cloned.properties.node_size = [...normalizedSize];
                     }
+                    styleManager.applyNodeStyles(cloned);
                     logger.info(`[XIS_Label] clone ${this.id} -> ${cloned.id} size=${sourceSize?.join("x")}`);
                 }
                 return cloned;
@@ -322,6 +340,29 @@ function setupLabelNode() {
 
             nodeType.prototype.onDblClick = function () {
                 openTextEditor(this);
+            };
+
+            const originalOnMouseDown = nodeType.prototype.onMouseDown;
+            nodeType.prototype.onMouseDown = function (event, localPos, graphCanvas) {
+                const handled = originalOnMouseDown?.call(this, event, localPos, graphCanvas);
+                if (handled === true) {
+                    return true;
+                }
+                if (!localPos || !Array.isArray(localPos)) {
+                    return handled;
+                }
+                const [x, y] = localPos;
+                const hitboxes = this.properties?.linkHitboxes;
+                if (!Array.isArray(hitboxes) || !hitboxes.length) {
+                    return handled;
+                }
+                const target = hitboxes.find((box) => x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2);
+                if (target?.href) {
+                    const openTarget = event?.ctrlKey ? "_self" : "_blank";
+                    window.open(target.href, openTarget);
+                    return true;
+                }
+                return handled;
             };
 
             /**
@@ -356,105 +397,59 @@ async function openTextEditor(node) {
     try {
         const modal = createModal();
         const editorDiv = document.createElement("div");
-        editorDiv.style.flex = "1";
-        editorDiv.style.display = "flex";
-        editorDiv.style.minHeight = "0";
-        editorDiv.style.overflow = "hidden";
-        editorDiv.style.padding = "10px";
+        editorDiv.className = "editor-content-area";
 
         const currentMode = node.properties.editorMode || EDITOR_MODES.HTML;
         const headerBar = document.createElement("div");
         headerBar.className = "editor-top-bar";
 
-        const colorButton = document.createElement("button");
-        colorButton.type = "button";
-        colorButton.className = "color-swatch-button";
-        const initialColor = node.properties.color || node.color || DEFAULT_COLOR;
-        colorButton.style.background = initialColor;
-        colorButton.title = "Background color";
-
-        const colorInput = document.createElement("input");
-        colorInput.type = "color";
-        colorInput.value = initialColor;
-        colorInput.style.display = "none";
-
-        colorButton.addEventListener("click", () => colorInput.click());
-        colorInput.addEventListener("input", () => {
-            const newColor = colorInput.value;
-            colorButton.style.background = newColor;
+        const handleColorChange = (newColor) => {
             node.properties.color = newColor;
-            node.color = newColor;
+            const styleChanged = styleManager.applyNodeStyles(node);
             parserManager.updateBackground(
                 node,
                 newColor,
                 node.properties.editorMode || EDITOR_MODES.HTML
             );
-            node.setDirtyCanvas(true, false);
-            app.canvas.setDirty(true);
+            if (styleChanged) {
+                node.setDirtyCanvas(true, false);
+                app.canvas.setDirty(true);
+            }
             logger.info(`Background color updated: ${newColor}`);
+        };
+
+        let headerControlsRef = null;
+
+        const handleModeChange = (mode) => {
+            switchEditorMode(mode, node, editorDiv, headerControlsRef);
+        };
+
+        const handleTextScale = (value) => {
+            node.properties.textScalePercent = value;
+            if (styleManager.applyNodeStyles(node)) {
+                node.setDirtyCanvas(true, false);
+                app.canvas.setDirty(true);
+            }
+        };
+
+        headerControlsRef = createEditorHeaderControls({
+            mode: currentMode,
+            color: node.properties.color || node.color || DEFAULT_COLOR,
+            textScalePercent: node.properties.textScalePercent ?? 50,
+            onModeChange: handleModeChange,
+            onColorChange: handleColorChange,
+            onTextScaleChange: handleTextScale
         });
 
-        const switchContainer = document.createElement("div");
-        switchContainer.className = "html-markdown-switch";
+        const headerControls = headerControlsRef;
 
-        const uniqueSuffix = node.id ?? Math.random().toString(36).slice(-4);
-        const htmlId = `html-switch-${uniqueSuffix}`;
-        const markdownId = `markdown-switch-${uniqueSuffix}`;
-        const radioName = `xis-label-mode-${uniqueSuffix}`;
-
-        const htmlRadio = document.createElement("input");
-        htmlRadio.type = "radio";
-        htmlRadio.name = radioName;
-        htmlRadio.id = htmlId;
-        htmlRadio.className = "switch-radio";
-        htmlRadio.checked = currentMode === EDITOR_MODES.HTML;
-
-        const htmlLabel = document.createElement("label");
-        htmlLabel.htmlFor = htmlId;
-        htmlLabel.className = "switch-label";
-        htmlLabel.textContent = "HTML";
-
-        const markdownRadio = document.createElement("input");
-        markdownRadio.type = "radio";
-        markdownRadio.name = radioName;
-        markdownRadio.id = markdownId;
-        markdownRadio.className = "switch-radio";
-        markdownRadio.checked = currentMode === EDITOR_MODES.MARKDOWN;
-
-        const markdownLabel = document.createElement("label");
-        markdownLabel.htmlFor = markdownId;
-        markdownLabel.className = "switch-label";
-        markdownLabel.textContent = "Markdown";
-
-        switchContainer.appendChild(htmlRadio);
-        switchContainer.appendChild(htmlLabel);
-        switchContainer.appendChild(markdownRadio);
-        switchContainer.appendChild(markdownLabel);
-
-        const backgroundControl = document.createElement("div");
-        backgroundControl.className = "background-control";
-        const backgroundLabel = document.createElement("span");
-        backgroundLabel.className = "background-label";
-        backgroundLabel.textContent = "Background";
-        backgroundControl.appendChild(backgroundLabel);
-        backgroundControl.appendChild(colorButton);
-
-        const headerLeft = document.createElement("div");
-        headerLeft.style.display = "flex";
-        headerLeft.style.alignItems = "center";
-        headerLeft.style.gap = "8px";
-        headerLeft.appendChild(switchContainer);
-
-        headerBar.appendChild(headerLeft);
-        headerBar.appendChild(backgroundControl);
+        headerBar.appendChild(headerControls.headerLeft);
+        headerBar.appendChild(headerControls.headerRight);
 
         enableModalDrag(modal, headerBar);
 
         const buttonDiv = document.createElement("div");
-        buttonDiv.style.padding = "10px";
-        buttonDiv.style.textAlign = "right";
-        buttonDiv.style.background = "#1A1A1A";
-        buttonDiv.style.borderTop = "1px solid #333";
+        buttonDiv.className = "editor-footer";
 
         const saveButton = createButton({
             text: "保存",
@@ -470,7 +465,6 @@ async function openTextEditor(node) {
         buttonDiv.appendChild(cancelButton);
 
         modal.appendChild(headerBar);
-        modal.appendChild(colorInput);
         modal.appendChild(editorDiv);
         modal.appendChild(buttonDiv);
 
@@ -495,17 +489,6 @@ async function openTextEditor(node) {
         await editorManager.createEditor(currentMode, editorDiv, initialText);
 
         // Mode switch handlers
-        htmlRadio.addEventListener("change", () => {
-            if (htmlRadio.checked) {
-                switchEditorMode(EDITOR_MODES.HTML, node, editorDiv, htmlRadio, markdownRadio);
-            }
-        });
-        markdownRadio.addEventListener("change", () => {
-            if (markdownRadio.checked) {
-                switchEditorMode(EDITOR_MODES.MARKDOWN, node, editorDiv, htmlRadio, markdownRadio);
-            }
-        });
-
         const saveHandler = () => {
             try {
                 const newText = editorManager.getValue();
@@ -544,10 +527,8 @@ async function openTextEditor(node) {
  * @param {string} mode - The new editor mode.
  * @param {Object} node - The node object.
  * @param {HTMLElement} editorDiv - The editor container.
- * @param {HTMLInputElement} htmlRadio - HTML mode radio input.
- * @param {HTMLInputElement} markdownRadio - Markdown mode radio input.
  */
-async function switchEditorMode(mode, node, editorDiv, htmlRadio, markdownRadio) {
+async function switchEditorMode(mode, node, editorDiv, headerControls) {
     try {
         // Save current editor content to the appropriate data property
         const currentText = editorManager.getValue();
@@ -578,8 +559,11 @@ async function switchEditorMode(mode, node, editorDiv, htmlRadio, markdownRadio)
         await editorManager.createEditor(mode, editorDiv, newText);
 
         // Update radio states
-        htmlRadio.checked = mode === EDITOR_MODES.HTML;
-        markdownRadio.checked = mode === EDITOR_MODES.MARKDOWN;
+        headerControls?.updateValues({
+            mode,
+            color: node.properties.color || node.color || DEFAULT_COLOR,
+            textScalePercent: node.properties.textScalePercent ?? 50
+        });
 
         logger.info(`Editor mode switched to: ${mode}`);
     } catch (e) {
