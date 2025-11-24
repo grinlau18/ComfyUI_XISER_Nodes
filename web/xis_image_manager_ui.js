@@ -13,7 +13,10 @@ import {
   createElementWithClass,
   updateContainerHeight,
   positionPopup,
-  initializeSortable
+  initializeSortable,
+  arraysShallowEqual,
+  areImagePreviewsEqual,
+  areImageStatesEqual
 } from "./xis_image_manager_utils.js";
 
 function buildImageState(imagePreviews, imageOrder, enabledLayers) {
@@ -101,7 +104,7 @@ function reconcileStateWithPreviews(imagePreviews, imageState) {
   return result;
 }
 
-function deriveOrderAndEnabledFromState(imagePreviews, imageState) {
+function deriveOrderAndEnabledFromState(imagePreviews, imageState, enforceSingleMode = false) {
   const previewById = new Map(imagePreviews.map(preview => [preview.image_id, preview]));
   const order = [];
   const orderSet = new Set();
@@ -131,6 +134,14 @@ function deriveOrderAndEnabledFromState(imagePreviews, imageState) {
       enabled[idx] = true;
     }
   });
+
+  if (enforceSingleMode && order.length) {
+    let activeIdx = order.find(idx => enabled[idx]);
+    if (activeIdx === undefined) activeIdx = order[0];
+    for (let i = 0; i < enabled.length; i++) {
+      enabled[i] = i === activeIdx;
+    }
+  }
 
   return { order, enabled };
 }
@@ -197,7 +208,7 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
     imageState = buildImageState(imagePreviews, imageOrder, enabledLayers);
   }
   imageState = reconcileStateWithPreviews(imagePreviews, imageState);
-  const { order: derivedOrder, enabled: derivedEnabled } = deriveOrderAndEnabledFromState(imagePreviews, imageState);
+  const { order: derivedOrder, enabled: derivedEnabled } = deriveOrderAndEnabledFromState(imagePreviews, imageState, isSingleMode);
   imageOrder = derivedOrder;
   enabledLayers = derivedEnabled;
   imagePreviews = imagePreviews.map(preview => ({
@@ -355,7 +366,7 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
     const defaultOrder = [...Array(imagePreviews.length).keys()];
     const defaultEnabled = Array(imagePreviews.length).fill(true);
     const resetState = buildImageState(imagePreviews, defaultOrder, defaultEnabled);
-    if (JSON.stringify(imageState) === JSON.stringify(resetState) && !isReversed) {
+    if (areImageStatesEqual(imageState, resetState) && !isReversed) {
       log.debug(`Skipping reset for node ${nodeId}: no change`);
       return;
     }
@@ -414,8 +425,8 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
 
     // Check if state needs updating
     const stateChanged = 
-      JSON.stringify(imageOrder) !== JSON.stringify(validatedImageOrder) ||
-      JSON.stringify(enabledLayers) !== JSON.stringify(newEnabledLayers);
+      !arraysShallowEqual(imageOrder, validatedImageOrder) ||
+      !arraysShallowEqual(enabledLayers, newEnabledLayers);
 
     if (stateChanged) {
       const normalizedState = buildImageState(imagePreviews, validatedImageOrder, newEnabledLayers);
@@ -580,7 +591,7 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
       sortableInstance = initializeSortable(cardContainer, nodeId, (newDomOrder) => {
         const newImageOrder = isReversed ? newDomOrder.reverse() : newDomOrder;
         const validatedImageOrder = validateImageOrder(newImageOrder, imagePreviews, nodeId);
-        if (JSON.stringify(validatedImageOrder) === JSON.stringify(imageOrder)) {
+        if (arraysShallowEqual(validatedImageOrder, imageOrder)) {
           log.debug(`Skipping sortable update for node ${nodeId}: no change`);
           return;
         }
@@ -634,7 +645,7 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
       nextImageState = enforceSingleModeState(nextImageState);
     }
 
-    const { order: derivedOrder, enabled: derivedEnabled } = deriveOrderAndEnabledFromState(newImagePreviewsInput, nextImageState);
+    const { order: derivedOrder, enabled: derivedEnabled } = deriveOrderAndEnabledFromState(newImagePreviewsInput, nextImageState, newIsSingleMode);
 
     const normalizedPreviews = newImagePreviewsInput.map(preview => ({
       ...preview,
@@ -642,13 +653,13 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
     }));
 
     const stateChanged =
-      JSON.stringify(imagePreviews) !== JSON.stringify(normalizedPreviews) ||
-      JSON.stringify(imageOrder) !== JSON.stringify(derivedOrder) ||
-      JSON.stringify(enabledLayers) !== JSON.stringify(derivedEnabled) ||
-      JSON.stringify(imageState) !== JSON.stringify(nextImageState) ||
+      !areImagePreviewsEqual(imagePreviews, normalizedPreviews) ||
+      !arraysShallowEqual(imageOrder, derivedOrder) ||
+      !arraysShallowEqual(enabledLayers, derivedEnabled) ||
+      !areImageStatesEqual(imageState, nextImageState) ||
       isReversed !== newIsReversed ||
       isSingleMode !== newIsSingleMode ||
-      JSON.stringify(nodeSize) !== JSON.stringify(newNodeSize);
+      !arraysShallowEqual(nodeSize, newNodeSize);
 
     if (!stateChanged) {
       log.debug(`Skipping setState for node ${nodeId}: no state change`);

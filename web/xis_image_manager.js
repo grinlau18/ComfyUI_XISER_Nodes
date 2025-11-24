@@ -4,7 +4,7 @@
  */
 
 import { app } from "/scripts/app.js";
-import { log, MIN_NODE_HEIGHT, debounce, getNodeClass, validateImageOrder, injectStyles } from "./xis_image_manager_utils.js";
+import { log, MIN_NODE_HEIGHT, debounce, getNodeClass, validateImageOrder, injectStyles, arraysShallowEqual, areImageStatesEqual, areImagePreviewsEqual } from "./xis_image_manager_utils.js";
 import { createImageManagerUI } from "./xis_image_manager_ui.js";
 
 /**
@@ -269,40 +269,6 @@ function computeOutputHash(imagePreviews, imageState) {
 
 function getNormalizedNodeSize(size) {
   return Array.isArray(size) && size.length === 2 ? size : [360, 360];
-}
-
-function arraysShallowEqual(a, b) {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-function imageStatesEqual(a, b) {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b)) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const left = a[i] || {};
-    const right = b[i] || {};
-    if (
-      left.id !== right.id ||
-      !!left.enabled !== !!right.enabled ||
-      left.source !== right.source ||
-      left.filename !== right.filename ||
-      left.originalFilename !== right.originalFilename ||
-      left.width !== right.width ||
-      left.height !== right.height ||
-      left.index !== right.index ||
-      (left.contentHash ?? left.content_hash ?? null) !== (right.contentHash ?? right.content_hash ?? null)
-    ) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function getSerializedImageStateValue(node, imageState, nodeIdOverride = null) {
@@ -733,7 +699,7 @@ app.registerExtension({
           if (isSingleMode) {
             nextState = enforceSingleModeState(nextState);
           }
-          if (imageStatesEqual(nextState, imageState)) return;
+          if (areImageStatesEqual(nextState, imageState)) return;
           applyState({ imageState: nextState });
         } catch (error) {
           statusText.innerText = "Layers error";
@@ -910,8 +876,8 @@ app.registerExtension({
             );
             const nextImageState = newIsSingleMode ? enforceSingleModeState(reconciled) : reconciled;
             const stateChanged =
-              JSON.stringify(imagePreviews) !== JSON.stringify(newPreviews) ||
-              !imageStatesEqual(imageState, nextImageState) ||
+              !areImagePreviewsEqual(imagePreviews, newPreviews) ||
+              !areImageStatesEqual(imageState, nextImageState) ||
               isReversed !== newIsReversed ||
               isSingleMode !== newIsSingleMode ||
               !arraysShallowEqual(nodeSize, newNodeSize);

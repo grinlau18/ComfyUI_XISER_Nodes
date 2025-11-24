@@ -57,6 +57,84 @@ function debounce(fn, delay = 50) {
   };
 }
 
+function arraysShallowEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function normalizeHash(entry) {
+  if (!entry) return null;
+  if (entry.content_hash !== undefined && entry.content_hash !== null) return entry.content_hash;
+  if (entry.contentHash !== undefined && entry.contentHash !== null) return entry.contentHash;
+  return null;
+}
+
+function normalizeOriginalFilename(entry) {
+  if (!entry) return "";
+  if (entry.originalFilename) return entry.originalFilename;
+  if (entry.filename) return entry.filename;
+  return "";
+}
+
+function normalizePreviewId(entry) {
+  if (!entry) return "";
+  return entry.image_id || entry.id || "";
+}
+
+function areImagePreviewsEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i] || {};
+    const right = b[i] || {};
+    if (
+      normalizePreviewId(left) !== normalizePreviewId(right) ||
+      (left.index ?? i) !== (right.index ?? i) ||
+      (left.filename || "") !== (right.filename || "") ||
+      normalizeOriginalFilename(left) !== normalizeOriginalFilename(right) ||
+      (left.source || "") !== (right.source || "") ||
+      (left.preview || "") !== (right.preview || "") ||
+      (left.width ?? null) !== (right.width ?? null) ||
+      (left.height ?? null) !== (right.height ?? null) ||
+      (left.enabled ?? true) !== (right.enabled ?? true) ||
+      normalizeHash(left) !== normalizeHash(right)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areImageStatesEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i] || {};
+    const right = b[i] || {};
+    if (
+      (left.id || "") !== (right.id || "") ||
+      !!left.enabled !== !!right.enabled ||
+      (left.source || "") !== (right.source || "") ||
+      (left.filename || "") !== (right.filename || "") ||
+      normalizeOriginalFilename(left) !== normalizeOriginalFilename(right) ||
+      (left.width ?? null) !== (right.width ?? null) ||
+      (left.height ?? null) !== (right.height ?? null) ||
+      (left.index ?? null) !== (right.index ?? null) ||
+      normalizeHash(left) !== normalizeHash(right)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Generates a unique class name for node-specific styling.
  * @param {number} nodeId - The node ID.
@@ -539,6 +617,9 @@ export {
   log,
   MIN_NODE_HEIGHT,
   debounce,
+  arraysShallowEqual,
+  areImagePreviewsEqual,
+  areImageStatesEqual,
   getNodeClass,
   validateImageOrder,
   truncateFilename,
