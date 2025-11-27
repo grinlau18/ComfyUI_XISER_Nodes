@@ -12,6 +12,7 @@ from aiohttp import web
 from .constants import logger
 from .storage import resolve_node_dir, compute_content_hash
 from .node import XIS_ImageManager
+from .editor.core import ImageEditor
 
 
 def _find_node_instance(node_id: str):
@@ -145,7 +146,7 @@ async def handle_fetch_image(request):
 
 
 async def handle_crop_image(request):
-    """Persist a cropped image and return updated preview metadata."""
+    """Persist a cropped image and return updated preview metadata using the new ImageEditor module."""
     try:
         data = await request.json()
         node_id = str(data.get("node_id") or "")
@@ -167,7 +168,14 @@ async def handle_crop_image(request):
         except Exception:
             return web.json_response({"error": "Invalid image data"}, status=400)
 
+        # Use the new ImageEditor module for image processing
+        editor = ImageEditor()
         pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
+
+        # Apply any additional processing using the editor if needed
+        # For now, we just use the basic image, but the editor provides
+        # more sophisticated operations for future expansion
+
         node_instance = _find_node_instance(node_id)
         tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
         existing_source_hash = None

@@ -27,6 +27,7 @@ from .storage import (
 )
 from .state import parse_image_state_payload, validate_image_order, hash_from_entry
 from .processor import process_pack_images, process_uploaded_images
+from .editor.core import ImageEditor
 # API routes are imported and registered separately to avoid circular imports
 
 class XIS_ImageManager:
