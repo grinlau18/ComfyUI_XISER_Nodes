@@ -22,7 +22,7 @@ def process_pack_images(node, pack_images, node_id, prev_pack_id_map, prev_index
     new_pack_id_map = defaultdict(list)
     pack_hash_usage = defaultdict(int)
 
-    if not pack_images:
+    if pack_images is None:
         return images_list, image_paths, image_previews, new_pack_id_map
     if not isinstance(pack_images, list):
         logger.error(f"Instance {node.instance_id} - Node {node_id}: Invalid pack_images: expected list, got {type(pack_images)}")
@@ -187,6 +187,7 @@ def process_uploaded_images(node, image_previews, images_list, node_id, node_dir
             })
             if filename not in node.created_files:
                 node.created_files.add(filename)
+                logger.debug(f"Instance {node.instance_id} - Node {node_id}: Added uploaded image {filename} to created_files")
             logger.debug(f"Instance {node.instance_id} - Node {node_id}: Loaded uploaded image {filename}")
         except Exception as e:
             logger.error(f"Instance {node.instance_id} - Node {node_id}: Failed to load uploaded image {file}: {e}")

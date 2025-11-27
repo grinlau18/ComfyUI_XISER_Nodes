@@ -133,7 +133,7 @@ if BIRENET_REPO_DIR not in sys.path:
 BIRENET_IMPORT_ERROR = None
 try:
     from birefnet_repo.models.birefnet import BiRefNet
-    from birefnet_repo.utils import check_state_dict
+    from src.xiser_nodes.birefnet_repo.utils import check_state_dict
 except ImportError as exc:  # pragma: no cover
     BiRefNet = None
     check_state_dict = None

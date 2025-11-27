@@ -4,12 +4,13 @@ import time
 import uuid
 import base64
 import numpy as np
+import re
 import folder_paths
 from io import BytesIO
 from PIL import Image
 from aiohttp import web
 from .constants import logger
-from .storage import resolve_node_dir
+from .storage import resolve_node_dir, compute_content_hash
 from .node import XIS_ImageManager
 
 
@@ -40,6 +41,13 @@ async def handle_upload(request):
             node_dir = os.path.join(node_dir, f"node_{node_id}")
         os.makedirs(node_dir, exist_ok=True)
 
+        # Find the node instance to track created files
+        node_instance = _find_node_instance(node_id)
+        if node_instance:
+            logger.debug(f"Instance - Found node instance for {node_id}, created_files count: {len(node_instance.created_files)}")
+        else:
+            logger.warning(f"Instance - No node instance found for {node_id}, uploaded files won't be tracked in created_files")
+
         existing_files = XIS_ImageManager._list_node_image_files(node_dir)
         upload_pattern = re.compile(r"upload_image_(\\d+)\\.png$")
         used_numbers = {
@@ -69,6 +77,11 @@ async def handle_upload(request):
                 img_filename = f"upload_image_{current_index:02d}.png"
                 img_path = os.path.join(node_dir, img_filename)
                 pil_img.save(img_path, format="PNG")
+
+                # Add to created_files if node instance exists
+                if node_instance:
+                    node_instance.created_files.add(img_filename)
+                    logger.debug(f"Instance - Added {img_filename} to created_files for node {node_id}")
 
                 try:
                     tracking_file = os.path.join(node_dir, f".{img_filename}.node_{node_id}")
@@ -184,7 +197,7 @@ async def handle_crop_image(request):
             except Exception as exc:
                 logger.warning(f"Instance - Failed to write tracking for cropped image {filename}: {exc}")
 
-        content_hash = XIS_ImageManager._compute_content_hash(np.array(pil_img, dtype=np.uint8), f"crop:{filename}")
+        content_hash = compute_content_hash(np.array(pil_img, dtype=np.uint8), f"crop:{filename}")
         thumbnail_generator = node_instance._generate_base64_thumbnail if node_instance else XIS_ImageManager()._generate_base64_thumbnail
         preview_b64 = thumbnail_generator(pil_img)
         if node_instance:

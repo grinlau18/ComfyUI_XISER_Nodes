@@ -390,6 +390,26 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
       metaBar.innerText = `Original: ${naturalWidth} x ${naturalHeight}`;
       sizeLabel = createElementWithClass("div", "xiser-image-editor-size");
       sizeLabel.innerText = `Crop: ${naturalWidth} x ${naturalHeight}`;
+
+      // Crop box visibility toggle
+      const toggleContainer = createElementWithClass("div", "xiser-image-editor-toggle-container");
+      const toggleLabel = createElementWithClass("label", "xiser-image-editor-toggle-label");
+      toggleLabel.innerText = "Show Crop Box";
+      const cropToggle = createElementWithClass("input", "xiser-image-editor-toggle", {
+        type: "checkbox",
+        checked: true
+      });
+      cropToggle.checked = true;
+      let showCropBox = true;
+
+      addListener(cropToggle, "change", () => {
+        showCropBox = cropToggle.checked;
+        draw();
+      });
+
+      toggleContainer.appendChild(toggleLabel);
+      toggleContainer.appendChild(cropToggle);
+      metaBar.appendChild(toggleContainer);
       metaBar.appendChild(sizeLabel);
       const canvasShell = createElementWithClass("div", "xiser-image-editor-canvas-shell");
       const canvas = createElementWithClass("canvas", "xiser-image-editor-canvas");
@@ -404,7 +424,7 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
       let scale = 1;
       let dragging = null;
       let startPoint = null;
-      let crop = { x: 0, y: 0, width: naturalWidth, height: naturalHeight };
+      let crop = { x: naturalWidth / 4, y: naturalHeight / 4, width: naturalWidth / 2, height: naturalHeight / 2 };
 
       function setCrop(newCrop) {
         crop = {
@@ -432,32 +452,39 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         if (!crop.width || !crop.height) return;
+
         const left = crop.x * scale;
         const top = crop.y * scale;
         const w = crop.width * scale;
         const h = crop.height * scale;
+
+        // Draw crop overlay (always visible for better UX)
         ctx.save();
         ctx.fillStyle = "rgba(0,0,0,0.45)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.globalCompositeOperation = "destination-out";
         ctx.fillRect(left, top, w, h);
         ctx.restore();
-        ctx.strokeStyle = "#1DA1F2";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(left + 1, top + 1, w - 2, h - 2);
-        const handleSize = Math.max(6, 8 * (scale > 1 ? scale : 1));
-        const handles = [
-          [left, top],
-          [left + w, top],
-          [left, top + h],
-          [left + w, top + h]
-        ];
-        ctx.fillStyle = "#1DA1F2";
-        handles.forEach(([hx, hy]) => {
-          ctx.beginPath();
-          ctx.arc(hx, hy, handleSize / 2, 0, Math.PI * 2);
-          ctx.fill();
-        });
+
+        // Draw crop box and handles only when showCropBox is true
+        if (showCropBox) {
+          ctx.strokeStyle = "#1DA1F2";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(left + 1, top + 1, w - 2, h - 2);
+          const handleSize = Math.max(6, 8 * (scale > 1 ? scale : 1));
+          const handles = [
+            [left, top],
+            [left + w, top],
+            [left, top + h],
+            [left + w, top + h]
+          ];
+          ctx.fillStyle = "#1DA1F2";
+          handles.forEach(([hx, hy]) => {
+            ctx.beginPath();
+            ctx.arc(hx, hy, handleSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
       }
 
       function toImageCoords(evt) {
