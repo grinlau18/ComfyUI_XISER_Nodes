@@ -126,7 +126,12 @@ try:
     PromptServer.instance.app.router.add_delete("/xiser/keys/{profile}", delete_key)
     # default key route retained for compatibility but returns 400
     PromptServer.instance.app.router.add_post("/xiser/keys/default", set_default_key)
-    print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts")
+
+    # Register XIS_ImageManager routes
+    from .src.xiser_nodes.image_manager.api import register_routes
+    register_routes()
+
+    print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, XIS_ImageManager endpoints")
 except Exception as e:
     print("[XISER] Failed to register routes:", str(e))
 
