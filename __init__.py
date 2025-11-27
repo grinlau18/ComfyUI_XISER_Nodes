@@ -8,7 +8,7 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 
 from server import PromptServer
 import json
@@ -20,6 +20,42 @@ from .server_extension import (
     serve_font_file,
     cutout_image,
 )  # 导入处理函数
+from .src.xiser_nodes.key_store import KEY_STORE
+from aiohttp import web
+
+
+async def list_keys(request):
+    data = KEY_STORE.list_profiles()
+    return web.json_response({"profiles": list(data.keys())})
+
+
+async def save_key(request):
+    try:
+        payload = await request.json()
+        profile = payload.get("profile", "").strip()
+        api_key = payload.get("api_key", "").strip()
+        overwrite = bool(payload.get("overwrite", False))
+        if not profile or not api_key:
+            return web.json_response({"error": "profile and api_key are required"}, status=400)
+        try:
+            KEY_STORE.save_key(profile, api_key, overwrite=overwrite)
+        except ValueError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response({"ok": True})
+    except Exception as exc:
+        return web.json_response({"error": str(exc)}, status=500)
+
+
+async def delete_key(request):
+    profile = request.match_info.get("profile", "")
+    if not profile:
+        return web.json_response({"error": "profile is required"}, status=400)
+    KEY_STORE.delete_key(profile)
+    return web.json_response({"ok": True})
+
+
+async def set_default_key(request):
+    return web.json_response({"error": "default key not supported"}, status=400)
 
 # 导入节点映射
 from .src.xiser_nodes import NODE_CLASS_MAPPINGS
@@ -85,6 +121,11 @@ try:
     PromptServer.instance.app.router.add_get("/custom/list_psd_files", list_psd_files)
     PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
     PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
+    PromptServer.instance.app.router.add_get("/xiser/keys", list_keys)
+    PromptServer.instance.app.router.add_post("/xiser/keys", save_key)
+    PromptServer.instance.app.router.add_delete("/xiser/keys/{profile}", delete_key)
+    # default key route retained for compatibility but returns 400
+    PromptServer.instance.app.router.add_post("/xiser/keys/default", set_default_key)
     print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts")
 except Exception as e:
     print("[XISER] Failed to register routes:", str(e))

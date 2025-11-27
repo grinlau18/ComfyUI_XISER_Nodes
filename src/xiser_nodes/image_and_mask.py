@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw
 import cv2
 import os
 from typing import Optional, Tuple, Union, List
+import math
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
 from .canvas_mask_processor import XIS_CanvasMaskProcessor
 
@@ -445,7 +446,7 @@ class XIS_ResizeImageOrMask:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "resize_mode": (["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas"], {"default": "force_resize"}),
+                "resize_mode": (["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas", "total_pixels"], {"default": "force_resize"}),
                 "scale_condition": (["downscale_only", "upscale_only", "always"], {"default": "always"}),
                 "interpolation": (list(INTERPOLATION_MODES.keys()), {"default": "bilinear"}),
                 "min_unit": ("INT", {"default": 16, "min": 1, "max": 64, "step": 1}),
@@ -502,11 +503,26 @@ class XIS_ResizeImageOrMask:
             target_width, target_height = manual_width, manual_height
         else:
             raise ValueError("Must provide either reference_image or both manual_width and manual_height")
-        
+
+        raw_target_width, raw_target_height = target_width, target_height
+        target_pixels = max(1, raw_target_width * raw_target_height)
+
         # 确保目标尺寸按 min_unit 对齐
         target_width = max(1, (target_width + min_unit - 1) // min_unit * min_unit)
         target_height = max(1, (target_height + min_unit - 1) // min_unit * min_unit)
-        fill_rgb = hex_to_rgb(fill_hex)
+        base_fill_rgb = hex_to_rgb(fill_hex)
+
+        def get_fill_color(num_channels: int, device, dtype):
+            """Return fill color aligned to channel count (keep alpha if present)."""
+            base = base_fill_rgb.to(device=device, dtype=dtype)
+            if num_channels == base.numel():
+                return base
+            if num_channels == 4 and base.numel() == 3:
+                # Default to transparent alpha for RGBA to preserve transparency
+                return torch.cat([base, torch.zeros(1, device=device, dtype=dtype)])
+            if base.numel() == 1:
+                return base.expand(num_channels)
+            return torch.cat([base, torch.zeros(max(0, num_channels - base.numel()), device=device, dtype=dtype)])
 
         def compute_size(orig_w: int, orig_h: int) -> Tuple[int, int, int, int]:
             """
@@ -542,6 +558,28 @@ class XIS_ResizeImageOrMask:
                 w = (w + min_unit - 1) // min_unit * min_unit
                 h = (h + min_unit - 1) // min_unit * min_unit
                 return w, h, (w - target_width) // 2, (h - target_height) // 2
+            elif resize_mode == "total_pixels":
+                desired_pixels = target_pixels
+                orig_pixels = max(1, orig_w * orig_h)
+                base_scale = math.sqrt(desired_pixels / orig_pixels)
+                ideal_w = orig_w * base_scale
+
+                def align_to_unit(value: float) -> int:
+                    return max(min_unit, int(round(value / min_unit)) * min_unit)
+
+                candidates = []
+                base_w_aligned = align_to_unit(ideal_w)
+                # Explore small neighborhood to find closest pixel count while keeping aspect
+                for step in (-2, -1, 0, 1, 2):
+                    w_candidate = max(min_unit, base_w_aligned + step * min_unit)
+                    h_candidate = align_to_unit(w_candidate / aspect)
+                    pixels = w_candidate * h_candidate
+                    aspect_diff = abs((w_candidate / h_candidate) - aspect)
+                    candidates.append((abs(pixels - desired_pixels), aspect_diff, w_candidate, h_candidate))
+
+                candidates.sort(key=lambda x: (x[0], x[1]))
+                _, _, w, h = candidates[0]
+                return w, h, 0, 0
 
         def should_resize(orig_w: int, orig_h: int, target_w: int, target_h: int) -> bool:
             """
@@ -556,12 +594,22 @@ class XIS_ResizeImageOrMask:
             Returns:
                 bool: 是否需要调整尺寸
             """
-            if scale_condition == "always":
-                return True
-            elif scale_condition == "downscale_only":
-                return orig_w > target_w or orig_h > target_h
-            elif scale_condition == "upscale_only":
-                return orig_w < target_w or orig_h < target_h
+            if resize_mode == "total_pixels":
+                orig_pixels = orig_w * orig_h
+                desired_pixels = target_pixels
+                if scale_condition == "always":
+                    return True
+                elif scale_condition == "downscale_only":
+                    return orig_pixels > desired_pixels
+                elif scale_condition == "upscale_only":
+                    return orig_pixels < desired_pixels
+            else:
+                if scale_condition == "always":
+                    return True
+                elif scale_condition == "downscale_only":
+                    return orig_w > target_w or orig_h > target_h
+                elif scale_condition == "upscale_only":
+                    return orig_w < target_w or orig_h < target_h
             return False
 
         resized_img = None
@@ -571,13 +619,14 @@ class XIS_ResizeImageOrMask:
             if image.dim() != 4:
                 raise ValueError(f"Image must be 4D [B, H, W, C], got {image.shape}")
             batch_size, orig_h, orig_w, channels = image.shape
+            fill_color = get_fill_color(channels, image.device, image.dtype)
             
             if should_resize(orig_w, orig_h, target_width, target_height):
                 w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
                 resized_img = resize_tensor(image, (h, w), INTERPOLATION_MODES[interpolation])
                 if resize_mode == "limited_by_canvas":
                     output = torch.full((batch_size, target_height, target_width, channels), 0, device=image.device, dtype=image.dtype)
-                    output.copy_(fill_rgb.expand(batch_size, target_height, target_width, channels))
+                    output.copy_(fill_color.view(1, 1, 1, -1).expand(batch_size, target_height, target_width, channels))
                     output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_img
                     resized_img = output
                 elif resize_mode == "fill_the_canvas":
@@ -600,12 +649,13 @@ class XIS_ResizeImageOrMask:
                 raise ValueError(f"Mask must be 2D [H, W] or 3D [B, H, W], got {mask.shape}")
             mask_input = mask.unsqueeze(0) if mask.dim() == 2 else mask
             batch_size, orig_h, orig_w = mask_input.shape
+            mask_fill_value = torch.tensor(0.0, device=mask.device, dtype=mask.dtype)
 
             if should_resize(orig_w, orig_h, target_width, target_height):
                 w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
                 resized_mask = resize_tensor(mask_input.unsqueeze(-1), (h, w), INTERPOLATION_MODES[interpolation]).squeeze(-1)
                 if resize_mode == "limited_by_canvas":
-                    output = torch.full((batch_size, target_height, target_width), fill_rgb[0], device=mask.device, dtype=mask.dtype)
+                    output = torch.full((batch_size, target_height, target_width), mask_fill_value, device=mask.device, dtype=mask.dtype)
                     output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_mask
                     resized_mask = output
                 elif resize_mode == "fill_the_canvas":

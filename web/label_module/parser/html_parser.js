@@ -132,6 +132,18 @@ const processContainer = (container) => {
         return summary;
     };
 
+    const hasBlockAncestor = (node) => {
+        let current = node?.parentElement;
+        while (current && current !== container) {
+            const computed = getSafeComputedStyles(current);
+            if (BLOCK_TAGS.includes(current.tagName) || computed.display === "block") {
+                return true;
+            }
+            current = current.parentElement;
+        }
+        return false;
+    };
+
     const mergeInlineStyles = (baseStyles, node) => {
         const inlineStyles = node.style || {};
         const computedStyles = getSafeComputedStyles(node);
@@ -222,7 +234,7 @@ const processContainer = (container) => {
                         ...seg,
                         link_href: href,
                         color: seg.color || DEFAULT_LINK_COLOR,
-                        text_decoration: seg.text_decoration || "underline"
+                        text_decoration: "underline"
                     }));
                     segments.push(...linkSegments);
                     return;
@@ -270,8 +282,9 @@ const processContainer = (container) => {
         const inlineStyles = node.style || {};
         const computedStyles = getSafeComputedStyles(node);
         const isBlock = BLOCK_TAGS.includes(node.tagName) || computedStyles.display === "block";
+        const shouldCreateLine = isBlock || !hasBlockAncestor(node) || node.tagName === "A";
 
-        if (isBlock) {
+        if (shouldCreateLine) {
             const fontSize =
                 HEADING_SIZES[node.tagName] ||
                 parseInt(inlineStyles.fontSize || computedStyles.fontSize) ||
@@ -309,9 +322,18 @@ const processContainer = (container) => {
             }
 
             const allowBlockChildren = node.tagName === "LI";
-            let segments = isSimpleBlock
+            let segments = (isBlock && isSimpleBlock)
                 ? [{ text: text, ...baseSegmentStyles }]
                 : extractTextSegments(node, baseSegmentStyles, allowBlockChildren);
+            if (node.tagName === "A") {
+                const href = node.getAttribute("href") || "";
+                segments = (segments.length ? segments : [{ text, ...baseSegmentStyles }]).map(seg => ({
+                    ...seg,
+                    link_href: seg.link_href || href,
+                    color: seg.color || DEFAULT_LINK_COLOR,
+                    text_decoration: "underline"
+                }));
+            }
             segments = trimSegmentEdgeWhitespace(segments);
             const isMarkdownEmptyLine = node.hasAttribute && node.hasAttribute("data-md-empty-line");
 
@@ -342,8 +364,8 @@ const processContainer = (container) => {
                 text_decoration: baseSegmentStyles.text_decoration,
                 text_align: inlineStyles.textAlign || computedStyles.textAlign || DEFAULT_LINE_DATA.text_align,
                 margin_left: marginLeft,
-                margin_top: marginTop,
-                margin_bottom: marginBottom,
+                margin_top: isBlock ? marginTop : 4,
+                margin_bottom: isBlock ? marginBottom : 4,
                 is_block: isBlock,
                 segments,
                 is_markdown_empty_line: isMarkdownEmptyLine

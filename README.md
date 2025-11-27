@@ -51,6 +51,14 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - Visual toolkit comprising curve/path/gradient editors, ImageManager, shape/text generators, color controls, and label helpers.
 - Image/mask/file utilities for blending, cropping, resizing, reordering, mirroring, and PSD layer handling.
 - Data and workflow support through shape summaries, guard checks, shorthand serializers, list extractors, and divisible sizing.
+- LLM automation workflows powered by DeepSeek with an extensible provider interface ready for future models.
+
+### 🤖 LLM Automation Bridge (XIS_LLMOrchestrator)
+- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (DeepSeek to start) and emit the reply as a STRING output for downstream nodes.
+- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and the optional vision inputs (`image`, `pack_images`).
+- **Attachments**: Incoming tensors are encoded to PNG base64 payloads before being passed to the provider, automatically truncating to the provider's supported image count.
+- **Extensibility**: Providers register via a lightweight config + interface so new vendors or custom endpoints can be attached without touching node logic.
+- **Vision Support**: When `image`/`pack_images` inputs are used the node transparently switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), so each request contains `input_text` + `input_image` blocks that satisfy their schema.
 
 ### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
 - **What makes it special**: the central visual playground for multi-layer composition, blending, and mask-aware editing.

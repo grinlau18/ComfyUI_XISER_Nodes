@@ -158,6 +158,28 @@ class XIS_ImageManager:
         os.makedirs(node_dir, exist_ok=True)
         return node_dir
 
+    def _save_image_with_tracking(self, pil_img: Image.Image, node_dir: str, filename: str, node_id: str, original_filename: str = None, edited: bool = False, source_hash: str = None):
+        """Persist an image to the node directory and record metadata for later retrieval."""
+        try:
+            os.makedirs(node_dir, exist_ok=True)
+            img_path = os.path.join(node_dir, filename)
+            pil_img.save(img_path, format="PNG")
+            self.created_files.add(filename)
+            tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+            with open(tracking_file, 'w') as f:
+                f.write(json.dumps({
+                    "node_id": node_id,
+                    "original_filename": original_filename or filename,
+                    "upload_time": time.time(),
+                    "edited": edited,
+                    "source_hash": source_hash
+                }))
+            logger.debug(f"Instance {self.instance_id} - Saved image {filename} with tracking for node {node_id}")
+            return img_path
+        except Exception as exc:
+            logger.error(f"Instance {self.instance_id} - Failed to save image {filename} for node {node_id}: {exc}")
+            return None
+
     @staticmethod
     def _list_node_image_files(node_dir):
         """Return all managed image files (legacy and new naming)."""
@@ -279,6 +301,7 @@ class XIS_ImageManager:
             is_single_mode_flag = False
 
         self._clean_old_files(node_id)
+        node_dir = self._get_node_output_dir(node_id)
 
         parsed_state_entries = self._parse_image_state_payload(image_state)
         state_enabled_lookup = {}
@@ -289,6 +312,11 @@ class XIS_ImageManager:
                 if entry_id:
                     state_enabled_lookup[entry_id] = bool(entry.get("enabled", True))
                     state_order_lookup[entry_id] = pos
+
+        def _hash_from_entry(entry):
+            if not entry or not isinstance(entry, dict):
+                return None
+            return entry.get("content_hash") or entry.get("contentHash")
 
         def _entry_priority(entry):
             entry_id = entry.get("id")
@@ -340,7 +368,55 @@ class XIS_ImageManager:
                 if array_uint8 is None:
                     logger.error(f"Instance {self.instance_id} - Node {node_id}: Failed to convert image at index {i} to uint8 array")
                     raise ValueError("Failed to convert image to uint8")
-                content_hash = self._compute_content_hash(array_uint8, f"pack_image_{i}")
+                original_uint8 = np.array(array_uint8, copy=True)
+                incoming_hash = self._compute_content_hash(array_uint8, f"pack_image_{i}")
+                storage_filename = f"xis_image_manager_{i + 1:02d}.png"
+                storage_path = os.path.join(node_dir, storage_filename)
+                tracking_file = os.path.join(node_dir, f".{storage_filename}.node_{node_id}")
+
+                # If the user cropped this image, prefer the edited file unless the upstream content changed
+                use_storage_image = False
+                tracked_source_hash = None
+                if os.path.exists(tracking_file):
+                    try:
+                        with open(tracking_file, "r") as f:
+                            tracking_data = json.loads(f.read() or "{}")
+                        use_storage_image = bool(tracking_data.get("edited"))
+                        tracked_source_hash = tracking_data.get("source_hash")
+                    except Exception as exc:
+                        logger.warning(f"Instance {self.instance_id} - Node {node_id}: Failed to read tracking for {storage_filename}: {exc}")
+
+                pil_img = None
+                stored_hash = None
+                if use_storage_image and os.path.exists(storage_path):
+                    try:
+                        pil_img = Image.open(storage_path).convert("RGBA")
+                        array_uint8 = np.array(pil_img, dtype=np.uint8)
+                        stored_hash = self._compute_content_hash(array_uint8, f"stored_pack_image_{i}")
+                        # If we lack a tracked source hash, fall back to comparing stored hash with incoming
+                        mismatch_detected = False
+                        if tracked_source_hash:
+                            mismatch_detected = tracked_source_hash != incoming_hash
+                        elif stored_hash and stored_hash != incoming_hash:
+                            mismatch_detected = True
+                        if mismatch_detected:
+                            logger.info(f"Instance {self.instance_id} - Node {node_id}: Pack image {i} changed upstream, ignoring cached edit")
+                            pil_img = None
+                            use_storage_image = False
+                            array_uint8 = np.array(original_uint8, copy=True)
+                        else:
+                            self.created_files.add(storage_filename)
+                            logger.debug(f"Instance {self.instance_id} - Node {node_id}: Using edited image {storage_filename} for pack index {i}")
+                    except Exception as exc:
+                        logger.warning(f"Instance {self.instance_id} - Node {node_id}: Failed to use edited image {storage_filename}: {exc}")
+
+                if pil_img is None:
+                    pil_img = Image.fromarray(array_uint8, mode="RGBA")
+                    self._save_image_with_tracking(pil_img, node_dir, storage_filename, node_id, filename, edited=False, source_hash=incoming_hash)
+                    content_hash = incoming_hash
+                else:
+                    content_hash = stored_hash or self._compute_content_hash(array_uint8, f"pack_image_{i}")
+                img_tensor = torch.from_numpy(array_uint8.astype(np.float32) / 255.0)
                 reuse_list = prev_pack_id_map.get(content_hash)
                 image_id = None
                 if reuse_list:
@@ -359,20 +435,20 @@ class XIS_ImageManager:
                     pack_hash_usage[content_hash] += 1
                     image_id = self._compose_unique_id(content_hash, occurrence)
                 new_pack_id_map[content_hash].append({"id": image_id, "index": i})
-                images_list.append(img)
-                image_paths.append(filename)
-                pil_img = Image.fromarray(array_uint8, mode="RGBA")
+                images_list.append(img_tensor)
+                image_paths.append(storage_filename)
                 preview_b64 = self._generate_base64_thumbnail(pil_img)
                 image_previews.append({
                     "index": i,
                     "preview": preview_b64,
-                    "width": img.shape[1],
-                    "height": img.shape[0],
+                    "width": pil_img.width,
+                    "height": pil_img.height,
                     "filename": filename,
                     "originalFilename": filename,
                     "image_id": image_id,
                     "source": "pack_images",
-                    "content_hash": content_hash
+                    "content_hash": content_hash,
+                    "storage_filename": storage_filename
                 })
 
         self._pack_id_history = {
@@ -381,8 +457,11 @@ class XIS_ImageManager:
         }
 
         # Load uploaded images - only load images that belong to this specific node instance
-        node_dir = self._get_node_output_dir(node_id)
-        existing_filenames = {p["filename"] for p in image_previews}
+        existing_filenames = {
+            p.get("storage_filename") or p.get("storageFilename") or p.get("filename")
+            for p in image_previews
+            if p.get("filename")
+        }
         uploaded_hash_usage = defaultdict(int)
         
         # Load uploaded images for this node, sorted by upload time to preserve order
@@ -437,7 +516,8 @@ class XIS_ImageManager:
                     "originalFilename": filename,
                     "image_id": image_id,
                     "source": "uploaded",
-                    "content_hash": base_hash
+                    "content_hash": base_hash,
+                    "storage_filename": filename
                 })
                 # Add to created_files for backward compatibility
                 if filename not in self.created_files:
@@ -449,6 +529,25 @@ class XIS_ImageManager:
 
         self.image_previews = image_previews
         self.image_paths = image_paths
+
+        # If the incoming images differ from cached state (count or hashes), drop stale state to preserve order
+        preview_by_id = {p.get("image_id"): p for p in self.image_previews if p.get("image_id")}
+        matched_ids = [entry.get("id") for entry in parsed_state_entries if entry.get("id") in preview_by_id]
+        state_hash_mismatch = False
+        if parsed_state_entries and len(matched_ids) == len(parsed_state_entries) == len(preview_by_id):
+            for entry in parsed_state_entries:
+                entry_hash = _hash_from_entry(entry)
+                preview_hash = preview_by_id.get(entry.get("id"), {}).get("content_hash")
+                if entry_hash and preview_hash and entry_hash != preview_hash:
+                    state_hash_mismatch = True
+                    break
+        else:
+            state_hash_mismatch = True
+
+        if state_hash_mismatch:
+            parsed_state_entries = []
+            state_enabled_lookup = {}
+            state_order_lookup = {}
 
         preview_by_index = {p["index"]: p for p in self.image_previews}
         num_images = len(images_list)
@@ -600,7 +699,8 @@ class XIS_ImageManager:
                     "originalFilename": p.get("originalFilename", p["filename"]),
                     "image_id": p.get("image_id", ""),
                     "source": p.get("source", "pack_images"),
-                    "content_hash": p.get("content_hash")
+                    "content_hash": p.get("content_hash"),
+                    "storage_filename": p.get("storage_filename", p["filename"])
                 } for p in self.image_previews
             ],
             "image_order": [list(range(len(self.image_previews)))],  # Ensure iterable
@@ -620,7 +720,9 @@ class XIS_ImageManager:
                     "height": p.get("height"),
                     "index": p.get("index"),
                     "contentHash": p.get("content_hash"),
-                    "content_hash": p.get("content_hash")
+                    "content_hash": p.get("content_hash"),
+                    "storageFilename": p.get("storage_filename", p.get("filename")),
+                    "storage_filename": p.get("storage_filename", p.get("filename"))
                 }
                 for p in self.image_previews
             ]]
@@ -641,10 +743,11 @@ class XIS_ImageManager:
                     "originalFilename": p.get("originalFilename", p["filename"]),
                     "image_id": p.get("image_id", ""),
                     "source": p.get("source", "pack_images"),
-                    "content_hash": p.get("content_hash")
+                    "content_hash": p.get("content_hash"),
+                    "storage_filename": p.get("storage_filename", p.get("filename"))
                 } for p in data.get("image_previews", []) if p.get("filename")
             ]
-            self.image_paths = [p["filename"] for p in self.image_previews]
+            self.image_paths = [p.get("storage_filename", p["filename"]) for p in self.image_previews]
             pack_id_map = defaultdict(list)
             for preview in self.image_previews:
                 if preview.get("source") == "pack_images":
@@ -808,6 +911,25 @@ class XIS_ImageManager:
         )
         return fingerprint
 
+def _resolve_node_dir(node_id: str) -> str:
+    """Resolve the node-specific directory, ensuring it exists."""
+    base_dir = os.path.join(folder_paths.get_output_directory(), "xis_image_manager")
+    if node_id and node_id not in ("undefined", "null", ""):
+        base_dir = os.path.join(base_dir, f"node_{node_id}")
+    os.makedirs(base_dir, exist_ok=True)
+    return base_dir
+
+def _find_node_instance(node_id: str):
+    """Locate the XIS_ImageManager node instance by node_id."""
+    try:
+        from server import PromptServer
+        for node in PromptServer.instance.node_instances.values():
+            if getattr(node, "id", None) == node_id:
+                return node
+    except Exception as exc:
+        logger.error(f"Instance - Failed to find node {node_id}: {exc}")
+    return None
+
 # Register upload endpoint
 async def handle_upload(request):
     """Handle image uploads for XIS_ImageManager node."""
@@ -863,7 +985,8 @@ async def handle_upload(request):
                         f.write(json.dumps({
                             "node_id": node_id,
                             "original_filename": filename,
-                            "upload_time": time.time()
+                            "upload_time": time.time(),
+                            "edited": False
                         }))
                     logger.debug(f"Instance - Created tracking file for {img_filename} to node {node_id}")
                 except Exception as e:
@@ -872,6 +995,7 @@ async def handle_upload(request):
                 preview_b64 = XIS_ImageManager()._generate_base64_thumbnail(pil_img)
                 images.append({
                     "filename": img_filename,
+                    "storageFilename": img_filename,
                     "preview": preview_b64,
                     "width": pil_img.width,
                     "height": pil_img.height,
@@ -887,6 +1011,104 @@ async def handle_upload(request):
     except Exception as e:
         logger.error(f"Instance - Failed to handle upload request: {e}")
         return web.json_response({"error": f"Failed to process upload: {e}"}, status=400)
+
+async def handle_fetch_image(request):
+    """Return the original image for editing."""
+    try:
+        data = await request.json()
+        node_id = str(data.get("node_id") or "")
+        filename = data.get("storage_filename") or data.get("filename")
+        if not filename or not (filename.startswith("upload_image_") or filename.startswith("xis_image_manager_")):
+            return web.json_response({"error": "Invalid filename"}, status=400)
+        node_dir = _resolve_node_dir(node_id)
+        img_path = os.path.join(node_dir, filename)
+        if not os.path.exists(img_path):
+            return web.json_response({"error": "Image not found"}, status=404)
+        pil_img = Image.open(img_path).convert("RGBA")
+        buffered = BytesIO()
+        pil_img.save(buffered, format="PNG")
+        img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return web.json_response({
+            "image": img_b64,
+            "width": pil_img.width,
+            "height": pil_img.height,
+            "filename": filename
+        })
+    except Exception as exc:
+        logger.error(f"Instance - Failed to fetch image: {exc}")
+        return web.json_response({"error": f"Failed to fetch image: {exc}"}, status=500)
+
+async def handle_crop_image(request):
+    """Persist a cropped image and return updated preview metadata."""
+    try:
+        data = await request.json()
+        node_id = str(data.get("node_id") or "")
+        filename = data.get("storage_filename") or data.get("filename")
+        image_id = data.get("image_id") or ""
+        image_payload = data.get("image")
+        original_filename = data.get("originalFilename") or filename
+        incoming_source_hash = data.get("source_hash") or data.get("sourceHash")
+
+        if not filename or not (filename.startswith("upload_image_") or filename.startswith("xis_image_manager_")):
+            return web.json_response({"error": "Invalid filename for crop"}, status=400)
+        if not image_payload:
+            return web.json_response({"error": "Missing image payload"}, status=400)
+
+        node_dir = _resolve_node_dir(node_id)
+        try:
+            if "base64," in image_payload:
+                image_payload = image_payload.split("base64,", 1)[1]
+            img_bytes = base64.b64decode(image_payload)
+        except Exception:
+            return web.json_response({"error": "Invalid image data"}, status=400)
+
+        pil_img = Image.open(BytesIO(img_bytes)).convert("RGBA")
+        node_instance = _find_node_instance(node_id)
+        tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+        existing_source_hash = None
+        try:
+            if os.path.exists(tracking_file):
+                with open(tracking_file, "r") as f:
+                    tracking_data = json.loads(f.read() or "{}")
+                existing_source_hash = tracking_data.get("source_hash")
+        except Exception as exc:
+            logger.warning(f"Instance - Failed to read tracking for cropped image {filename}: {exc}")
+        source_hash = incoming_source_hash or existing_source_hash
+
+        if node_instance:
+            node_instance._save_image_with_tracking(pil_img, node_dir, filename, node_id, original_filename, edited=True, source_hash=source_hash)
+        else:
+            img_path = os.path.join(node_dir, filename)
+            pil_img.save(img_path, format="PNG")
+            try:
+                with open(tracking_file, 'w') as f:
+                    f.write(json.dumps({
+                        "node_id": node_id,
+                        "original_filename": original_filename or filename,
+                        "upload_time": time.time(),
+                        "edited": True,
+                        "source_hash": source_hash
+                    }))
+            except Exception as exc:
+                logger.warning(f"Instance - Failed to write tracking for cropped image {filename}: {exc}")
+
+        content_hash = XIS_ImageManager._compute_content_hash(np.array(pil_img, dtype=np.uint8), f"crop:{filename}")
+        thumbnail_generator = node_instance._generate_base64_thumbnail if node_instance else XIS_ImageManager()._generate_base64_thumbnail
+        preview_b64 = thumbnail_generator(pil_img)
+        if node_instance:
+            node_instance.created_files.add(filename)
+        return web.json_response({
+            "success": True,
+            "preview": preview_b64,
+            "width": pil_img.width,
+            "height": pil_img.height,
+            "filename": filename,
+            "storage_filename": filename,
+            "content_hash": content_hash
+        })
+    except Exception as exc:
+        logger.error(f"Instance - Failed to handle crop request: {exc}")
+        return web.json_response({"error": f"Failed to save cropped image: {exc}"}, status=500)
 
 # Register delete endpoint
 async def handle_delete(request):
@@ -950,10 +1172,12 @@ try:
     from server import PromptServer
     PromptServer.instance.app.add_routes([
         web.post('/upload/xis_image_manager', handle_upload),
+        web.post('/fetch_image/xis_image_manager', handle_fetch_image),
+        web.post('/crop/xis_image_manager', handle_crop_image),
         web.post('/delete/xis_image_manager', handle_delete),
         web.post('/set_ui_data/xis_image_manager', handle_set_ui_data),
     ])
-    logger.info("Registered /upload/xis_image_manager, /delete/xis_image_manager, and /set_ui_data/xis_image_manager endpoints")
+    logger.info("Registered /upload/xis_image_manager, /fetch_image/xis_image_manager, /crop/xis_image_manager, /delete/xis_image_manager, and /set_ui_data/xis_image_manager endpoints")
 except Exception as e:
     logger.error(f"Failed to register endpoints: {e}")
 

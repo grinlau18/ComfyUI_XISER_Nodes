@@ -35,6 +35,31 @@ export class StyleManager {
         this.currentTheme = 'default';
     }
 
+    sanitizeColor(value) {
+        if (typeof value !== "string") return null;
+        const trimmed = value.trim();
+        return trimmed ? trimmed : null;
+    }
+
+    resolveExternalColor(node) {
+        if (!node) return null;
+        const ctor = node.constructor || {};
+        const candidates = [
+            node.color,
+            node.boxcolor,
+            node.title_color,
+            node.bgcolor,
+            ctor.color,
+            ctor.title_color,
+            ctor.bgcolor
+        ];
+        for (const candidate of candidates) {
+            const color = this.sanitizeColor(candidate);
+            if (color) return color;
+        }
+        return null;
+    }
+
     /**
      * Applies a theme to a node.
      * @param {Object} node - The node object.
@@ -151,7 +176,9 @@ export class StyleManager {
     getNodeStyles(node) {
         const isMuteMode = node.mode === 2;
         const isPassMode = node.mode === 4 || node.flags?.bypassed === true;
-        const baseColor = node.color || node.properties.color || DEFAULT_COLOR;
+        const baseColor = this.sanitizeColor(node.properties?.color) ||
+            this.resolveExternalColor(node) ||
+            DEFAULT_COLOR;
 
         const percent = clamp(Number(node.properties?.textScalePercent ?? 50), 1, 100);
         node.properties.textScalePercent = percent;
@@ -167,7 +194,18 @@ export class StyleManager {
         const snapshot = node.properties._styleSnapshot || {};
 
         const textScalePercent = clamp(Number(node.properties.textScalePercent ?? 50), 1, 100);
-        const color = node.properties.color || node.color || DEFAULT_COLOR;
+        const propertyColor = this.sanitizeColor(node.properties.color);
+        const externalColor = this.resolveExternalColor(node);
+        const propertyChanged = !!propertyColor && propertyColor !== snapshot.color;
+        const externalChanged = !!externalColor && externalColor !== snapshot.color;
+
+        let color = propertyColor || externalColor || DEFAULT_COLOR;
+        if (externalChanged && !propertyChanged) {
+            color = externalColor;
+        } else if (!propertyColor && externalColor) {
+            color = externalColor;
+        }
+        color = this.sanitizeColor(color) || DEFAULT_COLOR;
         const backgroundAlpha = typeof node.properties.backgroundAlpha === "number"
             ? clamp(node.properties.backgroundAlpha, 0, 1)
             : 1;
@@ -175,6 +213,9 @@ export class StyleManager {
         let changed = false;
         if (node.color !== color) {
             node.color = color;
+            changed = true;
+        }
+        if (node.properties.color !== color) {
             node.properties.color = color;
             changed = true;
         }

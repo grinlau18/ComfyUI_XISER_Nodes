@@ -404,7 +404,7 @@ export class TextRenderer {
         segments.forEach((segment) => {
             if (!segment.text) return;
             const isLink = Boolean(segment.link_href);
-            const fillColor = isLink ? (segment.color || DEFAULT_FONT_COLOR) : (segment.color || line.color || DEFAULT_FONT_COLOR);
+            const fillColor = isLink ? (segment.color || line.color || DEFAULT_FONT_COLOR) : (segment.color || line.color || DEFAULT_FONT_COLOR);
             if (!segment.font) {
                 const measurement = this.measureSegment(ctx, segment.text, line, segment);
                 segment.font = measurement.font;
@@ -418,7 +418,14 @@ export class TextRenderer {
             ctx.fillText(segment.text, cursorX, yPos);
             if (isLink) {
                 this.drawLinkUnderline(ctx, cursorX, yPos, segment.width || 0, line, segment);
-                this.recordLinkHitbox(linkHitboxes, cursorX, yPos - scrollOffset, segment.width || 0, segment.font_size || line.font_size || DEFAULT_FONT_SIZE, segment.link_href);
+                this.recordLinkHitbox(
+                    linkHitboxes,
+                    cursorX,
+                    yPos - scrollOffset,
+                    segment.width || 0,
+                    segment.font_size || line.font_size || DEFAULT_FONT_SIZE,
+                    segment.link_href
+                );
             }
             cursorX += segment.width || 0;
         });

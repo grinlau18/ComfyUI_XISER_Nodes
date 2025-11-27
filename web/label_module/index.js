@@ -345,22 +345,20 @@ function setupLabelNode() {
             const originalOnMouseDown = nodeType.prototype.onMouseDown;
             nodeType.prototype.onMouseDown = function (event, localPos, graphCanvas) {
                 const handled = originalOnMouseDown?.call(this, event, localPos, graphCanvas);
-                if (handled === true) {
-                    return true;
-                }
                 if (!localPos || !Array.isArray(localPos)) {
                     return handled;
                 }
                 const [x, y] = localPos;
                 const hitboxes = this.properties?.linkHitboxes;
-                if (!Array.isArray(hitboxes) || !hitboxes.length) {
-                    return handled;
-                }
-                const target = hitboxes.find((box) => x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2);
-                if (target?.href) {
-                    const openTarget = event?.ctrlKey ? "_self" : "_blank";
-                    window.open(target.href, openTarget);
-                    return true;
+                if (Array.isArray(hitboxes) && hitboxes.length) {
+                    const target = hitboxes.find((box) => x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2);
+                    if (target?.href) {
+                        const openTarget = (event?.ctrlKey || event?.metaKey) ? "_self" : "_blank";
+                        window.open(target.href, openTarget);
+                        event?.preventDefault?.();
+                        event?.stopPropagation?.();
+                        return true;
+                    }
                 }
                 return handled;
             };

@@ -81,6 +81,14 @@ function normalizeOriginalFilename(entry) {
   return "";
 }
 
+function normalizeStorageFilename(entry) {
+  if (!entry) return "";
+  if (entry.storageFilename) return entry.storageFilename;
+  if (entry.storage_filename) return entry.storage_filename;
+  if (entry.filename) return entry.filename;
+  return "";
+}
+
 function normalizePreviewId(entry) {
   if (!entry) return "";
   return entry.image_id || entry.id || "";
@@ -103,6 +111,7 @@ function areImagePreviewsEqual(a, b) {
       (left.width ?? null) !== (right.width ?? null) ||
       (left.height ?? null) !== (right.height ?? null) ||
       (left.enabled ?? true) !== (right.enabled ?? true) ||
+      normalizeStorageFilename(left) !== normalizeStorageFilename(right) ||
       normalizeHash(left) !== normalizeHash(right)
     ) {
       return false;
@@ -127,6 +136,7 @@ function areImageStatesEqual(a, b) {
       (left.width ?? null) !== (right.width ?? null) ||
       (left.height ?? null) !== (right.height ?? null) ||
       (left.index ?? null) !== (right.index ?? null) ||
+      normalizeStorageFilename(left) !== normalizeStorageFilename(right) ||
       normalizeHash(left) !== normalizeHash(right)
     ) {
       return false;
@@ -607,6 +617,135 @@ function injectStyles() {
     }
     .xiser-image-manager-popup-cancel:hover {
       background: #5A5A5A;
+    }
+    .xiser-image-editor-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10020;
+      backdrop-filter: blur(2px);
+    }
+    .xiser-image-editor-panel {
+      width: 920px;
+      max-width: 92vw;
+      max-height: 88vh;
+      background: #0f1115;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .xiser-image-editor-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(90deg, rgba(29, 161, 242, 0.18), rgba(29, 161, 242, 0));
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .xiser-image-editor-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #F5F6F5;
+    }
+    .xiser-image-editor-close {
+      cursor: pointer;
+      color: rgba(245, 246, 245, 0.85);
+      font-size: 18px;
+      line-height: 18px;
+      padding: 4px;
+      transition: color 0.2s, transform 0.2s;
+    }
+    .xiser-image-editor-close:hover {
+      color: #fff;
+      transform: scale(1.05);
+    }
+    .xiser-image-editor-panel-body {
+      padding: 12px 16px 8px 16px;
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .xiser-image-editor-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: rgba(245, 246, 245, 0.8);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .xiser-image-editor-size {
+      font-weight: 600;
+      color: #1DA1F2;
+    }
+    .xiser-image-editor-canvas-shell {
+      border-radius: 10px;
+      background: radial-gradient(ellipse at top, rgba(29, 161, 242, 0.08), rgba(0, 0, 0, 0.35));
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 320px;
+    }
+    .xiser-image-editor-canvas {
+      max-width: 100%;
+      max-height: 560px;
+      width: auto;
+      background: #000;
+      border-radius: 6px;
+      cursor: crosshair;
+    }
+    .xiser-image-editor-info {
+      font-size: 12px;
+      color: rgba(245, 246, 245, 0.8);
+    }
+    .xiser-image-editor-footer {
+      padding: 8px 16px 14px 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .xiser-image-editor-button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      color: #F5F6F5;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, opacity 0.2s;
+      user-select: none;
+    }
+    .xiser-image-editor-button:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+    .xiser-image-editor-button.disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .xiser-image-editor-primary {
+      background: linear-gradient(135deg, #1DA1F2, #0d8cd6);
+      border-color: rgba(29, 161, 242, 0.4);
+      box-shadow: 0 6px 14px rgba(29, 161, 242, 0.35);
+    }
+    .xiser-image-editor-primary:hover {
+      background: linear-gradient(135deg, #33b2ff, #0d8cd6);
     }
   `;
   document.head.appendChild(style);

@@ -90,13 +90,14 @@ function reconcileImageState(imagePreviews, imageState) {
         source: entry.source ?? preview.source,
         filename: entry.filename ?? preview.filename,
         originalFilename: entry.originalFilename ?? preview.originalFilename,
-        width: entry.width ?? preview.width,
-        height: entry.height ?? preview.height,
-        index: preview.index,
-        contentHash: entry.contentHash ?? entry.content_hash ?? preview.content_hash ?? preview.contentHash ?? null
-      });
-      seen.add(entry.id);
-    }
+      width: entry.width ?? preview.width,
+      height: entry.height ?? preview.height,
+      index: preview.index,
+      contentHash: entry.contentHash ?? entry.content_hash ?? preview.content_hash ?? preview.contentHash ?? null,
+      storageFilename: entry.storageFilename ?? entry.storage_filename ?? preview.storageFilename ?? preview.storage_filename ?? preview.filename
+    });
+    seen.add(entry.id);
+  }
   }
 
   for (const preview of imagePreviews) {
@@ -110,7 +111,8 @@ function reconcileImageState(imagePreviews, imageState) {
       width: preview.width,
       height: preview.height,
       index: preview.index,
-      contentHash: preview.content_hash || preview.contentHash || null
+      contentHash: preview.content_hash || preview.contentHash || null,
+      storageFilename: preview.storageFilename || preview.storage_filename || preview.filename
     });
   }
 
@@ -155,7 +157,8 @@ function serializeImageState(imageState, nodeId) {
     width: entry.width ?? null,
     height: entry.height ?? null,
     index: entry.index ?? null,
-    contentHash: entry.contentHash ?? entry.content_hash ?? null
+    contentHash: entry.contentHash ?? entry.content_hash ?? null,
+    storageFilename: entry.storageFilename ?? entry.storage_filename ?? entry.filename ?? null
   }));
 
   return JSON.stringify({ node_id: nodeId, images });
@@ -182,7 +185,8 @@ function buildStateFromLegacy(imagePreviews, imageOrder = [], enabledLayers = []
       width: preview.width,
       height: preview.height,
       index: preview.index,
-      contentHash: preview.content_hash || preview.contentHash || null
+      contentHash: preview.content_hash || preview.contentHash || null,
+      storageFilename: preview.storageFilename || preview.storage_filename || preview.filename
     });
     seen.add(preview.image_id);
   });
@@ -199,7 +203,8 @@ function buildStateFromLegacy(imagePreviews, imageOrder = [], enabledLayers = []
       width: preview.width,
       height: preview.height,
       index: preview.index,
-      contentHash: preview.content_hash || preview.contentHash || null
+      contentHash: preview.content_hash || preview.contentHash || null,
+      storageFilename: preview.storageFilename || preview.storage_filename || preview.filename
     });
     seen.add(preview.image_id);
   });
