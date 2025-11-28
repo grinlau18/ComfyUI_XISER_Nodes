@@ -4,7 +4,7 @@
  * @author grinlau18
  */
 
-import { log } from './xis_shape_utils.js';
+import { log } from "./shape_utils.js";
 
 /**
  * 保存形状状态到节点

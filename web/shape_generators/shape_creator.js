@@ -4,7 +4,7 @@
  * @author grinlau18
  */
 
-import { log, normalizeColor, modeToShapeType, DEFAULT_MODE_SELECTION } from './xis_shape_utils.js';
+import { log, normalizeColor, modeToShapeType, DEFAULT_MODE_SELECTION } from "./shape_utils.js";
 import ShapeRegistry from './registry.js';
 import { getFontManager } from './text.js';
 

@@ -5,7 +5,7 @@
  */
 
 import { app } from "/scripts/app.js";
-import { setupCanvas, updateDisplay, setupInputListeners, removeInputListeners, updateCanvasSize } from "./XIS_CurveEditor_canvas.js";
+import { setupCanvas, updateDisplay, setupInputListeners, removeInputListeners, updateCanvasSize } from "./curve_editor_canvas.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"

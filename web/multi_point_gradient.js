@@ -5,7 +5,7 @@
  */
 
 import { app } from "/scripts/app.js";
-import { setupCanvas, updateDisplay, setupInputListeners, updateCanvasSize } from "./XIS_MultiPointGradient_canvas.js";
+import { setupCanvas, updateDisplay, setupInputListeners, updateCanvasSize } from "./multi_point_gradient_canvas.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"

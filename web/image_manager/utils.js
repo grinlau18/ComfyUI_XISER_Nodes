@@ -618,134 +618,201 @@ function injectStyles() {
     .xiser-image-manager-popup-cancel:hover {
       background: #5A5A5A;
     }
-    .xiser-image-editor-overlay {
+    .vscode-image-editor-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.65);
+      background: rgba(0, 0, 0, 0.75);
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 10020;
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(4px);
     }
-    .xiser-image-editor-panel {
+    .vscode-image-editor-panel {
       width: 920px;
       max-width: 92vw;
       max-height: 88vh;
-      background: #0f1115;
-      border-radius: 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+      background: #1e1e1e;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid #3c3c3c;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    .xiser-image-editor-panel-header {
+    .vscode-image-editor-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 12px 16px;
-      background: linear-gradient(90deg, rgba(29, 161, 242, 0.18), rgba(29, 161, 242, 0));
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: #2d2d30;
+      border-bottom: 1px solid #3c3c3c;
     }
-    .xiser-image-editor-title {
-      font-size: 14px;
+    .vscode-image-editor-title {
+      font-size: 13px;
       font-weight: 600;
-      color: #F5F6F5;
+      color: #cccccc;
     }
-    .xiser-image-editor-close {
+    .vscode-image-editor-close {
       cursor: pointer;
-      color: rgba(245, 246, 245, 0.85);
-      font-size: 18px;
-      line-height: 18px;
-      padding: 4px;
-      transition: color 0.2s, transform 0.2s;
+      color: #cccccc;
+      font-size: 16px;
+      line-height: 16px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: background 0.2s, color 0.2s;
     }
-    .xiser-image-editor-close:hover {
-      color: #fff;
-      transform: scale(1.05);
+    .vscode-image-editor-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
     }
-    .xiser-image-editor-panel-body {
-      padding: 12px 16px 8px 16px;
+    .vscode-image-editor-body {
+      padding: 16px;
       flex: 1;
       overflow: auto;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
+      background: #1e1e1e;
     }
-    .xiser-image-editor-meta {
+    .vscode-image-editor-meta {
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-size: 12px;
-      color: rgba(245, 246, 245, 0.8);
-      background: rgba(255, 255, 255, 0.03);
-      padding: 8px 10px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: #cccccc;
+      background: #252526;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: 1px solid #3c3c3c;
     }
-    .xiser-image-editor-size {
+    .vscode-image-editor-meta-left {
+      flex: 1;
+    }
+    .vscode-image-editor-meta-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .vscode-image-editor-size {
       font-weight: 600;
-      color: #1DA1F2;
+      color: #007acc;
+      min-width: 120px;
+      text-align: right;
     }
-    .xiser-image-editor-canvas-shell {
-      border-radius: 10px;
-      background: radial-gradient(ellipse at top, rgba(29, 161, 242, 0.08), rgba(0, 0, 0, 0.35));
-      padding: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    .vscode-image-editor-canvas-shell {
+      border-radius: 4px;
+      background: #252526;
+      padding: 12px;
+      border: 1px solid #3c3c3c;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 320px;
+      flex: 1;
+      overflow: hidden;
+      min-height: 200px;
     }
-    .xiser-image-editor-canvas {
-      max-width: 100%;
-      max-height: 560px;
-      width: auto;
+    .vscode-image-editor-canvas {
       background: #000;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: crosshair;
+      border: 1px solid #3c3c3c;
     }
-    .xiser-image-editor-info {
+    .vscode-image-editor-info {
       font-size: 12px;
-      color: rgba(245, 246, 245, 0.8);
+      color: #cccccc;
+      text-align: center;
+      padding: 8px;
     }
-    .xiser-image-editor-footer {
-      padding: 8px 16px 14px 16px;
+    .vscode-image-editor-footer {
+      padding: 12px 16px;
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(255, 255, 255, 0.02);
+      border-top: 1px solid #3c3c3c;
+      background: #2d2d30;
     }
-    .xiser-image-editor-button {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(255, 255, 255, 0.06);
-      color: #F5F6F5;
+    .vscode-button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1px solid #3c3c3c;
+      background: #0e639c;
+      color: #ffffff;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: background 0.2s, transform 0.1s, opacity 0.2s;
+      transition: background 0.2s, border-color 0.2s;
       user-select: none;
+      min-width: 80px;
+      text-align: center;
     }
-    .xiser-image-editor-button:hover {
-      background: rgba(255, 255, 255, 0.12);
+    .vscode-button:hover {
+      background: #1177bb;
+      border-color: #4d4d4d;
     }
-    .xiser-image-editor-button.disabled {
+    .vscode-button.disabled {
       opacity: 0.6;
       cursor: not-allowed;
-      transform: none;
+      background: #3c3c3c;
     }
-    .xiser-image-editor-primary {
-      background: linear-gradient(135deg, #1DA1F2, #0d8cd6);
-      border-color: rgba(29, 161, 242, 0.4);
-      box-shadow: 0 6px 14px rgba(29, 161, 242, 0.35);
+    .vscode-button-secondary {
+      background: #3c3c3c;
+      border-color: #4d4d4d;
     }
-    .xiser-image-editor-primary:hover {
-      background: linear-gradient(135deg, #33b2ff, #0d8cd6);
+    .vscode-button-secondary:hover {
+      background: #4d4d4d;
+      border-color: #5a5a5a;
+    }
+    .vscode-button-primary {
+      background: #0e639c;
+      border-color: #1177bb;
+    }
+    .vscode-button-primary:hover {
+      background: #1177bb;
+      border-color: #138cdd;
+    }
+    /* ComfyUI Toggle Styles */
+    .comfyui-toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .comfyui-toggle {
+      appearance: none;
+      width: 32px;
+      height: 16px;
+      background: #3c3c3c;
+      border-radius: 8px;
+      position: relative;
+      cursor: pointer;
+      border: 1px solid #4d4d4d;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .comfyui-toggle:checked {
+      background: #0e639c;
+      border-color: #1177bb;
+    }
+    .comfyui-toggle::before {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #cccccc;
+      top: 1px;
+      left: 1px;
+      transition: transform 0.2s;
+    }
+    .comfyui-toggle:checked::before {
+      transform: translateX(16px);
+      background: #ffffff;
+    }
+    .comfyui-toggle-label {
+      font-size: 12px;
+      color: #cccccc;
+      cursor: pointer;
+      user-select: none;
     }
   `;
   document.head.appendChild(style);

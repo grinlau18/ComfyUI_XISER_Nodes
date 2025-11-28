@@ -4,7 +4,7 @@
  * @author grinlau18
  */
 
-import { log, getGridColor } from './xis_shape_utils.js';
+import { log, getGridColor } from "./shape_utils.js";
 
 /**
  * 创建网格系统

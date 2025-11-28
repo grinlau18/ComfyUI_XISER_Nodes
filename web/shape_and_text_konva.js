@@ -9,13 +9,13 @@ import ShapeRegistry from "./shape_generators/registry.js";
 import KonvaWheelInteraction from "./shape_generators/konva_wheel_interaction.js";
 
 // 导入模块化组件
-import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from "./shape_generators/xis_shape_utils.js";
-import { createKonvaShape, updateKonvaShape, setStateManagementFunctions, getBaseShapeSize } from "./shape_generators/xis_shape_creator.js";
-import { createResetButton, createCenterAlignButton, createVerticalAlignButton, createSettingsButton, createGridToggleButton, createHelpButton, updateButtonPositions } from "./shape_generators/xis_button_manager.js";
-import { createGridSystem, updateGridColor } from "./shape_generators/xis_grid_system.js";
-import { saveShapeState, restoreShapeState, resetShapeState, centerAlignShape, verticalAlignShape, updateCanvasBackground } from "./shape_generators/xis_state_manager.js";
-import { setupInputListeners, setupParametricControls, initializeWidgetsFromProperties, setControlDependencies } from "./shape_generators/xis_control_manager.js";
-import { createHelpPanel } from "./shape_generators/xis_help_overlay.js";
+import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from "./shape_generators/shape_utils.js";
+import { createKonvaShape, updateKonvaShape, setStateManagementFunctions, getBaseShapeSize } from "./shape_generators/shape_creator.js";
+import { createResetButton, createCenterAlignButton, createVerticalAlignButton, createSettingsButton, createGridToggleButton, createHelpButton, updateButtonPositions } from "./shape_generators/button_manager.js";
+import { createGridSystem, updateGridColor } from "./shape_generators/grid_system.js";
+import { saveShapeState, restoreShapeState, resetShapeState, centerAlignShape, verticalAlignShape, updateCanvasBackground } from "./shape_generators/state_manager.js";
+import { setupInputListeners, setupParametricControls, initializeWidgetsFromProperties, setControlDependencies } from "./shape_generators/control_manager.js";
+import { createHelpPanel } from "./shape_generators/help_overlay.js";
 
 // 日志级别控制
 const LOG_LEVEL = "error"; // Options: "info", "warning", "error"

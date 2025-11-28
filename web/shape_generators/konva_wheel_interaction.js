@@ -1,4 +1,4 @@
-import { saveShapeState as persistShapeState } from "./xis_state_manager.js";
+import { saveShapeState as persistShapeState } from "./state_manager.js";
 
 /**
  * Konva Wheel Interaction Module

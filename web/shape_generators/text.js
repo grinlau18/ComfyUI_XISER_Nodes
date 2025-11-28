@@ -2,7 +2,7 @@
  * Text mode controls and font manager
  */
 
-import { log } from "./xis_shape_utils.js";
+import { log } from "./shape_utils.js";
 
 class XISFontManager {
   constructor() {

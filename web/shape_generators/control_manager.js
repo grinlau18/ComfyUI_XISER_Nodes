@@ -4,9 +4,9 @@
  * @author grinlau18
  */
 
-import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from './xis_shape_utils.js';
-import { updateKonvaShape } from './xis_shape_creator.js';
-import { updateCanvasBackground } from './xis_state_manager.js';
+import { log, normalizeColor, modeToShapeType, shapeTypeToMode, DEFAULT_MODE_SELECTION } from "./shape_utils.js";
+import { updateKonvaShape } from "./shape_creator.js";
+import { updateCanvasBackground } from "./state_manager.js";
 
 /**
  * 监听输入控件变化
