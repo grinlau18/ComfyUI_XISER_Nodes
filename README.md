@@ -51,6 +51,7 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - Visual toolkit comprising curve/path/gradient editors, ImageManager, shape/text generators, color controls, and label helpers.
 - Image/mask/file utilities for blending, cropping, resizing, reordering, mirroring, and PSD layer handling.
 - Data and workflow support through shape summaries, guard checks, shorthand serializers, list extractors, and divisible sizing.
+- LLM automation workflows powered by DeepSeek with an extensible provider interface ready for future models.
 
 ### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
 - **What makes it special**: the central visual playground for multi-layer composition, blending, and mask-aware editing.
@@ -66,6 +67,15 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 ![XIS_Canvas导入PSD进行区域重绘工作流](img/XIS_Canvas_2.jpeg)
 #### Workflow Example: Regional Redrawing After Image Layered Typesetting
 ![XIS_Canvas图像合成加区域重绘工作流](img/XIS_Canvas_3.jpeg)
+
+### 🤖 LLM Automation Bridge (XIS_LLMOrchestrator)
+- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (DeepSeek to start) and emit the reply as a STRING output for downstream nodes.
+- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and the optional vision inputs (`image`, `pack_images`).
+- **Attachments**: Incoming tensors are encoded to PNG base64 payloads before being passed to the provider, automatically truncating to the provider's supported image count.
+- **Extensibility**: Providers register via a lightweight config + interface so new vendors or custom endpoints can be attached without touching node logic.
+- **Vision Support**: When `image`/`pack_images` inputs are used the node transparently switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), so each request contains `input_text` + `input_image` blocks that satisfy their schema.
+  ![XIS_LLMOrchestrator节点界面](img/XIS_LLMOrchestrator_1.jpeg)
+  ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_2.jpeg)
 
 ### ✨ Visual + Node Toolkit
 - **XIS_CurveEditor**: Sculpt distribution curves for INT/FLOAT/HEX outputs, with a widget that exposes Bézier grips and HSV/RGB/LAB color interpolation.
@@ -92,6 +102,10 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
   ![Text Label Feature](img/XIS_Label_1.jpeg)
 ### 🧰 Image, Mask & File Nodes
+- **XIS_ImagePuzzle**: Advanced image stitching with four layout types (left-main, right-main, top-main, bottom-main), supporting multiple main images with proper spacing and alignment.
+  ![文本标签功能](img/XIS_ImagePuzzle_1.jpeg)
+  ![文本标签功能](img/XIS_ImagePuzzle_2.jpeg)
+  
 - **XIS_ImageAdjustAndBlend**: Adjust brightness, contrast, saturation, hue, RGB gains, and blend modes with optional mask/background mixes.
 - **XIS_CropImage**: Crop via masks, invert masks on demand, and fill backgrounds with color or padding.
 - **XIS_ResizeImageOrMask**: Resize with multiple strategies (force, aspect ratio, canvas limit) plus interpolation choices and shrink/expand toggles.

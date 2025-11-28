@@ -50,6 +50,7 @@
 - 可视化节点套件包含曲线/路径/渐变编辑器、图像管理、形状/文本生成、节点配色与标签助手。
 - 图像/蒙版/文件工具涵盖调色、裁剪、缩放、重新排序、镜像与 PSD 图层处理。
 - 数据与工作流支持包括形状摘要、信号检测、简写序列化、列表抽取与可整除尺寸修正。
+- 借助 DeepSeek 的 LLM 自动化能力，配合可扩展的提供方接口，后续可无缝接入更多大模型。
 
 ### 🖼️ 多图层画布枢纽（XIS_Canvas）
 - **精华**：集成 BiRefNet 抠图、PSD 导入、图层变换、蒙版生成与 20 步历史的主控画布。
@@ -65,6 +66,15 @@
 ![XIS_Canvas导入PSD进行区域重绘工作流](img/XIS_Canvas_2.jpeg)
 #### 图像分层排版后进行区域重绘的工作流示例
 ![XIS_Canvas图像合成加区域重绘工作流](img/XIS_Canvas_3.jpeg)
+
+### 🤖 LLM 自动化桥（XIS_LLMOrchestrator）
+- **用途**：将指令以及可选的 `image` / `pack_images` 张量发送给所选 LLM 提供方（目前内置 DeepSeek），输出下游节点可直接读取的 STRING 文本。
+- **输入**：包含 API Key 字段、自由文本指令、可选系统提示、可调温度/Top-P/最大 Token，并支持图像与图像包的视觉输入。
+- **附件处理**：节点会自动把所有输入图像转成 PNG Base64 字符串，根据模型上限自动截断，方便在一个请求中附带多张图。
+- **扩展性**：提供者通过轻量配置 + 接口注册，即可新增更多模型或自建推理端点，而无需改动节点核心逻辑。
+- **视觉输入**：当 `image` / `pack_images` 有连接时，节点会自动切换到 DeepSeek 的 `responses` 接口，使用 OpenAI 兼容的 `input_text`+`input_image` 结构发送多模态请求，确保符合官方校验规则。
+  ![XIS_LLMOrchestrator节点界面](img/XIS_LLMOrchestrator_1.jpeg)
+  ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_2.jpeg)
 
 ### ✨ 可视节点工具包
 - **XIS_CurveEditor**：编辑 INT/FLOAT/HEX 曲线，提供可调的贝塞尔点以及 HSV/RGB/LAB 颜色插值。
@@ -101,6 +111,10 @@
 ---
 
 ### 🧰 图像、蒙版与文件节点
+- **XIS_ImagePuzzle**：高级图像拼接功能，支持四种布局类型（左主右副、右主左副、上主下副、下主上副），多张主图支持正确间距和对齐。 
+  ![文本标签功能](img/XIS_ImagePuzzle_1.jpeg)
+  ![文本标签功能](img/XIS_ImagePuzzle_2.jpeg)
+  
 - **XIS_ImageAdjustAndBlend**：调节亮度/对比/饱和/色相、RGB 增益与混合模式，可混入蒙版和背景。
 - **XIS_CropImage**：使用蒙版裁剪，支持蒙版反转与背景色填充，并可设定边距。
 - **XIS_ResizeImageOrMask**：多种缩放策略（强制、等比、画布限制）与插值器，支持只放/只缩等条件。

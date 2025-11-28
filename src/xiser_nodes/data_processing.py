@@ -154,6 +154,94 @@ class XIS_PackImages:
         return (normalized_images,)
 
 
+class XIS_UnpackImages:
+    """
+    将 pack_images 数据还原成列表和批量 IMAGE。
+    - image_list: 原始的图像列表（每张为 HWC RGBA 张量）
+    - image_batch: 规范化尺寸后的批量张量 (N, H, W, 4)，会根据首张图尺寸自动调整其他图尺寸
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "pack_images": ("IMAGE", {"default": None}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("image_list", "image_batch")
+    OUTPUT_IS_LIST = (True, False)
+    FUNCTION = "unpack_images"
+    CATEGORY = "XISER_Nodes/Data_Processing"
+
+    def unpack_images(self, pack_images: Optional[List[torch.Tensor]] = None):
+        if pack_images is None or not isinstance(pack_images, list) or len(pack_images) == 0:
+            logger.warning("XIS_UnpackImages received empty pack_images input")
+            return ([], torch.empty(0, 0, 0, 4))
+
+        original_images: List[torch.Tensor] = []  # HWC RGBA, keep original sizes
+        processed_images: List[torch.Tensor] = []  # HWC RGBA for batching
+
+        for idx, img in enumerate(pack_images):
+            if not isinstance(img, torch.Tensor):
+                logger.error(f"pack_images[{idx}] is not a torch.Tensor: {type(img)}")
+                raise ValueError("All pack_images items must be torch.Tensor")
+            if len(img.shape) != 3:
+                logger.error(f"pack_images[{idx}] has invalid shape {img.shape}, expected (H, W, C)")
+                raise ValueError("Each pack_images item must be a 3D tensor (H, W, C)")
+            if img.shape[-1] not in (3, 4):
+                logger.error(f"pack_images[{idx}] has invalid channel count {img.shape[-1]}, expected 3 or 4")
+                raise ValueError("Each pack_images item must have 3 or 4 channels")
+
+            # 保证 RGBA
+            if img.shape[-1] == 3:
+                alpha = torch.ones_like(img[..., :1])
+                img = torch.cat([img, alpha], dim=-1)
+
+            original_images.append(img)
+            processed_images.append(img)
+
+        # 构建批量张量，自动调整到首张图尺寸
+        target_h, target_w = processed_images[0].shape[:2]
+        batch_tensors: List[torch.Tensor] = []
+        for idx, img in enumerate(processed_images):
+            if img.shape[0] != target_h or img.shape[1] != target_w:
+                logger.info(f"Resizing image {idx} from {img.shape[:2]} to {(target_h, target_w)} for batching")
+                resized = F.interpolate(
+                    img.permute(2, 0, 1).unsqueeze(0),
+                    size=(target_h, target_w),
+                    mode="bilinear",
+                    align_corners=False,
+                ).squeeze(0).permute(1, 2, 0)
+                batch_tensors.append(resized)
+            else:
+                batch_tensors.append(img)
+
+        image_batch = torch.stack(batch_tensors, dim=0)
+        image_list = [img.unsqueeze(0) for img in original_images]  # each element is a 1-batch IMAGE like MakeImageList
+        return (image_list, image_batch)
+
+    @staticmethod
+    def IS_CHANGED(pack_images: Optional[List[torch.Tensor]] = None) -> str:
+        """Lightweight hash to detect changes in pack_images."""
+        hasher = hashlib.sha256()
+        if pack_images is None or not isinstance(pack_images, list) or len(pack_images) == 0:
+            hasher.update("empty".encode("utf-8"))
+            return hasher.hexdigest()
+
+        hasher.update(f"len:{len(pack_images)}".encode("utf-8"))
+        for idx, img in enumerate(pack_images):
+            if isinstance(img, torch.Tensor):
+                hasher.update(f"{idx}:{tuple(img.shape)}:{img.dtype}".encode("utf-8"))
+                if img.numel() > 0:
+                    sample = img.flatten()[:100].cpu().numpy().tobytes()
+                    hasher.update(sample)
+            else:
+                hasher.update(f"{idx}:invalid".encode("utf-8"))
+        return hasher.hexdigest()
+
+
 class XIS_MergePackImages:
     """A custom node to merge up to 5 pack_images inputs into a single pack_images output."""
 
@@ -387,6 +475,7 @@ class XIS_KSamplerSettingsUnpackNode:
 
 NODE_CLASS_MAPPINGS = {
     "XIS_PackImages": XIS_PackImages,
+    "XIS_UnpackImages": XIS_UnpackImages,
     "XIS_MergePackImages": XIS_MergePackImages,
     "XIS_KSamplerSettingsNode": XIS_KSamplerSettingsNode,
     "XIS_KSamplerSettingsUnpackNode": XIS_KSamplerSettingsUnpackNode,

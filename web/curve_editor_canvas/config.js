@@ -1,4 +1,4 @@
-import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT, NODE_UI_WIDTH, NODE_UI_HEIGHT } from "../XIS_CurveEditor.js";
+import { MIN_NODE_WIDTH, MIN_NODE_HEIGHT, NODE_UI_WIDTH, NODE_UI_HEIGHT } from "../curve_editor.js";
 
 const LOG_LEVEL = "error";
 const CANVAS_WIDTH = 540;

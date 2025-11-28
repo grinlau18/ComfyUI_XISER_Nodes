@@ -56,17 +56,6 @@ export class ParserManager {
         node.properties.lastParsedSource = node.properties.lastParsedSource || {};
         node.properties.lastParsedResult = node.properties.lastParsedResult || {};
 
-        if (node.properties.lastParsedSource[cacheKey] === newText) {
-            const cachedResult = node.properties.lastParsedResult[cacheKey];
-            if (cachedResult) {
-                node.properties.parsedTextData = cachedResult;
-                node.properties.parsedTextMode = mode;
-                logger.debug(`[ParserManager] ${mode} text unchanged, reused cached parsed data`);
-                return cachedResult;
-            }
-            logger.debug(`[ParserManager] ${mode} text unchanged but no cached parsed data, reparsing`);
-        }
-
         const result = parser.update(node, newText, mode);
         node.properties.lastParsedSource[cacheKey] = newText;
         node.properties.lastParsedResult[cacheKey] = node.properties.parsedTextData;
