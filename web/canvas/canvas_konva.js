@@ -22,9 +22,64 @@ import { updateHistory } from './canvas_history.js';
 export function initializeKonva(node, nodeState, boardContainer, boardWidth, boardHeight, borderWidth, canvasColor, borderColor) {
   const log = nodeState.log || console;
 
-  // Define step constants for wheel interactions
-  const ROTATION_STEP = 1; // Rotation step size (1 degree)
-  const SCALE_STEP = 0.01; // Scaling step size (1%)
+  // 定义滚轮交互的步进常量，并封装统一的处理函数
+  const ROTATION_STEP = 1; // 旋转步进（度）
+  const SCALE_STEP = 0.01; // 缩放步进（比例）
+  const handleWheel = (evt) => {
+    if (!nodeState.transformer) return;
+    const target = nodeState.transformer.nodes()[0];
+    if (!target || !nodeState.imageNodes.includes(target)) return;
+
+    const index = nodeState.imageNodes.indexOf(target);
+    if (index === -1 || !nodeState.imageNodes[index]) return;
+
+    nodeState.isInteracting = true;
+    if (!nodeState.isTransforming) {
+      nodeState.isTransforming = true;
+      nodeState.transformStartState = {
+        x: target.x(),
+        y: target.y(),
+        scaleX: target.scaleX(),
+        scaleY: target.scaleY(),
+        rotation: target.rotation(),
+      };
+    }
+
+    const isAltPressed = evt.altKey;
+    if (isAltPressed) {
+      const currentRotation = target.rotation();
+      const delta = evt.deltaY > 0 ? -ROTATION_STEP : ROTATION_STEP;
+      target.rotation(currentRotation + delta);
+    } else {
+      const oldScaleX = target.scaleX();
+      const oldScaleY = target.scaleY();
+      const scaleFactor = evt.deltaY > 0 ? (1 - SCALE_STEP) : (1 + SCALE_STEP);
+      const newScaleX = Math.min(Math.max(oldScaleX * scaleFactor, 0.1), 10);
+      const newScaleY = Math.min(Math.max(oldScaleY * scaleFactor, 0.1), 10);
+      target.scaleX(newScaleX);
+      target.scaleY(newScaleY);
+    }
+
+    // 立刻更新状态与 widget，保持与后端同步
+    nodeState.initialStates[index] = mergeStateWithAdjustments(nodeState.initialStates[index], {
+      x: target.x(),
+      y: target.y(),
+      scaleX: target.scaleX(),
+      scaleY: target.scaleY(),
+      rotation: target.rotation(),
+    });
+    node.properties.image_states = nodeState.initialStates;
+    const imageStatesWidget = node.widgets.find((w) => w.name === 'image_states');
+    if (imageStatesWidget) {
+      imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+    }
+    node.setProperty('image_states', nodeState.initialStates);
+    nodeState.imageLayer.batchDraw();
+    updateHistory(nodeState, true);
+    nodeState.isTransforming = false;
+    nodeState.transformStartState = null;
+    nodeState.isInteracting = false;
+  };
 
   if (!window.Konva) {
     log.error(`Konva.js not available for node ${node.id}`);
@@ -55,9 +110,22 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     if (evt?.stopImmediatePropagation) evt.stopImmediatePropagation();
   };
   const stopWheelCapture = (evt) => {
-    // 阻止默认滚轮缩放，但允许事件继续传播到 Konva listener
+    // 阻止默认滚轮，阻断到 LiteGraph，并直接触发本节点逻辑
     if (evt?.preventDefault) evt.preventDefault();
+    if (evt?.stopPropagation) evt.stopPropagation();
+    if (evt?.stopImmediatePropagation) evt.stopImmediatePropagation();
+    handleWheel(evt);
   };
+  // 全局捕获：鼠标在本节点区域内时，也阻断 LiteGraph 的缩放
+  const globalWheelCapture = (evt) => {
+    if (!stageWrapper.contains(evt.target)) return;
+    if (evt?.preventDefault) evt.preventDefault();
+    if (evt?.stopPropagation) evt.stopPropagation();
+    if (evt?.stopImmediatePropagation) evt.stopImmediatePropagation();
+    handleWheel(evt);
+  };
+  window.addEventListener('wheel', globalWheelCapture, { capture: true, passive: false });
+  nodeState.globalWheelCapture = globalWheelCapture;
   stageContainer.addEventListener('pointerdown', stopPropagationCapture, { capture: true });
   stageContainer.addEventListener('pointermove', stopPropagationCapture, { capture: true });
   stageContainer.addEventListener('pointerup', stopPropagationCapture, { capture: true });
@@ -329,6 +397,12 @@ export function destroyKonva(nodeState) {
   nodeState.stage.destroy();
   nodeState.stage = null;
 
+  // 移除全局滚轮捕获
+  if (nodeState.globalWheelCapture) {
+    window.removeEventListener('wheel', nodeState.globalWheelCapture, { capture: true });
+    nodeState.globalWheelCapture = null;
+  }
+
   // Remove stage container
   if (stageContainer && stageContainer.parentNode) {
     stageContainer.remove();
@@ -522,51 +596,11 @@ export function setupWheelEvents(node, nodeState) {
     nodeState.transformStartState = null;
   }, 300);
 
-  // Wheel event handler for zooming and rotating
+  // Konva 内部监听，防漏网之鱼
   nodeState.stage.on('wheel', (e) => {
-    e.evt?.preventDefault?.(); // 阻止浏览器默认滚动
-    e.evt?.stopPropagation?.(); // 阻断冒泡到 ComfyUI 画布
-    const target = nodeState.transformer.nodes()[0];
-    if (!target || !nodeState.imageNodes.includes(target)) return;
-
-    const index = nodeState.imageNodes.indexOf(target);
-    if (index === -1 || !nodeState.imageNodes[index]) {
-      log.warn(`Invalid or null target at index ${index} in node ${node.id}`);
-      return;
-    }
-
-    nodeState.isInteracting = true;
-    if (!nodeState.isTransforming) {
-      // Start of transformation
-      nodeState.isTransforming = true;
-      nodeState.transformStartState = {
-        x: target.x(),
-        y: target.y(),
-        scaleX: target.scaleX(),
-        scaleY: target.scaleY(),
-        rotation: target.rotation(),
-      };
-    }
-
-    const isAltPressed = e.evt.altKey;
-    if (isAltPressed) {
-      const currentRotation = target.rotation();
-      const delta = e.evt.deltaY > 0 ? -ROTATION_STEP : ROTATION_STEP;
-      target.rotation(currentRotation + delta);
-    } else {
-      // Preserve independent scaling ratios
-      const oldScaleX = target.scaleX();
-      const oldScaleY = target.scaleY();
-      const scaleFactor = e.evt.deltaY > 0 ? (1 - SCALE_STEP) : (1 + SCALE_STEP);
-      const newScaleX = Math.min(Math.max(oldScaleX * scaleFactor, 0.1), 10);
-      const newScaleY = Math.min(Math.max(oldScaleY * scaleFactor, 0.1), 10);
-      target.scaleX(newScaleX);
-      target.scaleY(newScaleY);
-    }
-
-    updateState(target, index, false); // Update state without history
-    debouncedUpdateHistory(); // Schedule history update
-    nodeState.isInteracting = false;
+    e.evt?.preventDefault?.();
+    e.evt?.stopPropagation?.();
+    handleWheel(e.evt);
   });
 
   // Ensure drag stops on mouseup/touchend to avoid unintended follow
