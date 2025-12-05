@@ -466,14 +466,10 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   };
 
   const attachOutsideHandler = () => {
-    if (outsideClickHandler) return;
-    outsideClickHandler = (evt) => handleOutsidePointer(evt);
-    document.addEventListener('pointerdown', outsideClickHandler, true);
+    // Vue 下避免全局捕获，暂不绑定全局 pointerdown
   };
 
   const detachOutsideHandler = () => {
-    if (!outsideClickHandler) return;
-    document.removeEventListener('pointerdown', outsideClickHandler, true);
     outsideClickHandler = null;
   };
 
@@ -567,8 +563,8 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   const endDrag = () => {
     if (!dragState.active) return;
     dragState.active = false;
-    document.removeEventListener('pointermove', onDragMove);
-    document.removeEventListener('pointerup', endDrag);
+    panel.removeEventListener('pointermove', onDragMove);
+    panel.removeEventListener('pointerup', endDrag);
     header.style.cursor = 'grab';
   };
 
@@ -581,8 +577,8 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     dragState.panelX = parseFloat(panel.style.left || '0');
     dragState.panelY = parseFloat(panel.style.top || '0');
     header.style.cursor = 'grabbing';
-    document.addEventListener('pointermove', onDragMove);
-    document.addEventListener('pointerup', endDrag);
+    panel.addEventListener('pointermove', onDragMove);
+    panel.addEventListener('pointerup', endDrag);
     evt.preventDefault();
   };
 

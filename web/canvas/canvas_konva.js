@@ -43,7 +43,29 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   stageContainer.style.position = 'absolute';
   stageContainer.style.top = '0';
   stageContainer.style.left = '0';
+  stageContainer.style.zIndex = '10';
+  stageContainer.style.pointerEvents = 'auto';
+  stageContainer.style.touchAction = 'none'; // allow custom gesture handling
+  stageContainer.style.userSelect = 'none';
   stageWrapper.appendChild(stageContainer);
+
+  // Vue / Comfy 主画布中，使用捕获阶段阻断事件冒泡到节点面板，但不干扰 Konva 本身
+  const stopPropagationCapture = (evt) => {
+    if (evt?.stopPropagation) evt.stopPropagation();
+    if (evt?.stopImmediatePropagation) evt.stopImmediatePropagation();
+  };
+  const stopWheelCapture = (evt) => {
+    // 阻止默认滚轮缩放，但允许事件继续传播到 Konva listener
+    if (evt?.preventDefault) evt.preventDefault();
+  };
+  stageContainer.addEventListener('pointerdown', stopPropagationCapture, { capture: true });
+  stageContainer.addEventListener('pointermove', stopPropagationCapture, { capture: true });
+  stageContainer.addEventListener('pointerup', stopPropagationCapture, { capture: true });
+  stageContainer.addEventListener('touchstart', stopPropagationCapture, { capture: true });
+  stageContainer.addEventListener('touchmove', stopPropagationCapture, { capture: true });
+  stageContainer.addEventListener('touchend', stopPropagationCapture, { capture: true });
+  // wheel 需要阻止默认以避免 ComfyUI 全局缩放
+  stageContainer.addEventListener('wheel', stopWheelCapture, { capture: true, passive: false });
 
   const stage = new Konva.Stage({
     container: stageContainer,
@@ -123,8 +145,10 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   });
   imageLayer.add(nodeState.transformer);
 
-  // Event handlers for stage
+  // Event handlers for stage (stop propagation to graph/UI)
   stage.on('click tap', (e) => {
+    e.evt?.stopPropagation?.();
+    e.evt?.preventDefault?.();
     const target = e.target;
     if (target === canvasRect || target === stage || target === borderRect) {
       deselectLayer(nodeState);
@@ -141,6 +165,8 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   });
 
   stage.on('mousedown', (e) => {
+    e.evt?.stopPropagation?.();
+    e.evt?.preventDefault?.();
     const target = e.target;
     if (nodeState.imageNodes.includes(target) && target) {
       const index = nodeState.imageNodes.indexOf(target);
@@ -298,15 +324,15 @@ export function destroyKonva(nodeState) {
     nodeState.selectedLayer = null;
     nodeState.layerItems = [];
 
-    // Destroy stage
-    const stageContainer = nodeState.stage.container();
-    nodeState.stage.destroy();
-    nodeState.stage = null;
+  // Destroy stage
+  const stageContainer = nodeState.stage.container();
+  nodeState.stage.destroy();
+  nodeState.stage = null;
 
-    // Remove stage container
-    if (stageContainer && stageContainer.parentNode) {
-      stageContainer.remove();
-    }
+  // Remove stage container
+  if (stageContainer && stageContainer.parentNode) {
+    stageContainer.remove();
+  }
 
     log.info(`Konva stage and resources destroyed for node ${nodeState.nodeId}`);
   } catch (e) {
@@ -498,7 +524,8 @@ export function setupWheelEvents(node, nodeState) {
 
   // Wheel event handler for zooming and rotating
   nodeState.stage.on('wheel', (e) => {
-    e.evt.preventDefault();
+    e.evt?.preventDefault?.(); // 阻止浏览器默认滚动
+    e.evt?.stopPropagation?.(); // 阻断冒泡到 ComfyUI 画布
     const target = nodeState.transformer.nodes()[0];
     if (!target || !nodeState.imageNodes.includes(target)) return;
 
@@ -540,6 +567,16 @@ export function setupWheelEvents(node, nodeState) {
     updateState(target, index, false); // Update state without history
     debouncedUpdateHistory(); // Schedule history update
     nodeState.isInteracting = false;
+  });
+
+  // Ensure drag stops on mouseup/touchend to avoid unintended follow
+  nodeState.stage.on('mouseup touchend', (e) => {
+    e.evt?.stopPropagation?.();
+    e.evt?.preventDefault?.();
+    const target = nodeState.transformer.nodes()[0];
+    if (target && target.stopDrag) {
+      target.stopDrag();
+    }
   });
 
   log.info(`Wheel event listeners set up for node ${node.id}`);

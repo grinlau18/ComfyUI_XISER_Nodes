@@ -76,6 +76,25 @@ class XIS_ResizeImageOrMask:
         if pack_images is not None:
             logger.debug(f"pack_images type: {type(pack_images)}, length: {len(pack_images) if hasattr(pack_images, '__len__') else 'N/A'}")
 
+        # 处理 v3 节点数据格式
+        def _unwrap_v3_data(data):
+            """处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据"""
+            if data is None:
+                return None
+            if hasattr(data, 'outputs') and isinstance(data.outputs, tuple):
+                # io.NodeOutput 对象
+                return data.outputs[0]
+            elif isinstance(data, tuple) and len(data) == 1:
+                # 可能是 (data,) 格式
+                return data[0]
+            else:
+                # 原始数据
+                return data
+
+        # 解包 v3 数据格式
+        pack_images = _unwrap_v3_data(pack_images)
+        reference_image = _unwrap_v3_data(reference_image) if reference_image else None
+
         # 处理 pack_images 输入
         resized_pack_images = None
         all_resized_images = []  # 用于存储所有处理后的图像，包括主图像和pack_images
@@ -121,6 +140,14 @@ class XIS_ResizeImageOrMask:
                 if processed_img is not None:
                     # 转换回 3D 张量
                     resized_img_3d = processed_img.squeeze(0)
+                    # 确保 RGBA
+                    if resized_img_3d.shape[-1] == 3:
+                        alpha = torch.ones_like(resized_img_3d[..., :1])
+                        resized_img_3d = torch.cat([resized_img_3d, alpha], dim=-1)
+                    if resized_img_3d.shape[-1] != 4:
+                        logger.error(f"Invalid channel count after resize: {resized_img_3d.shape[-1]}")
+                        raise ValueError("Resized pack_images items must have 4 channels (RGBA)")
+                    resized_img_3d = resized_img_3d.clamp(0.0, 1.0)
                     resized_pack_images.append(resized_img_3d)
                     # 添加到所有图像列表中（保持为4D张量）
                     all_resized_images.append(processed_img)

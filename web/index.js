@@ -1,2 +1,2 @@
-import "./LLM_KeyManager.js";
-import "./LLM_NodeUI.js";
+import "./llm_key_manager.js";
+import "./llm_node_ui.js";

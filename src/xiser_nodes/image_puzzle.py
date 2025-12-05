@@ -397,11 +397,29 @@ class XIS_ImagePuzzle:
         else:
             return (255, 255, 255)  # 默认白色
 
+    # 处理 v3 节点数据格式
+    def _unwrap_v3_data(self, data):
+        """处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据"""
+        if data is None:
+            return None
+        if hasattr(data, 'outputs') and isinstance(data.outputs, tuple):
+            # io.NodeOutput 对象
+            return data.outputs[0]
+        elif isinstance(data, tuple) and len(data) == 1:
+            # 可能是 (data,) 格式
+            return data[0]
+        else:
+            # 原始数据
+            return data
+
     def generate_puzzle(self, pack_images: List[torch.Tensor], main_count: int, layout_type: str,
                        gap: int, main_base_width: int, bg_color: str) -> Tuple[torch.Tensor]:
         """
         生成拼图主函数
         """
+        # 解包 v3 数据格式
+        pack_images = self._unwrap_v3_data(pack_images)
+
         # 验证输入
         if not pack_images:
             raise ValueError("pack_images 输入为空，请提供至少一张图片")

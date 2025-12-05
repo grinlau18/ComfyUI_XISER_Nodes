@@ -131,8 +131,9 @@ export function createNodeState(nodeId, app) {
     layerItems: [],
     lastNodePos: [0, 0],
     lastNodeSize: [0, 0],
-    lastScale: app.canvas?.ds?.scale || 1,
-    lastOffset: app.canvas?.ds?.offset ? [...app.canvas.ds.offset] : [0, 0],
+    // Vue 前端下不要依赖 graphCanvas 缩放/偏移，统一使用本地状态
+    lastScale: 1,
+    lastOffset: [0, 0],
     pollInterval: null, // Used for polling node updates in canvas.js
     animationFrameId: null,
     stage: null,

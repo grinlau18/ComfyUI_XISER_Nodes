@@ -1,0 +1,973 @@
+**📘《XISER-Nodes 迁移到 ComfyUI 新 Vue / Nodes v3 的完整 SOP》**
+
+（无 Vue 重写版｜可直接交付给 AI 代理执行）
+
+---
+
+# **0. Phase 0：包结构与 `__init__.py` 处理规范（关键章节）**
+
+本项目是一个 **“节点 + HTTP 服务 + Web 扩展” 的综合型 ComfyUI 插件**，因此**包结构和入口文件必须严格保护**。
+
+本阶段目标：**在迁移所有节点到 v3 期间，不破坏现有扩展能力。**
+
+---
+
+## **0.1 `xiser_nodes/__init__.py`（顶层）的规范**
+
+当前顶层 `__init__.py` 承担三大角色：
+
+1. **暴露旧节点系统的映射：**
+
+```python
+__all__ = [
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "WEB_DIRECTORY",
+]
+```
+
+2. **注册插件 HTTP 接口（颜色更改、PSD、font、Key 管理、ImageManager 等）**
+3. **声明 WEB_DIRECTORY（用于前端 Web 扩展）**
+
+### ✅ **迁移期间的强制规范（AI 代理必须遵守）**
+
+* **禁止删除或重写：**
+
+  * 顶层所有 HTTP 路由逻辑
+  * `WEB_DIRECTORY` 声明
+  * 与颜色管理、PSD、字体、KeyStore、ImageManager 相关的入口逻辑
+
+### ⚠️ **新的迁移策略（2025-12-04更新）**
+
+基于新的"逐步转向v3，未迁移节点暂不加载"策略：
+
+* **`NODE_CLASS_MAPPINGS` 处理**：
+  - 顶层 `__init__.py` 已设置为 `NODE_CLASS_MAPPINGS = None`
+  - 聚合层 `__init__.py` 已设置为 `NODE_CLASS_MAPPINGS = None`
+  - 这是为了**彻底转向v3架构**，避免legacy兼容性问题
+
+* **节点文件规范**：
+  - 已迁移的v3节点：**删除所有** `NODE_CLASS_MAPPINGS` 等legacy映射
+  - 未迁移的节点：暂时不加载，等待迁移
+  - 所有节点完全使用v3 API，不保留legacy兼容代码
+
+### ⛔ 禁止的操作
+
+* 不允许将 v3 节点注册逻辑插入顶层 `__init__.py`
+* 不允许修改 HTTP 路由和 `WEB_DIRECTORY` 声明
+
+### ⭐ 最终目标（所有节点迁移 v3 后才可执行）
+
+* 将所有节点注册从顶层入口移除，改为由各自模块的 `ComfyExtension` 提供
+* 顶层 `__init__.py` 最终仅保留：
+
+  * Web 扩展入口
+  * HTTP 路由
+  * 元信息（版本号等）
+  * `WEB_DIRECTORY`
+
+---
+
+## **0.2 `/src/xiser_nodes/__init__.py`（节点聚合层）的规范**
+
+该文件做的事：
+
+* 从每个节点模块导入 `NODE_CLASS_MAPPINGS`
+* 合并成一个总表 `NODE_CLASS_MAPPINGS`
+* 自动生成 `NODE_DISPLAY_NAME_MAPPINGS`
+
+### ⚠️ **新的迁移策略（2025-12-04更新）**
+
+基于新的"逐步转向v3，未迁移节点暂不加载"策略：
+
+* **当前状态**：
+  - `NODE_CLASS_MAPPINGS = None`，`NODE_DISPLAY_NAME_MAPPINGS = None`
+  - 只加载已迁移的v3模块，未迁移模块暂时不加载
+  - 使用智能加载机制，详细日志输出
+
+* **节点文件规范**：
+  - 已迁移节点：**删除所有** `NODE_CLASS_MAPPINGS` 字典
+  - 未迁移节点：暂时不加载，等待迁移
+  - 所有节点完全转向v3 API，不保留legacy兼容代码
+
+* **加载机制**：
+  - 已迁移模块列表：`logic`, `ui_control`, `list_processing`, `data_processing`, `label`, `set_color`
+  - A级待迁移模块：`image_and_mask`, `resize_image_or_mask`, `psd_layer_extract`, `adjust_image`, `image_puzzle`, `shape_data`, `sampling`
+  - S级待迁移模块：`curve_editor`, `coordinate_path`, `reorder_images`, `shape_and_text`, `canvas_mask_processor`, `multi_point_gradient`, `canvas`, `llm.orchestrator`, `image_manager.node`
+
+### 最终目标（已部分实现）
+
+* ✅ 移除所有 `NODE_CLASS_MAPPINGS` 的导入与合并（已实现）
+* ✅ 改为由各自模块的 `ComfyExtension` 提供节点注册（已实现）
+* ✅ 实现智能加载机制，只加载已迁移节点（已实现）
+
+---
+
+## **0.3 `comfy_entrypoint()` 的规范**
+
+* 每个节点文件添加一个 `ComfyExtension` + `comfy_entrypoint()`
+* 配置 v3 的节点注册
+* **不得写在顶层 `__init__.py`**
+
+---
+
+# **1. Phase 1：节点盘点与分类**
+
+代理需扫描项目，生成一个节点清单：
+
+* 文件路径
+* class 名
+* 是否 legacy（含 INPUT_TYPES）
+* 是否已有 JS 扩展
+* JS 交互复杂度等级：
+
+  * **B：简单控件**
+  * **A：中等控件**
+  * **S：复杂交互（canvas / path / curve 等）**
+
+示例（生成 JSON）：
+
+```json
+[
+  {
+    "file": "src/xiser_nodes/coordinate_path.py",
+    "class": "XIS_CoordinatePath",
+    "schema_version": "legacy",
+    "frontend": "coordinate_path.js",
+    "ui_level": "S"
+  },
+  {
+    "file": "src/xiser_nodes/set_color.py",
+    "class": "XIS_SetColor",
+    "schema_version": "legacy",
+    "frontend": "set_color.js",
+    "ui_level": "B"
+  }
+]
+```
+
+---
+
+# **2. Phase 2：整体迁移策略（无 Vue 重写）**
+
+### 2.1 总策略（2025-12-04更新）
+
+* 🥇 **逐步转向纯v3架构**：已迁移的v3节点不再考虑兼容legacy
+* 🥈 **未迁移节点暂时不加载**：等待迁移完成后再加载
+* 🥉 **前端保持不变**：JS前端逻辑全部保留，通过v3自定义类型交互
+* 🏆 **彻底移除legacy兼容代码**：所有已迁移节点完全使用v3 API
+
+### 2.2 新的加载机制
+
+1. **智能加载**：只加载已迁移的v3模块，未迁移模块暂不加载
+2. **渐进迁移**：按B级→A级→S级的顺序逐步迁移
+3. **风险控制**：未迁移节点不加载，避免兼容性问题
+4. **用户透明**：前端保持不变，用户无感知
+
+### 2.3 当前状态（2025-12-04）
+
+* ✅ **B级节点**：27个节点100%完成迁移
+* 🔄 **A级节点**：15个节点待迁移（分3个阶段）
+* 📅 **S级节点**：13个节点待迁移（A级完成后开始）
+* 📊 **总体进度**：34/55个节点已迁移（61.8%）
+
+---
+
+# **3. Phase 3：Python legacy → v3 的通用迁移规范**
+
+所有 legacy 节点需执行以下步骤：
+
+---
+
+## **3.1 修改类继承**
+
+legacy：
+
+```python
+class MyNode:
+```
+
+改为：
+
+```python
+from comfy_api.latest import io, ComfyExtension
+
+class MyNode(io.ComfyNode):
+```
+
+---
+
+## **3.2 将 INPUT_TYPES → define_schema()**
+
+从旧结构：
+
+```python
+@classmethod
+def INPUT_TYPES(cls):
+    return {
+        "required": {
+            "width": ("INT", {...}),
+            ...
+        }
+    }
+```
+
+变为：
+
+```python
+@classmethod
+def define_schema(cls):
+    return io.Schema(
+        node_id="MyNode",
+        display_name="My Node",
+        category="MyCategory",
+        inputs=[
+            io.Int.Input("width", default=512, min=1, max=4096),
+            io.Combo.Input("mode", options=["A","B"], default="A"),
+        ],
+        outputs=[
+            io.String.Output("result", display_name="result"),
+        ],
+    )
+```
+
+---
+
+## **3.3 execute 迁移**
+
+legacy：
+
+```python
+def execute(self, a, b):
+    return (x, y)
+```
+
+v3：
+
+```python
+@classmethod
+def execute(cls, a, b):
+    return io.NodeOutput(x, y)
+```
+
+---
+
+## **3.4 v3 节点输出端口 display_name 要求**
+
+**强制要求：所有 v3 节点的输出端口必须包含 `display_name` 参数**
+
+在 `define_schema()` 方法中，所有输出端口定义必须包含 `display_name` 参数：
+
+```python
+# ❌ 错误写法（缺少 display_name）
+outputs=[
+    io.String.Output("result"),
+]
+
+# ✅ 正确写法（包含 display_name）
+outputs=[
+    io.String.Output("result", display_name="result"),
+]
+```
+
+**技术说明**：
+- v3 API 要求所有输出端口必须有 `display_name` 参数
+- `display_name` 的值通常与输出端口名称相同
+- 如果没有 `display_name` 参数，节点可能无法正常工作
+- 该规则适用于所有类型的输出端口：`io.String.Output`、`io.Int.Output`、`io.Float.Output`、`io.Boolean.Output`、`io.Image.Output`、`io.Mask.Output`、`io.AnyType.Output` 等
+
+**示例**：
+```python
+outputs=[
+    io.String.Output("combined_prompt", display_name="combined_prompt"),
+    io.String.Output("negative_prompt_output", display_name="negative_prompt_output"),
+    io.Boolean.Output("merge_status", display_name="merge_status"),
+]
+```
+
+---
+
+## **3.5 v3 API 类型系统规范**
+
+### **通用类型 `io.AnyType`**
+对于接受任意类型（整数、浮点数、布尔值、字符串等）的输入输出，使用 `io.AnyType`：
+
+```python
+# ✅ 正确写法（使用 AnyType）
+inputs=[
+    io.AnyType.Input("signal", optional=True),
+]
+outputs=[
+    io.AnyType.Output("result", display_name="result"),
+]
+```
+
+### **自定义类型 `io.Custom`**
+对于字典/对象类型，使用 `io.Custom` 定义自定义类型：
+
+```python
+# 定义自定义类型
+MyCustomType = io.Custom("MY_CUSTOM_TYPE")
+
+# 在 schema 中使用
+inputs=[
+    MyCustomType.Input("config"),
+],
+outputs=[
+    MyCustomType.Output("result", display_name="result"),
+]
+```
+
+### **列表类型参数 `is_list=True` 和 `is_output_list=True`**
+`is_list=True` 参数**仅适用于输入**，不适用于输出。输出列表使用 `is_output_list=True`：
+
+```python
+# ✅ 正确写法（输入可以使用 is_list=True）
+inputs=[
+    io.AnyType.Input("list", is_list=True),
+]
+
+# ❌ 错误写法（输出不能使用 is_list=True）
+outputs=[
+    io.Image.Output("image_list", display_name="image_list", is_list=True),  # 错误！
+]
+
+# ✅ 正确写法（输出使用 is_output_list=True）
+outputs=[
+    io.Image.Output("image_list", display_name="image_list", is_output_list=True),  # 正确
+]
+```
+
+### **可选参数 `optional=True`**
+当输入为可选时 (`optional=True`)，**不要**指定 `default=None`：
+
+```python
+# ❌ 错误写法（optional=True 时不要用 default=None）
+inputs=[
+    io.String.Input("text", optional=True, default=None),
+]
+
+# ✅ 正确写法（只使用 optional=True）
+inputs=[
+    io.String.Input("text", optional=True),
+]
+```
+
+---
+
+## **3.6 注册方式：彻底删除 legacy 映射，添加 v3 扩展**
+
+### ⚠️ **新的规范（2025-12-04更新）**
+
+基于新的迁移策略，所有已迁移节点必须：
+
+1. **彻底删除 legacy 映射**：
+   ```python
+   # ❌ 删除以下所有legacy代码：
+   # NODE_CLASS_MAPPINGS = {"XIS_NodeName": XIS_NodeName}
+   # NODE_DISPLAY_NAME_MAPPINGS = {"XIS_NodeName": "XIS Node Name"}
+   # @classmethod INPUT_TYPES(cls): ...
+   # def execute(self, ...): ...
+   ```
+
+2. **添加 v3 扩展注册**：
+   ```python
+   class MyExtension(ComfyExtension):
+       async def get_node_list(self):
+           return [MyNode]
+
+   async def comfy_entrypoint():
+       return MyExtension()
+   ```
+
+3. **确保纯 v3 架构**：
+   - 继承自 `io.ComfyNode`
+   - 只有 `define_schema()` 和 `@classmethod execute()` 方法
+   - 输出端口必须包含 `display_name` 参数
+   - 使用正确的v3类型（`io.Boolean`而非`io.Bool`等）
+
+✅ **完全转向 v3：删除所有 NODE_CLASS_MAPPINGS 等 legacy 映射，不保留任何兼容代码。**
+
+---
+
+# **4. Phase 4：JS / LiteGraph 前端兼容规范**
+
+### 全局规则
+
+* JS 扩展不改为 Vue
+* 所有 `app.registerExtension`、`node.addDOMWidget`、canvas 绘制逻辑均保留
+
+### JS 可以改的：
+
+* 防御性判空
+* 兼容 Python 参数名调整
+* 兼容 schema 默认值
+
+### JS **禁止改动的：**
+
+* widget 名
+* widget 返回结构（例如 `color_data = {"color": "#fff"}`）
+* `path_canvas` JSON 结构
+
+---
+
+# **📌 Phase 4.5：前端兼容 Vue / 传统 LiteGraph 的统一开发规范（强制要求）**
+
+> **适用范围：所有带 JS 前端交互的节点（尤其是 S 级交互节点，如 CoordinatePath / CurveEditor / ShapeNodes）**
+> 目的：保证节点在 *传统界面* 和 *新 Vue 节点界面 (Nodes 2.0)* 中都能正常工作。
+
+---
+
+# **🎯 总目标**
+
+1. Vue 节点界面下：
+
+   * 所有交互正常
+   * 鼠标事件不丢失
+   * canvas 绘制不变形
+   * 节点尺寸正确适配 Vue 容器
+
+2. 传统 LiteGraph 界面下：
+
+   * 依旧保持原有行为
+   * 原先的 canvas + 右键菜单 + 鼠标拖拽都能用
+
+3. 代码结构可持续：
+
+   * 不依赖 Vue 内部 API
+   * 不写“Magical if(VueMode)”
+   * 一个 JS 扩展同时兼容两端
+
+---
+
+# **📘 4.5.1 鼠标事件兼容规范**
+
+## **❌ 禁止做法（传统界面常见写法，但在 Vue 下会失效）**
+
+```js
+canvas.addEventListener("mousedown", (e) => {
+    const x = e.canvasX;   // 传统界面下有效，Vue 下为空或被改写
+    const y = e.canvasY;
+});
+```
+
+原因：
+
+* Vue 模式外层有多层包装容器
+* 原 litegraph canvas 已不是事件真正命中的对象
+* Vue/Mantine/Tailwind 的 overlay 会阻断 pointer events
+
+---
+
+## **✅ 强制做法：所有鼠标坐标都基于 widget DOM 自己计算**
+
+```js
+canvas.addEventListener("mousedown", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;   // 相对 widget 内部的局部坐标
+    const y = e.clientY - rect.top;
+});
+```
+
+优势：
+
+* 100% 兼容 Vue & LiteGraph
+* 完全不依赖外层 transform
+* 缩放、拖动、改变界面布局都不会影响结果
+
+---
+
+# **📘 4.5.2 节点尺寸与布局适配规范**
+
+## **❌ 禁止依赖 LiteGraph 的 node.size 来计算绘制区域**
+
+例如：
+
+```js
+node.setSize([360, 510]);
+canvas.width = node.size[0];
+canvas.height = node.size[1] - 140;
+```
+
+### 在 Vue 模式下的问题：
+
+* Vue 会改变节点 DOM 的 padding / margin
+* Vue 节点外层有 shadow DOM / wrapper
+* `node.size` 与实际视觉大小经常不一致
+
+---
+
+## **✅ 强制做法：canvas 尺寸必须读取 DOM rect**
+
+```js
+function resizeCanvas() {
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+    draw();
+}
+
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
+```
+
+### LiteGraph 模式：
+
+* `node.setSize` 决定容器大小 → rect 读取仍然正确
+
+### Vue 模式：
+
+* Vue 决定容器大小 → rect 读取也正确
+
+**→ 一套代码两端都适配**
+
+---
+
+# **📘 4.5.3 事件绑定位置规范**
+
+## **强制要求：所有交互必须绑定在 DOM widget 内**
+
+> 不允许绑定在 GraphCanvas 或全局 document 上（右键菜单除外）。
+
+### 推荐结构：
+
+```
+<DOM widget container>
+    <Canvas for drawing>
+    <Overlay for control points>
+    <Hidden drag layer>
+</DOM>
+```
+
+避免：
+
+* LiteGraph 原生 canvas 层
+* Vue 节点外层容器
+* 全局 body/document 层事件（会与 Vue 事件系统冲突）
+
+---
+
+# **📘 4.5.4 双界面兼容的状态管理规范**
+
+### **强制要求：状态必须储存在 “序列化对象” 中**
+
+例如：
+
+```js
+state = {
+    control_points: [...],
+    width: 512,
+    height: 512,
+    path_mode: "linear",
+    distribution_mode: "uniform",
+    node_size: [360, 510],
+};
+```
+
+并确保：
+
+### `getValue() → 完整 JSON`
+
+```js
+getValue() {
+    return JSON.parse(JSON.stringify(state));
+}
+```
+
+### `setValue(value)` → 完整还原 + 重绘
+
+```js
+setValue(value) {
+    state = { ...state, ...value };  // 合并旧值与新值
+    redraw();
+}
+```
+
+**原因：**
+
+* 在 Vue 模式下，设备像素比、缩放、UI 变化更频繁，必须确保状态能通过序列化完全恢复
+* 你以后迁移 Python 端到 v3，只需要保持 JSON 结构一致即可
+* 不依赖前端渲染逻辑 → 能保证 workflow 持久化安全
+
+---
+
+# **📘 4.5.5 避免依赖外层 transform**
+
+LiteGraph 模式绝大多数节点用：
+
+* `graphCanvas.scale`
+* `canvasToLocalX()`
+* `canvasToLocalY()`
+* `globalToLocal()`
+
+这些方法在 Vue 模式下可能被拦截或不更新。
+
+---
+
+## **强制要求：节点内部坐标必须自己维护**
+
+例如：
+
+```js
+const localX = (clientX - rect.left) / rect.width;
+const localY = (clientY - rect.top) / rect.height;
+```
+
+你需要的只是：
+
+* 自己的 DOM 宽度 rect.width
+* 自己的 DOM 高度 rect.height
+* 鼠标在 DOM 内的位置
+
+外层缩放不关心。
+
+---
+
+# **📘 4.5.6 不允许写“判断 Vue 模式”的代码**
+
+例如：
+
+```js
+if (window.__is_vue_mode) { ... }
+```
+
+或：
+
+```js
+if (app.uiVersion === "vue") { ... }
+```
+
+### **强制禁止（会随前端更新而破裂）**
+
+取而代之：
+
+* 写出**对两种前端都天然成立**的代码
+* 不依赖未文档化的全局变量
+* 所有逻辑尽量“内部 DOM 自洽”
+
+---
+
+# **📘 4.5.7 使用 DOM API 代替 LiteGraph 的节点几何方法**
+
+传统节点常用：
+
+* `node.pos`
+* `node.size`
+* `node.graph.canvas`
+
+在 Vue 模式下不可靠，建议：
+
+* 用 `getBoundingClientRect()` 获取可视区域
+* 用 CSS 控制 DOM 布局
+* 让 Vue 和 LiteGraph 自己决定外层盒子大小，你只关心内部 DOM
+
+---
+
+# **📘 4.5.8 高稳定性 DOM widget 模型（推荐最终模式）**
+
+这是最终推荐结构，适用于所有 S 级节点：
+
+```
+node.addDOMWidget("xxx", "UI Panel", root, {
+    serialize: true,
+    hideOnZoom: true,
+    getValue() { ... },
+    setValue(value) { ... },
+    getMinHeight() { return 200; }
+});
+```
+
+它保证：
+
+* Vue 模式：DOM widget 会插入 Vue 节点内容区，被 Vue 正常布局
+* 传统模式：DOM widget 被加入到 LiteGraph 节点的 DOM 区域
+* 两端行为一致
+
+---
+
+# **📘 4.5.9 加入到 SOP 的最终文字模板**
+
+你可以把下面这个段落 **原样复制** 到 SOP 文档中：
+
+> ### **Phase 4.5：Vue / 传统界面双兼容前端规范**
+>
+> 所有带 JS 前端逻辑的节点必须遵守以下规则，以确保在 ComfyUI 的 Vue 节点界面（Nodes 2.0）和传统 LiteGraph 界面均能正常使用：
+>
+> **1. 鼠标事件必须绑定在 DOM widget 内部**，禁止依赖 graphCanvas 或 `e.canvasX/canvasY`。
+> → 坐标以 `(e.clientX - rect.left)` / `(e.clientY - rect.top)` 计算。
+>
+> **2. Canvas 尺寸必须从 widget DOM 的 `getBoundingClientRect()` 读取**，不要依赖 `node.size`。
+> → Vue 和 LiteGraph 的节点尺寸行为不同。
+>
+> **3. 所有交互状态必须集中存放为序列化对象（如 `path_canvas`）**，
+> → `getValue()` 和 `setValue()` 操作该对象。
+>
+> **4. 禁止编写“Vue 或 LiteGraph 环境判断”代码**，代码必须在两端环境中天然成立。
+>
+> **5. 禁止依赖 LiteGraph 的 canvas transform / zoom / globalToLocal**，
+> → 所有坐标计算必须使用 DOM 相对坐标。
+>
+> **6. DOM widget 是唯一允许的前端 UI 承载方式**
+> → 事件、canvas 绘制、右键菜单等必须在 widget DOM 内部管理。
+>
+> 遵守以上规范可确保节点在 Vue 节点界面与传统 LiteGraph 模式下稳定运行，避免鼠标事件失效、布局错位或坐标计算错误的问题。
+
+---
+
+## **📘 4.5.10 使用 Konva 的节点前端规范（兼容 Vue / 传统界面）
+
+对所有使用 Konva 搭建交互画板的节点，前端必须遵守以下规则：
+
+### **强制要求：Konva Stage 的 container 必须是 DOM widget 内的局部容器**
+
+Stage 创建形式：new Konva.Stage({ container: rootDiv, width, height })
+
+rootDiv 来自 node.addDOMWidget 创建的 DOM，而不是 LiteGraph 的全局 canvas。
+
+### 强制要求：所有坐标与事件完全通过 Konva 自己的 API 获取
+
+使用 stage.getPointerPosition() 获取鼠标位置；
+
+禁止依赖 e.canvasX / e.canvasY、graphCanvas transform 等 LiteGraph 特有坐标。
+
+### 强制要求：Konva 的尺寸必须通过 container DOM 的 getBoundingClientRect() 设置
+
+在 initKonva 和 node.onResize 中：
+
+读取 rect = rootDiv.getBoundingClientRect()；
+
+调用 stage.size({ width: rect.width, height: rect.height })；
+
+禁止用 node.size 直接作为 Konva stage 的大小。
+
+### 强制要求：必须有一个独立的状态对象来驱动 Konva 图形
+
+在扩展中维护 state = { ... }，保存所有必要数据（点位、路径、样式等）；
+
+getValue() 返回该 state 的深拷贝；
+
+setValue(value) 合并 value 后，通过 state 重建 Konva 图层；
+
+Python 节点只依赖这个 state 的 JSON 结构。
+
+### 强制要求：不得依赖具体“是否为 Vue 模式”的判断
+
+不使用任何未文档化的标志（如 window.__vue_mode__）；
+
+代码必须在传统界面和 Vue 节点界面中“自然”工作：
+
+它只假设：有一个 DOM 容器 + Konva Stage 可以挂上去。
+
+### 强制要求：必须处理好节点销毁与可能的重新挂载
+
+在 node.onRemoved 中一定要调用 stage.destroy()；
+
+initKonva 应能在多次调用中安全地在新 DOM 上重建 Stage（避免持有旧 DOM 引用）；
+
+这样 Vue 模式下节点重新渲染时，Konva 能被正确重建，不会失效。
+
+遵循以上规范，可以确保带 Konva 画板的节点在 ComfyUI 的 Vue 节点界面和传统 LiteGraph 界面下均正常工作，同时避免鼠标事件失效、画板变形、或由于 DOM 重挂载导致的 Stage 失效问题。
+
+---
+
+# **5. Phase 5：测试规范**
+
+分阶段迁移部份节点，完成后由我手动测试，确保在两种界面下均正常工作后，在继续下一阶段工作。
+
+---
+
+# **6. 案例 1：复杂节点 XIS_CoordinatePath（S 级交互）**
+
+## **6.1 迁移要求摘要**
+
+* Python → 用自定义类型 `PathCanvas = io.Custom("XIS_PATH_CANVAS")`
+* JS → DOM widget + canvas 完全保留
+* `path_canvas` 的结构必须完全一致：
+
+```json
+{
+  "control_points": [...],
+  "width": 512,
+  "height": 512,
+  "path_mode": "linear",
+  "distribution_mode": "uniform",
+  "node_size": [360, 510]
+}
+```
+
+---
+
+## **6.2 Python v3 写法模板（可直接由代理生成）**
+
+```python
+from comfy_api.latest import io, ComfyExtension
+
+PathCanvas = io.Custom("XIS_PATH_CANVAS")
+
+class XIS_CoordinatePath(io.ComfyNode):
+
+    OUTPUT_IS_LIST = (True, True, True, True, False, False)
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_CoordinatePath",
+            display_name="XIS Coordinate Path",
+            category="XISER_Nodes/Visual_Editing",
+            inputs=[
+                io.Int.Input("width", default=512, min=1, max=4096),
+                io.Int.Input("height", default=512, min=1, max=4096),
+                io.Int.Input("path_segments", default=5, min=2, max=100),
+                io.Combo.Input("path_mode", options=["linear","curve"], default="linear"),
+                io.Combo.Input("distribution_mode",
+                    options=["uniform","ease_in","ease_out","ease_in_out","ease_out_in"],
+                    default="uniform"),
+                PathCanvas.Input("path_canvas", default={
+                    "control_points": [],
+                    "width":512,
+                    "height":512,
+                    "path_mode":"linear",
+                    "distribution_mode":"uniform",
+                    "node_size":[360,510]
+                })
+            ],
+            outputs=[
+                io.Int.Output("x_coordinate", display_name="x_coordinate", is_output_list=True),
+                io.Int.Output("y_coordinate", display_name="y_coordinate", is_output_list=True),
+                io.Float.Output("x_percent", display_name="x_percent", is_output_list=True),
+                io.Float.Output("y_percent", display_name="y_percent", is_output_list=True),
+                io.List.Output("x_list", display_name="x_list"),
+                io.List.Output("y_list", display_name="y_list"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, width, height, path_segments,
+                path_mode, distribution_mode, path_canvas):
+
+        # 基础防御
+        path_canvas = path_canvas or {}
+        control_points = path_canvas.get("control_points", [])
+
+        # ====== 原逻辑整体搬运区域 ======
+        # 生成 x_coords, y_coords, x_percent, y_percent, x_list, y_list
+        # ====== END 原逻辑 ======
+
+        return io.NodeOutput(
+            x_coords, y_coords,
+            x_percent, y_percent,
+            x_list, y_list
+        )
+
+
+class XISCoordinatePathExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_CoordinatePath]
+
+
+async def comfy_entrypoint():
+    return XISCoordinatePathExtension()
+```
+
+---
+
+# **7. 案例 2：简单节点 XIS_SetColor（B 级交互）**
+
+## **7.1 要求摘要**
+
+* Python 使用：`ColorData = io.Custom("XIS_COLOR_DATA")`
+* 接受对象结构：`{"color": "#rrggbb"}`
+* JS DOM widget 保留，不改行为
+
+---
+
+## **7.2 Python v3 写法模板（已验证）**
+
+```python
+from comfy_api.latest import io, ComfyExtension
+
+ColorData = io.Custom("XIS_COLOR_DATA")
+
+def is_valid_hex_color(s):
+    import re
+    return bool(re.match(r'^#([0-9a-fA-F]{6})$', s))
+
+class XIS_SetColor(io.ComfyNode):
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_SetColor",
+            display_name="XIS Set Color",
+            category="XISER_Nodes/UI_And_Control",  # 注意：实际类别为 UI_And_Control
+            inputs=[
+                ColorData.Input("color_data")  # ✅ 已验证：自定义类型不支持 default 参数
+            ],
+            outputs=[
+                io.String.Output("color", display_name="color")  # 注意：输出名为 "color"
+            ],
+        )
+
+    @classmethod
+    def execute(cls, color_data):
+        # 处理 None 输入
+        if color_data is None:
+            hex_color = "#ffffff"
+        elif isinstance(color_data, dict):
+            hex_color = color_data.get("color", "#ffffff")
+        else:
+            hex_color = str(color_data)
+
+        if not is_valid_hex_color(hex_color):
+            hex_color = "#ffffff"
+
+        return io.NodeOutput(hex_color,)  # ✅ 已验证：io.NodeOutput(color,) 正确
+
+
+class XISSetColorExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_SetColor]
+
+
+async def comfy_entrypoint():
+    return XISSetColorExtension()
+```
+
+### **7.3 验证结果**
+- ✅ **节点注册**: 在 ComfyUI 中正常显示
+- ✅ **功能测试**: 颜色选择、HEX输出功能正常
+- ✅ **前端兼容**: JS 前端 (`set_color.js`) 通过 `addDOMWidget` 与 v3 自定义类型交互正常
+- ✅ **输出格式**: 输出正确字符串 `"#007031"`，不是 `["#007031"]`
+- ✅ **迁移策略**: 纯 v3 模式可行，无需 legacy 兼容代码
+
+---
+
+# **8. TL;DR（给 AI 代理执行的超短总结 - 2025-12-04更新）**
+
+> * 严格保护两个 `__init__.py`，迁移期间禁止删除 ROUTES / WEB_DIRECTORY。
+> * **新的迁移策略**：逐步转向v3，未迁移节点暂不加载，已迁移节点彻底移除legacy兼容代码。
+> * 所有 legacy 节点 → 添加 `io.ComfyNode` + `define_schema` + `@classmethod execute` + `ComfyExtension` + `comfy_entrypoint`。
+> * **彻底删除所有 `NODE_CLASS_MAPPINGS` 等 legacy 映射**，不保留任何兼容代码。
+> * 顶层和聚合层 `__init__.py` 已设置为 `NODE_CLASS_MAPPINGS = None`。
+> * 所有 JS/LiteGraph 前端逻辑全部保留，不改为 Vue。
+> * DOM widget 的序列化结构（如 `color_data`, `path_canvas`）通过 v3 自定义类型交互。
+> * 完整测试所有节点：加载 UI、JS 交互、执行结果，与迁移前一致。
+
+---
+
+## 📌 近期维护行动（2025-12-04更新）
+
+### 已完成
+- ✅ 制定新的后端迁移策略：逐步转向v3，未迁移节点暂不加载
+- ✅ 更新顶层和聚合层 `__init__.py`：设置为 `NODE_CLASS_MAPPINGS = None`
+- ✅ 实现智能加载机制：只加载已迁移的v3模块
+- ✅ 创建A级节点迁移计划：分3个阶段完成15个节点迁移
+- ✅ 更新迁移进度报告：反映新的迁移策略和当前状态
+- ✅ 创建v3架构迁移总计划：明确总体路线图
+
+### 待完成
+- 🔄 更新 `节点清单.json` 的 schema_version 与实际迁移状态同步
+- 🔄 开始执行A级节点迁移计划阶段1
+- 🔄 开发或迁移节点时遵循 pack_images 规范：HWC RGBA、float [0,1]、list 容器
+- 🔄 定期同步《迁移进度报告.md》的统计数据
+- 🔄 验证新的加载机制在实际环境中的工作状态

@@ -187,11 +187,39 @@ class XIS_ReorderImages:
             if logger.isEnabledFor(logging.ERROR):
                 logger.error(f"Failed to clean up output directory: {e}")
 
+    def _unwrap_v3_data(self, data):
+        """
+        处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据
+
+        Args:
+            data: 输入数据，可能是 io.NodeOutput、元组或原始数据
+
+        Returns:
+            解包后的原始数据
+        """
+        if data is None:
+            return None
+
+        if hasattr(data, 'outputs') and isinstance(data.outputs, tuple):
+            # io.NodeOutput 对象
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Unwrapping io.NodeOutput, outputs length: {len(data.outputs)}")
+            return data.outputs[0]
+        elif isinstance(data, tuple) and len(data) == 1:
+            # 可能是 (data,) 格式
+            return data[0]
+        else:
+            # 原始数据
+            return data
+
     def reorder_images(self, pack_images, image_order="[]", node_id=""):
         """Process images, generate previews, and reorder based on frontend order."""
+        # 解包 v3 数据格式
+        pack_images = self._unwrap_v3_data(pack_images)
+
         if logger.isEnabledFor(logging.INFO):
-            logger.info(f"Node {node_id}: Processing {len(pack_images)} images, order: {image_order}")
-        
+            logger.info(f"Node {node_id}: Processing {len(pack_images) if pack_images else 0} images, order: {image_order}")
+
         # Validate input
         if pack_images is None or not isinstance(pack_images, list):
             if logger.isEnabledFor(logging.ERROR):

@@ -72,6 +72,22 @@ class XIS_LLMOrchestrator:
             },
         }
 
+    def _unwrap_v3_data(self, data):
+        """
+        处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据
+        """
+        if data is None:
+            return None
+        if hasattr(data, 'outputs') and isinstance(data.outputs, tuple):
+            # io.NodeOutput 对象
+            return data.outputs[0]
+        elif isinstance(data, tuple) and len(data) == 1:
+            # 可能是 (data,) 格式
+            return data[0]
+        else:
+            # 原始数据
+            return data
+
     def forward(
         self,
         provider: str,
@@ -95,6 +111,9 @@ class XIS_LLMOrchestrator:
         prompt_extend: bool = True,
         **kwargs,
     ):
+        # 解包 v3 数据格式
+        pack_images = self._unwrap_v3_data(pack_images)
+
         # Backward-compatible alias
         if provider == "qwen_image":
             provider = "qwen-image-edit-plus"

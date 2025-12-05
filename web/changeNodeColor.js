@@ -402,17 +402,14 @@ function getMonochromeColors(theme = detectActiveTheme()) {
 function getTargetNodes(node) {
     const canvas = app?.canvas;
     if (!canvas) {
-        return [node];
+        return node ? [node] : [];
     }
     const selectedNodes = canvas.selected_nodes || {};
-    const selectedCount = Object.keys(selectedNodes).length;
-    if (selectedCount > 1 && selectedNodes[node?.id]) {
-        return Object.values(selectedNodes).filter(Boolean);
+    const selectedValues = Object.values(selectedNodes || {}).filter(Boolean);
+    if (selectedValues.length > 0) {
+        return selectedValues;
     }
-    if (selectedCount === 1 && selectedNodes[node?.id]) {
-        return [node];
-    }
-    return [node];
+    return node ? [node] : [];
 }
 
 function updateNodeColorProperties(node, color, colorType) {
@@ -478,6 +475,12 @@ function hydrateNodeAppearance(node) {
 }
 
 async function openColorSetDialog(node) {
+    const targetNodes = getTargetNodes(node);
+    if (targetNodes.length === 0) {
+        console.warn("[XISER] No target nodes selected for color dialog");
+        return;
+    }
+    const primaryNode = targetNodes[0];
     const isDarkTheme = document.body.classList.contains("dark-theme");
     const backgroundColor = isDarkTheme ? "#2E2E2E" : "#FFFFFF";
     const textColor = isDarkTheme ? "#FFFFFF" : "#333333";
@@ -532,7 +535,7 @@ async function openColorSetDialog(node) {
     selectionInfo.style.fontSize = "13px";
     selectionInfo.style.marginBottom = "10px";
     const updateSelectionInfo = () => {
-        const count = getTargetNodes(node).length;
+        const count = targetNodes.length;
         selectionInfo.textContent = t("selectionInfo", count);
     };
     updateSelectionInfo();
@@ -607,7 +610,7 @@ async function openColorSetDialog(node) {
     titleColorLabel.textContent = t("titleSwatchLabel");
     const titleColorInput = document.createElement("input");
     titleColorInput.type = "color";
-    titleColorInput.value = node.properties?.xiser_title_color || node.color || getDefaultColor("titleColor", presetTheme);
+    titleColorInput.value = primaryNode?.properties?.xiser_title_color || primaryNode?.color || getDefaultColor("titleColor", presetTheme);
     titleColorInput.style.width = "100%";
     titleColorInput.style.height = "38px";
     titleColorLabel.appendChild(titleColorInput);
@@ -617,7 +620,7 @@ async function openColorSetDialog(node) {
     contentColorLabel.textContent = t("contentSwatchLabel");
     const contentColorInput = document.createElement("input");
     contentColorInput.type = "color";
-    contentColorInput.value = node.properties?.xiser_content_color || node.bgcolor || getDefaultColor("contentColor", presetTheme);
+    contentColorInput.value = primaryNode?.properties?.xiser_content_color || primaryNode?.bgcolor || getDefaultColor("contentColor", presetTheme);
     contentColorInput.style.width = "100%";
     contentColorInput.style.height = "38px";
     contentColorLabel.appendChild(contentColorInput);
@@ -862,6 +865,26 @@ async function openColorSetDialog(node) {
 
 app.registerExtension({
     name: "XISER.ChangeNodeColor",
+    commands: [
+        {
+            id: "xiser.selection.color",
+            label: "XISER Color",
+            icon: "pi pi-palette",
+            function: () => {
+                const canvas = app?.canvas;
+                const selected = canvas?.selected_nodes || {};
+                const firstSelected = Object.values(selected || {}).find(Boolean);
+                openColorSetDialog(firstSelected);
+            },
+        },
+    ],
+    getSelectionToolboxCommands: (selectedItem) => {
+        // 当有节点选中时显示调色板按钮
+        if (selectedItem?.type === "node" || selectedItem?.id || selectedItem) {
+            return ["xiser.selection.color"];
+        }
+        return [];
+    },
     async setup() {
         const existingExtensions = app.extensions.map(ext => ext.name);
         if (existingExtensions.some(name => name.includes("ChangeNodeColor") && name !== "XISER.ChangeNodeColor")) {
@@ -902,5 +925,64 @@ app.registerExtension({
             });
             return options;
         };
+
+        // 在 Vue toolbox 中添加调色板工具按钮
+        const addToolboxButton = () => {
+            const selectors = [
+                '[data-testid="comfyui-toolbox"]',
+                ".comfyui-toolbox",
+                ".comfyui-toolbar",
+                ".toolbox",
+            ];
+            let container = null;
+            for (const sel of selectors) {
+                container = document.querySelector(sel);
+                if (container) break;
+            }
+            if (!container || container.dataset?.xiserPaletteAttached) return;
+
+            const btn = document.createElement("button");
+            btn.title = t("manageMenu");
+            btn.textContent = "🎨";
+            btn.style.border = "none";
+            btn.style.background = "transparent";
+            btn.style.cursor = "pointer";
+            btn.style.fontSize = "16px";
+            btn.style.display = "flex";
+            btn.style.alignItems = "center";
+            btn.style.justifyContent = "center";
+            btn.style.width = "28px";
+            btn.style.height = "28px";
+            btn.style.borderRadius = "6px";
+            btn.addEventListener("mouseover", () => {
+                btn.style.background = "rgba(120,140,255,0.15)";
+            });
+            btn.addEventListener("mouseout", () => {
+                btn.style.background = "transparent";
+            });
+            btn.addEventListener("click", () => {
+                const canvas = app?.canvas;
+                const selected = canvas?.selected_nodes || {};
+                const firstSelected = Object.values(selected || {}).find(Boolean);
+                openColorSetDialog(firstSelected);
+            });
+
+            const wrapper = document.createElement("div");
+            wrapper.style.display = "flex";
+            wrapper.style.alignItems = "center";
+            wrapper.style.justifyContent = "center";
+            wrapper.style.padding = "4px";
+            wrapper.appendChild(btn);
+
+            container.appendChild(wrapper);
+            container.dataset.xiserPaletteAttached = "1";
+            console.log("[XISER] Toolbox palette button attached");
+        };
+
+        // 延迟挂载，等待 Vue DOM 渲染
+        const observer = new MutationObserver(() => addToolboxButton());
+        observer.observe(document.body, { childList: true, subtree: true });
+        // 立即尝试一次
+        addToolboxButton();
     },
 });

@@ -1,9 +1,8 @@
 """Top-level package for xiser_nodes."""
 
 __all__ = [
-    "NODE_CLASS_MAPPINGS",
-    "NODE_DISPLAY_NAME_MAPPINGS",
     "WEB_DIRECTORY",
+    "comfy_entrypoint",
 ]
 
 __author__ = """XISER"""
@@ -20,7 +19,22 @@ from .server_extension import (
     serve_font_file,
     cutout_image,
 )  # 导入处理函数
-from .src.xiser_nodes.key_store import KEY_STORE
+
+# 安全导入KEY_STORE，避免触发节点映射导入
+try:
+    from .src.xiser_nodes.key_store import KEY_STORE
+except ImportError as e:
+    print(f"[XISER] 警告: 无法导入KEY_STORE: {e}")
+    # 创建虚拟的KEY_STORE以避免错误
+    class DummyKeyStore:
+        def list_profiles(self):
+            return {}
+        def save_key(self, profile, api_key, overwrite=False):
+            pass
+        def delete_key(self, profile):
+            pass
+    KEY_STORE = DummyKeyStore()
+
 from aiohttp import web
 
 
@@ -57,12 +71,20 @@ async def delete_key(request):
 async def set_default_key(request):
     return web.json_response({"error": "default key not supported"}, status=400)
 
-# 导入节点映射
-from .src.xiser_nodes import NODE_CLASS_MAPPINGS
+# 导入v3节点注册
 try:
-    from .src.xiser_nodes import NODE_DISPLAY_NAME_MAPPINGS
-except ImportError:
-    NODE_DISPLAY_NAME_MAPPINGS = {}
+    from .src.xiser_nodes import comfy_entrypoint as _comfy_entrypoint
+    comfy_entrypoint = _comfy_entrypoint
+    # v3模式：不导出legacy映射
+    NODE_CLASS_MAPPINGS = None
+    NODE_DISPLAY_NAME_MAPPINGS = None
+except Exception as exc:
+    print(f"[XISER] Failed to import v3 node registrations: {exc}")
+    NODE_CLASS_MAPPINGS = None
+    NODE_DISPLAY_NAME_MAPPINGS = None
+
+    async def comfy_entrypoint():
+        return None
 
 # 节点颜色存储
 NODE_COLORS = {"title": {}, "content": {}}
@@ -87,10 +109,12 @@ async def handle_color_change(request):
         updated_workflow = None
         if workflow and isinstance(workflow, dict) and "nodes" in workflow:
             try:
-                if "XIS_ReorderImages" in NODE_CLASS_MAPPINGS:
-                    updated_workflow = NODE_CLASS_MAPPINGS["XIS_ReorderImages"].set_color(node_id, color, color_type, workflow)
-                else:
-                    print("[XISER] XIS_ReorderImages 未加载，跳过工作流更新")
+                # 由于NODE_CLASS_MAPPINGS现在是None（为了启用V3节点），我们无法直接访问
+                # 这里跳过工作流更新，或者可以尝试动态导入
+                print("[XISER] V3模式：跳过工作流颜色更新（需要重新实现）")
+                # 如果需要此功能，可以在这里动态导入XIS_ReorderImages类
+                # from .src.xiser_nodes.reorder_images import XIS_ReorderImages
+                # updated_workflow = XIS_ReorderImages.set_color(node_id, color, color_type, workflow)
             except Exception as e:
                 print("[XISER] 更新工作流失败:", str(e))
                 traceback.print_exc()

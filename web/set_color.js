@@ -167,22 +167,28 @@ app.registerExtension({
         );
       }
 
-      // 创建颜色块 UI
+      // 创建颜色块 UI（LiteGraph DOM 模式）
       const colorContainer = createColorBlockUI(node);
 
-      // 注册 DOM 控件
-      node.addDOMWidget("color_data", "Color Picker", colorContainer, {
-        serialize: true,
-        hideOnZoom: false,
-        getValue: () => {
-          return node.properties.colorData || { color: "#ffffff" };
-        },
-        setValue: (value) => {
-          node.properties.colorData = value;
-          updateColorDisplay(node);
-        },
-        getMinHeight: () => 32 // 设置最小高度为60像素
-      });
+      // 注册 DOM 控件；Vue 前端支持 DOM widget 时显示色块
+      if (typeof node.addDOMWidget === "function") {
+        node.addDOMWidget("color_data", "Color Picker", colorContainer, {
+          serialize: true,
+          hideOnZoom: false,
+          getValue: () => {
+            return node.properties.colorData || { color: "#ffffff" };
+          },
+          setValue: (value) => {
+            node.properties.colorData = value;
+            updateColorDisplay(node);
+          },
+          getMinHeight: () => 32, // 设置最小高度
+          getHeight: () => 32,
+          margin: 6
+        });
+      } else {
+        log.warning("addDOMWidget not available; SetColor DOM widget will not render in this frontend.");
+      }
 
       log.info(`Color widget setup completed for node ${node.id}`);
     }
@@ -231,7 +237,7 @@ app.registerExtension({
       .xis-color-container {
         box-sizing: border-box;
         width: 100%;
-        height: 100%;
+        height: 32px;
         display: flex;
         align-items: center;
         justify-content: center;

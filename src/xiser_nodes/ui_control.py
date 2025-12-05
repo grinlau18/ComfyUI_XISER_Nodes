@@ -1,25 +1,36 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 from .utils import logger
-from typing import Any
+from comfy_api.latest import io, ComfyExtension
 import hashlib
+
+# 自定义类型定义
+CanvasConfig = io.Custom("XIS_CANVAS_CONFIG")
 
 
 # 输入多个提示词并通过开关控制
-class XIS_PromptsWithSwitches:
+class XIS_PromptsWithSwitches(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        input_config = {}
+    def define_schema(cls):
+        """Define the v3 schema for the PromptsWithSwitches node."""
+        inputs = []
         for i in range(1, 6):
-            input_config[f"prompt_{i}"] = ("STRING", {"default": "", "multiline": True})
-            input_config[f"enable_{i}"] = ("BOOLEAN", {"default": True})
-        return {"required": {}, "optional": input_config}
+            inputs.append(io.String.Input(f"prompt_{i}", default="", multiline=True, optional=True))
+            inputs.append(io.Boolean.Input(f"enable_{i}", default=True, optional=True))
 
-    RETURN_TYPES = ("STRING", "BOOLEAN")
-    OUTPUT_IS_LIST = (True, False)
-    FUNCTION = "process_prompts"
-    CATEGORY = "XISER_Nodes/UI_And_Control"
+        return io.Schema(
+            node_id="XIS_PromptsWithSwitches",
+            display_name="Prompts With Switches",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=inputs,
+            outputs=[
+                io.String.Output("prompts", display_name="prompts", is_output_list=True),
+                io.Boolean.Output("has_prompts", display_name="has_prompts"),
+            ],
+        )
 
-    def process_prompts(self, **kwargs):
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the PromptsWithSwitches node."""
         prompts = []
         for i in range(1, 6):
             prompt_key = f"prompt_{i}"
@@ -29,90 +40,120 @@ class XIS_PromptsWithSwitches:
             if enable and prompt.strip():
                 prompts.append(prompt)
         if not prompts:
-            return (["No prompts to display."], False)
-        return (prompts, True)
+            return io.NodeOutput(["No prompts to display."], False)
+        return io.NodeOutput(prompts, True)
 
 # 输入浮点数并通过滑块控制
-class XIS_Float_Slider:
+class XIS_Float_Slider(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "value": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "display": "slider"}),
-            }
-        }
+    def define_schema(cls):
+        """Define the v3 schema for the Float Slider node."""
+        return io.Schema(
+            node_id="XIS_Float_Slider",
+            display_name="Float Slider",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.Float.Input("value", default=0.0, min=0.0, max=1.0, step=0.01),
+            ],
+            outputs=[
+                io.Float.Output("value_output", display_name="value_output"),
+            ],
+        )
 
-    RETURN_TYPES = ("FLOAT",)
-    FUNCTION = "process_float_slider"
-    CATEGORY = "XISER_Nodes/UI_And_Control"
-
-    def process_float_slider(self, value):
-        return (value,)
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the Float Slider node (v3 version)."""
+        value = kwargs.get("value", 0.0)
+        return io.NodeOutput(value)
 
 # 输入整数并通过滑块控制
-class XIS_INT_Slider:
+class XIS_INT_Slider(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "value": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1, "display": "slider"}),
-            }
-        }
+    def define_schema(cls):
+        """Define the v3 schema for the INT Slider node."""
+        return io.Schema(
+            node_id="XIS_INT_Slider",
+            display_name="INT Slider",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.Int.Input("value", default=0, min=0, max=100, step=1),
+            ],
+            outputs=[
+                io.Int.Output("value_output", display_name="value_output"),
+            ],
+        )
 
-    RETURN_TYPES = ("INT",)
-    FUNCTION = "process_int_slider"
-    CATEGORY = "XISER_Nodes/UI_And_Control"
-
-    def process_int_slider(self, value):
-        return (value,)
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the INT Slider node (v3 version)."""
+        value = kwargs.get("value", 0)
+        return io.NodeOutput(value)
     
 
 
 # IPA参数设置节点
-class XIS_IPAStyleSettings:
+class XIS_IPAStyleSettings(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "option": (["linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output",
-                            "weak middle", "strong middle", "style transfer", "composition", "strong style transfer",
-                            "style and composition", "style transfer precise", "composition precise"],),
-                "slider": ("FLOAT", {"default": 0.5, "min": 0.00, "max": 1.00, "step": 0.01, "display": "slider"}),
-            }
-        }
+    def define_schema(cls):
+        """Define the v3 schema for the IPA Style Settings node."""
+        options = [
+            "linear", "ease in", "ease out", "ease in-out", "reverse in-out", "weak input", "weak output",
+            "weak middle", "strong middle", "style transfer", "composition", "strong style transfer",
+            "style and composition", "style transfer precise", "composition precise"
+        ]
 
-    RETURN_TYPES = ("STRING", "FLOAT")
-    FUNCTION = "process"
-    CATEGORY = "XISER_Nodes/UI_And_Control"
+        return io.Schema(
+            node_id="XIS_IPAStyleSettings",
+            display_name="IPA Style Settings",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.Combo.Input("option", default="linear", options=options),
+                io.Float.Input("slider", default=0.5, min=0.0, max=1.0, step=0.01),
+            ],
+            outputs=[
+                io.String.Output("option_output", display_name="option_output"),
+                io.Float.Output("slider_output", display_name="slider_output"),
+            ],
+        )
 
-    def process(self, option, slider):
-        return (option, slider)
-
-# 提示词处理器      
-class XIS_PromptProcessor:
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "positive_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入自定义正向提示词"}),
-                "positive_prompt2": ("STRING", {"default": ""}),  # Changed to input interface
-                "negative_prompt": ("STRING", {"default": "", "multiline": True, "placeholder": "输入反向提示词"}),
-                "merge_positive": ("BOOLEAN", {
-                    "default": True,
-                    "label_on": "已使用自动反推词",
-                    "label_off": "已关闭自动反推词"
-                }),
-            }
-        }
+    def execute(cls, **kwargs):
+        """Execute the IPA Style Settings node."""
+        option = kwargs.get("option", "linear")
+        slider = kwargs.get("slider", 0.5)
+        return io.NodeOutput(option, slider)
 
-    RETURN_TYPES = ("STRING", "STRING", "BOOLEAN")
-    RETURN_NAMES = ("combined_prompt", "negative_prompt", "merge_status")
+# 提示词处理器
+class XIS_PromptProcessor(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        """Define the v3 schema for the Prompt Processor node."""
+        return io.Schema(
+            node_id="XIS_PromptProcessor",
+            display_name="Prompt Processor",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.String.Input("positive_prompt1", default="", multiline=True),
+                io.String.Input("positive_prompt2", default=""),
+                io.String.Input("negative_prompt", default="", multiline=True),
+                io.Boolean.Input("merge_positive", default=True),
+            ],
+            outputs=[
+                io.String.Output("combined_prompt", display_name="combined_prompt"),
+                io.String.Output("negative_prompt_output", display_name="negative_prompt_output"),
+                io.Boolean.Output("merge_status", display_name="merge_status"),
+            ],
+        )
 
-    FUNCTION = "process_prompt"
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the Prompt Processor node."""
+        # 从 kwargs 中获取参数
+        positive_prompt1 = kwargs.get("positive_prompt1", "")
+        positive_prompt2 = kwargs.get("positive_prompt2", "")
+        negative_prompt = kwargs.get("negative_prompt", "")
+        merge_positive = kwargs.get("merge_positive", True)
 
-    CATEGORY = "XISER_Nodes/UI_And_Control"
-
-    def process_prompt(self, positive_prompt1, positive_prompt2, negative_prompt, merge_positive):
         # 扩展结束符号集合
         end_symbols = {".", "。", ",", "，", ")", "!", "！", "?", "？", ";", "；"}
 
@@ -136,58 +177,82 @@ class XIS_PromptProcessor:
             combined_prompt = positive_prompt1.strip()
 
         # 返回三个输出值
-        return (combined_prompt, negative_prompt, merge_positive)
+        return io.NodeOutput(combined_prompt, negative_prompt, merge_positive)
 
     @classmethod
-    def IS_CHANGED(cls, positive_prompt1, positive_prompt2, negative_prompt, merge_positive):
+    def IS_CHANGED(cls, **kwargs):
         # 根据所有输入参数生成唯一的哈希值
         import hashlib
+        positive_prompt1 = kwargs.get("positive_prompt1", "")
+        positive_prompt2 = kwargs.get("positive_prompt2", "")
+        negative_prompt = kwargs.get("negative_prompt", "")
+        merge_positive = kwargs.get("merge_positive", True)
+
         input_hash = hashlib.sha256(
             f"{positive_prompt1}_{positive_prompt2}_{negative_prompt}_{merge_positive}".encode()
         ).hexdigest()
         return input_hash
 
-    def __init__(self):
-        pass
 
-
-class XIS_MultiPromptSwitch:
+class XIS_MultiPromptSwitch(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "positive_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入正向提示词"}),
-                "positive_prompt2": ("STRING", {"default": ""}),
-                "enable_prompt2": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "positive_prompt3": ("STRING", {"default": ""}),
-                "enable_prompt3": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "positive_prompt4": ("STRING", {"default": ""}),
-                "enable_prompt4": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "positive_prompt5": ("STRING", {"default": ""}),
-                "enable_prompt5": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "negative_prompt1": ("STRING", {"default": "", "multiline": True, "placeholder": "输入反向提示词"}),
-                "negative_prompt2": ("STRING", {"default": ""}),
-                "enable_neg_prompt2": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "negative_prompt3": ("STRING", {"default": ""}),
-                "enable_neg_prompt3": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "negative_prompt4": ("STRING", {"default": ""}),
-                "enable_neg_prompt4": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),
-                "negative_prompt5": ("STRING", {"default": ""}),
-                "enable_neg_prompt5": ("BOOLEAN", {"default": True, "label_on": "启用", "label_off": "禁用"}),  
-            }
-        }
+    def define_schema(cls):
+        """Define the v3 schema for the MultiPromptSwitch node."""
+        inputs = [
+            io.String.Input("positive_prompt1", default="", multiline=True),
+            io.String.Input("positive_prompt2", default=""),
+            io.Boolean.Input("enable_prompt2", default=True),
+            io.String.Input("positive_prompt3", default=""),
+            io.Boolean.Input("enable_prompt3", default=True),
+            io.String.Input("positive_prompt4", default=""),
+            io.Boolean.Input("enable_prompt4", default=True),
+            io.String.Input("positive_prompt5", default=""),
+            io.Boolean.Input("enable_prompt5", default=True),
+            io.String.Input("negative_prompt1", default="", multiline=True),
+            io.String.Input("negative_prompt2", default=""),
+            io.Boolean.Input("enable_neg_prompt2", default=True),
+            io.String.Input("negative_prompt3", default=""),
+            io.Boolean.Input("enable_neg_prompt3", default=True),
+            io.String.Input("negative_prompt4", default=""),
+            io.Boolean.Input("enable_neg_prompt4", default=True),
+            io.String.Input("negative_prompt5", default=""),
+            io.Boolean.Input("enable_neg_prompt5", default=True),
+        ]
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("combined_positive_prompt", "combined_negative_prompt")
+        return io.Schema(
+            node_id="XIS_MultiPromptSwitch",
+            display_name="Multi Prompt Switch",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=inputs,
+            outputs=[
+                io.String.Output("combined_positive_prompt", display_name="combined_positive_prompt"),
+                io.String.Output("combined_negative_prompt", display_name="combined_negative_prompt"),
+            ],
+        )
 
-    FUNCTION = "process_prompts"
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the MultiPromptSwitch node."""
+        # 从 kwargs 中获取所有参数
+        positive_prompt1 = kwargs.get("positive_prompt1", "")
+        positive_prompt2 = kwargs.get("positive_prompt2", "")
+        positive_prompt3 = kwargs.get("positive_prompt3", "")
+        positive_prompt4 = kwargs.get("positive_prompt4", "")
+        positive_prompt5 = kwargs.get("positive_prompt5", "")
+        enable_prompt2 = kwargs.get("enable_prompt2", True)
+        enable_prompt3 = kwargs.get("enable_prompt3", True)
+        enable_prompt4 = kwargs.get("enable_prompt4", True)
+        enable_prompt5 = kwargs.get("enable_prompt5", True)
+        negative_prompt1 = kwargs.get("negative_prompt1", "")
+        negative_prompt2 = kwargs.get("negative_prompt2", "")
+        negative_prompt3 = kwargs.get("negative_prompt3", "")
+        negative_prompt4 = kwargs.get("negative_prompt4", "")
+        negative_prompt5 = kwargs.get("negative_prompt5", "")
+        enable_neg_prompt2 = kwargs.get("enable_neg_prompt2", True)
+        enable_neg_prompt3 = kwargs.get("enable_neg_prompt3", True)
+        enable_neg_prompt4 = kwargs.get("enable_neg_prompt4", True)
+        enable_neg_prompt5 = kwargs.get("enable_neg_prompt5", True)
 
-    CATEGORY = "XISER_Nodes/UI_And_Control"
-
-    def process_prompts(self, positive_prompt1, positive_prompt2, positive_prompt3, positive_prompt4, positive_prompt5,
-                        enable_prompt2, enable_prompt3, enable_prompt4, enable_prompt5,
-                        negative_prompt1, negative_prompt2, negative_prompt3, negative_prompt4, negative_prompt5,
-                        enable_neg_prompt2, enable_neg_prompt3, enable_neg_prompt4, enable_neg_prompt5):
         # 扩展结束符号集合
         end_symbols = {".", "。", ",", "，", ")", "!", "！", "?", "？", ";", "；"}
 
@@ -239,14 +304,30 @@ class XIS_MultiPromptSwitch:
                 else:
                     combined_negative += "\n" + prompt
 
-        return (combined_positive, combined_negative)
+        return io.NodeOutput(combined_positive, combined_negative)
 
     @classmethod
-    def IS_CHANGED(cls, positive_prompt1, positive_prompt2, positive_prompt3, positive_prompt4, positive_prompt5,
-                   enable_prompt2, enable_prompt3, enable_prompt4, enable_prompt5,
-                   negative_prompt1, negative_prompt2, negative_prompt3, negative_prompt4, negative_prompt5,
-                   enable_neg_prompt2, enable_neg_prompt3, enable_neg_prompt4, enable_neg_prompt5):
+    def IS_CHANGED(cls, **kwargs):
         # 根据所有输入参数生成唯一的哈希值
+        positive_prompt1 = kwargs.get("positive_prompt1", "")
+        positive_prompt2 = kwargs.get("positive_prompt2", "")
+        positive_prompt3 = kwargs.get("positive_prompt3", "")
+        positive_prompt4 = kwargs.get("positive_prompt4", "")
+        positive_prompt5 = kwargs.get("positive_prompt5", "")
+        enable_prompt2 = kwargs.get("enable_prompt2", True)
+        enable_prompt3 = kwargs.get("enable_prompt3", True)
+        enable_prompt4 = kwargs.get("enable_prompt4", True)
+        enable_prompt5 = kwargs.get("enable_prompt5", True)
+        negative_prompt1 = kwargs.get("negative_prompt1", "")
+        negative_prompt2 = kwargs.get("negative_prompt2", "")
+        negative_prompt3 = kwargs.get("negative_prompt3", "")
+        negative_prompt4 = kwargs.get("negative_prompt4", "")
+        negative_prompt5 = kwargs.get("negative_prompt5", "")
+        enable_neg_prompt2 = kwargs.get("enable_neg_prompt2", True)
+        enable_neg_prompt3 = kwargs.get("enable_neg_prompt3", True)
+        enable_neg_prompt4 = kwargs.get("enable_neg_prompt4", True)
+        enable_neg_prompt5 = kwargs.get("enable_neg_prompt5", True)
+
         input_string = f"{positive_prompt1}_{positive_prompt2}_{positive_prompt3}_{positive_prompt4}_{positive_prompt5}_" \
                        f"{enable_prompt2}_{enable_prompt3}_{enable_prompt4}_{enable_prompt5}_" \
                        f"{negative_prompt1}_{negative_prompt2}_{negative_prompt3}_{negative_prompt4}_{negative_prompt5}_" \
@@ -254,16 +335,13 @@ class XIS_MultiPromptSwitch:
         input_hash = hashlib.sha256(input_string.encode()).hexdigest()
         return input_hash
 
-    def __init__(self):
-        pass
-
 
 
 # 处理分辨率选择
-class XIS_ResolutionSelector:
+class XIS_ResolutionSelector(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        # 丰富预设分辨率选项
+    def define_schema(cls):
+        """Define the v3 schema for the Resolution Selector node."""
         resolution_options = [
             "256x256 (1:1)", "512x512 (1:1)", "768x768 (1:1)", "1024x1024 (1:1)", "2048x2048 (1:1)",
             "640x480 (4:3)", "800x600 (4:3)", "1024x768 (4:3)", "1280x960 (4:3)",
@@ -272,45 +350,34 @@ class XIS_ResolutionSelector:
             "800x1200 (2:3)", "1200x1800 (2:3)", "1200x800 (3:2)", "1800x1200 (3:2)",
             "960x540 (16:9)", "854x480 (16:9)"
         ]
-        
-        return {
-            "required": {
-                "resolution": (resolution_options, {"default": "512x512 (1:1)"}),  # 下拉菜单选择分辨率
-                "use_custom_resolution": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "使用自定义分辨率",
-                    "label_off": "使用预设分辨率"
-                }),  # 是否使用自定义分辨率
-                "custom_width": ("INT", {
-                    "default": 512,
-                    "min": 1,
-                    "max": 8192,
-                    "step": 1,
-                    "display": "number"
-                }),  # 自定义宽度
-                "custom_height": ("INT", {
-                    "default": 512,
-                    "min": 1,
-                    "max": 8192,
-                    "step": 1,
-                    "display": "number"
-                }),  # 自定义高度
-                "swap_orientation": ("BOOLEAN", {
-                    "default": False,
-                    "label_on": "已切换横竖方向",
-                    "label_off": "未切换横竖方向"
-                })  # 是否切换横竖方向
-            }
-        }
 
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("width", "height")
+        return io.Schema(
+            node_id="XIS_ResolutionSelector",
+            display_name="Resolution Selector",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.Combo.Input("resolution", default="512x512 (1:1)", options=resolution_options),
+                io.Boolean.Input("use_custom_resolution", default=False),
+                io.Int.Input("custom_width", default=512, min=1, max=8192, step=1),
+                io.Int.Input("custom_height", default=512, min=1, max=8192, step=1),
+                io.Boolean.Input("swap_orientation", default=False),
+            ],
+            outputs=[
+                io.Int.Output("width", display_name="width"),
+                io.Int.Output("height", display_name="height"),
+            ],
+        )
 
-    FUNCTION = "select_resolution"
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the Resolution Selector node."""
+        # 从 kwargs 中获取参数
+        resolution = kwargs.get("resolution", "512x512 (1:1)")
+        use_custom_resolution = kwargs.get("use_custom_resolution", False)
+        custom_width = kwargs.get("custom_width", 512)
+        custom_height = kwargs.get("custom_height", 512)
+        swap_orientation = kwargs.get("swap_orientation", False)
 
-    CATEGORY = "XISER_Nodes/UI_And_Control"
-
-    def select_resolution(self, resolution, use_custom_resolution, custom_width, custom_height, swap_orientation):
         # 解析预设分辨率
         if not use_custom_resolution:
             # 从字符串中提取宽度和高度
@@ -327,43 +394,50 @@ class XIS_ResolutionSelector:
             width, height = height, width
 
         # 返回最终的宽度和高度
-        return (width, height)
+        return io.NodeOutput(width, height)
 
     @classmethod
-    def IS_CHANGED(cls, resolution, use_custom_resolution, custom_width, custom_height, swap_orientation):
+    def IS_CHANGED(cls, **kwargs):
         # 根据所有输入参数生成唯一的哈希值
+        resolution = kwargs.get("resolution", "512x512 (1:1)")
+        use_custom_resolution = kwargs.get("use_custom_resolution", False)
+        custom_width = kwargs.get("custom_width", 512)
+        custom_height = kwargs.get("custom_height", 512)
+        swap_orientation = kwargs.get("swap_orientation", False)
+
         input_hash = hashlib.sha256(
             f"{resolution}_{use_custom_resolution}_{custom_width}_{custom_height}_{swap_orientation}".encode()
         ).hexdigest()
         return input_hash
 
-    def __init__(self):
-        pass
-
 # 画布配置节点 - 输出 CANVAS_CONFIG 类型
-class XIS_CanvasConfig:
+class XIS_CanvasConfig(io.ComfyNode):
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "board_width": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
-                "board_height": ("INT", {"default": 1024, "min": 256, "max": 8192, "step": 16}),
-                "canvas_color": (["black", "white", "transparent"], {"default": "black"}),
-                "auto_size": (["off", "on"], {"default": "off"}),
-            }
-        }
+    def define_schema(cls):
+        """Define the v3 schema for the Canvas Config node."""
+        return io.Schema(
+            node_id="XIS_CanvasConfig",
+            display_name="Canvas Config",
+            category="XISER_Nodes/UI_And_Control",
+            inputs=[
+                io.Int.Input("board_width", default=1024, min=256, max=8192, step=16),
+                io.Int.Input("board_height", default=1024, min=256, max=8192, step=16),
+                io.Combo.Input("canvas_color", default="black", options=["black", "white", "transparent"]),
+                io.Combo.Input("auto_size", default="off", options=["off", "on"]),
+            ],
+            outputs=[
+                CanvasConfig.Output("canvas_config", display_name="canvas_config"),
+            ],
+        )
 
-    RETURN_TYPES = ("CANVAS_CONFIG",)
-    RETURN_NAMES = ("canvas_config",)
-    FUNCTION = "create_config"
-    CATEGORY = "XISER_Nodes/UI_And_Control"
+    @classmethod
+    def execute(cls, **kwargs):
+        """Execute the Canvas Config node."""
+        board_width = kwargs.get("board_width", 1024)
+        board_height = kwargs.get("board_height", 1024)
+        canvas_color = kwargs.get("canvas_color", "black")
+        auto_size = kwargs.get("auto_size", "off")
 
-    def create_config(self, board_width, board_height, canvas_color, auto_size):
-        """
-        创建画布配置字典，用于传递给 XISER_Canvas 节点的 canvas_config 输入
-
-        注意：border_width 参数已移除，因为前端画板大小无法同步更新
-        """
         config = {
             "board_width": board_width,
             "board_height": board_height,
@@ -371,16 +445,24 @@ class XIS_CanvasConfig:
             "auto_size": auto_size
         }
         logger.info(f"Canvas config created: {config}")
-        return (config,)
+        return io.NodeOutput(config)
 
-# 节点映射
-NODE_CLASS_MAPPINGS = {
-    "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
-    "XIS_Float_Slider": XIS_Float_Slider,
-    "XIS_INT_Slider": XIS_INT_Slider,
-    "XIS_ResolutionSelector": XIS_ResolutionSelector,
-    "XIS_PromptProcessor": XIS_PromptProcessor,
-    "XIS_MultiPromptSwitch": XIS_MultiPromptSwitch,
-    "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
-    "XIS_CanvasConfig": XIS_CanvasConfig,
-}
+# 节点映射 - 注释掉以启用V3注册模式
+
+
+class XISUIControlExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [
+            XIS_PromptsWithSwitches,
+            XIS_Float_Slider,
+            XIS_INT_Slider,
+            XIS_ResolutionSelector,
+            XIS_PromptProcessor,
+            XIS_MultiPromptSwitch,
+            XIS_IPAStyleSettings,
+            XIS_CanvasConfig,
+        ]
+
+
+async def comfy_entrypoint():
+    return XISUIControlExtension()

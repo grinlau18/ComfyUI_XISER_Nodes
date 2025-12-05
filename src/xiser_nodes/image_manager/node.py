@@ -46,6 +46,28 @@ class XIS_ImageManager:
         self._pack_id_history = {}
         logger.info(f"Instance {self.instance_id} - XIS_ImageManager initialized with output directory: {self.output_dir}")
 
+    def _unwrap_v3_data(self, data):
+        """
+        处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据
+
+        Args:
+            data: 输入数据，可能是 io.NodeOutput、元组或原始数据
+
+        Returns:
+            解包后的原始数据
+        """
+        if data is None:
+            return None
+        if hasattr(data, 'outputs') and isinstance(data.outputs, tuple):
+            # io.NodeOutput 对象
+            return data.outputs[0]
+        elif isinstance(data, tuple) and len(data) == 1:
+            # 可能是 (data,) 格式
+            return data[0]
+        else:
+            # 原始数据
+            return data
+
     @classmethod
     def INPUT_TYPES(cls):
         """Define input types for the node, using hidden widgets to prevent UI rendering."""
@@ -131,6 +153,9 @@ class XIS_ImageManager:
 
     def manage_images(self, pack_images=None, image_order="{}", enabled_layers="{}", node_id="", node_size="[360, 360]", is_reversed="{}", is_single_mode="{}", image_ids="[]", image_state="[]", **kwargs):
         """Process images based on frontend-provided order and enabled state."""
+        # 解包 v3 数据格式
+        pack_images = self._unwrap_v3_data(pack_images)
+
         node_id = str(kwargs.get('node_id', node_id) or self.id)
         self.id = node_id
 
@@ -495,6 +520,9 @@ class XIS_ImageManager:
             if value is None:
                 return []
             actual = value
+            # 处理 v3 节点数据格式 (io.NodeOutput)
+            if hasattr(actual, 'outputs') and isinstance(actual.outputs, tuple):
+                actual = actual.outputs[0]
             if isinstance(actual, tuple):
                 if len(actual) == 1:
                     actual = actual[0]
