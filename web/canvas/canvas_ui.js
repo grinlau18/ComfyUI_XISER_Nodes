@@ -22,9 +22,9 @@ export function initializeUI(node, nodeState, widgetContainer) {
   const defaultBoardHeight = uiConfig.board_height || 1024;
   const defaultBorderWidth = uiConfig.border_width || 120;
   const sidePadding = 1;            // 画布左右各 12px
+  const bottomPadding = 392;         // 画布底部固定余量
   const horizontalPadding = sidePadding * 2; // 总横向留白
   const titleBarHeight = 48;         // 标题栏高度预估
-  const controlsHeightFallback = 260; // 控件区高度兜底，避免空白过大
 
   // Configurable button positions (px, at displayScale = 1)
   const BUTTON_POSITIONS = {
@@ -54,69 +54,79 @@ export function initializeUI(node, nodeState, widgetContainer) {
     const canvasDisplayW = canvasBaseW * scale;
     const canvasDisplayH = canvasBaseH * scale;
 
-    // 节点宽度 = 画板展示宽度 + 左右各 12px
-    const desiredW = canvasDisplayW + sidePadding * 2;
-    // 尝试动态测量：画布容器距顶部的偏移即为控件高度；失败则用兜底
-    let controlsH = controlsHeightFallback;
-    const canvasContainer = widgetContainer.querySelector(`.xiser-canvas-container-${nodeState.nodeId}`);
-    if (canvasContainer) {
-      const offset = canvasContainer.offsetTop;
-      if (Number.isFinite(offset) && offset > 0) {
-        controlsH = offset;
-      }
+    // 先清空高度限制，避免历史 min/max 锁死尺寸导致测量失真
+    widgetContainer.style.height = '';
+    widgetContainer.style.minHeight = '';
+    widgetContainer.style.maxHeight = '';
+    const lgNode = widgetContainer.closest('.lg-node');
+    if (lgNode) {
+      lgNode.style.height = '';
+      lgNode.style.minHeight = '';
+      lgNode.style.maxHeight = '';
+      lgNode.style.width = '';
+      lgNode.style.minWidth = '';
+      lgNode.style.maxWidth = '';
     }
-    // 节点高度 = 控件区 + 画板展示高度 + 底部 12px 余量
-    let desiredH = controlsH + canvasDisplayH + 12;
+
+    const canvasContainer = widgetContainer.querySelector(`.xiser-canvas-container-${nodeState.nodeId}`);
+    const wrapper = canvasContainer?.querySelector(`.xiser-canvas-wrapper-${nodeState.nodeId}`);
 
     // 画布容器尺寸 = 画板展示尺寸，并同步 wrapper 尺寸
     if (canvasContainer) {
       canvasContainer.style.boxSizing = 'border-box';
       canvasContainer.style.width = `${canvasDisplayW}px`;
       canvasContainer.style.height = `${canvasDisplayH}px`;
-      canvasContainer.style.minWidth = `${canvasDisplayW}px`;
-      canvasContainer.style.minHeight = `${canvasDisplayH}px`;
-      canvasContainer.style.maxWidth = `${canvasDisplayW}px`;
-      canvasContainer.style.maxHeight = `${canvasDisplayH}px`;
       canvasContainer.style.overflow = 'hidden';
       canvasContainer.style.marginLeft = `${sidePadding}px`;
       canvasContainer.style.marginRight = `${sidePadding}px`;
 
-      const wrapper = canvasContainer.querySelector(`.xiser-canvas-wrapper-${nodeState.nodeId}`);
       if (wrapper) {
         wrapper.style.width = `${canvasDisplayW}px`;
         wrapper.style.height = `${canvasDisplayH}px`;
-        const wrapperH = wrapper.offsetHeight || canvasDisplayH;
-        const wrapperOffset = wrapper.offsetTop || 0;
-        desiredH = wrapperOffset + wrapperH + 12; // 精确高度：控件区到 wrapper 顶 + wrapper 高度 + 底部余量
+        wrapper.style.overflow = 'hidden';
       }
     }
+
+    // 重新测量控件偏移和 wrapper 实际高度（已清空限制，写回尺寸后取值更可靠）
+    const widgetRect = widgetContainer.getBoundingClientRect();
+    const canvasTop = canvasContainer
+      ? canvasContainer.getBoundingClientRect().top - widgetRect.top // 控件区高度 = 容器顶部相对 widget 顶部
+      : 0;
+    const wrapperH = wrapper?.offsetHeight ?? wrapper?.getBoundingClientRect().height ?? canvasDisplayH;
+
+    // 节点宽度 = 画板展示宽度 + 左右各 sidePadding
+    const desiredW = canvasDisplayW + sidePadding * 2;
+    // 真实高度：控件区偏移 + wrapper 高度 + 底部余量
+    const desiredH = canvasTop + wrapperH + bottomPadding;
 
     // 设置 widget 容器尺寸，避免内容溢出
     widgetContainer.style.boxSizing = 'border-box';
     widgetContainer.style.width = `${desiredW}px`;
     widgetContainer.style.height = `${desiredH}px`;
-    widgetContainer.style.minWidth = `${desiredW}px`;
-    widgetContainer.style.maxWidth = `${desiredW}px`;
-    widgetContainer.style.minHeight = `${desiredH}px`;
-    widgetContainer.style.maxHeight = `${desiredH}px`;
     widgetContainer.style.resize = 'none';
     widgetContainer.style.overflow = 'hidden';
 
     // 同步外层节点尺寸并禁用拖拽手柄
-    const lgNode = widgetContainer.closest('.lg-node');
     if (lgNode) {
       lgNode.style.setProperty('--node-width', `${desiredW}px`);
       lgNode.style.setProperty('--node-height', `${desiredH}px`);
       lgNode.style.width = `${desiredW}px`;
       lgNode.style.height = `${desiredH}px`;
-      lgNode.style.minWidth = `${desiredW}px`;
-      lgNode.style.maxWidth = `${desiredW}px`;
-      lgNode.style.minHeight = `${desiredH}px`;
-      lgNode.style.maxHeight = `${desiredH}px`;
+      lgNode.style.overflow = 'hidden';
       lgNode.querySelectorAll("[aria-label^='从']").forEach((el) => {
         el.style.display = 'none';
         el.style.pointerEvents = 'none';
       });
+    }
+
+    // 同步 LiteGraph 画布节点尺寸，确保背景与 DOM 匹配
+    // LiteGraph 使用未缩放的画布坐标，需要除以当前画布缩放以匹配 DOM 尺寸
+    const graphScale = node?.graph?.canvas?.ds?.scale || 1;
+    if (Array.isArray(node.size) && graphScale > 0) {
+      node.size[0] = desiredW / graphScale;
+      node.size[1] = desiredH / graphScale;
+      node.graph?.setDirtyCanvas?.(true, true);
+      node.setDirtyCanvas?.(true, true);
     }
   }
 
@@ -216,6 +226,10 @@ export function initializeUI(node, nodeState, widgetContainer) {
         pointer-events: none;
         display: block;
         background: transparent;
+      }
+      .xiser-canvas-wrapper-${nodeState.nodeId} {
+        border: none !important;
+        box-shadow: none !important;
       }
       .xiser-canvas-stage-${nodeState.nodeId} {
         position: absolute;

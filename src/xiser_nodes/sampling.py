@@ -5,6 +5,7 @@ from typing import Dict, Tuple, List
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 import comfy.samplers
+from comfy_api.latest import io, ComfyExtension
 from .utils import logger
 
 # 自定义动态去噪采样器
@@ -259,7 +260,107 @@ class XIS_LatentBlendNode:
         # Return in ComfyUI LATENT format
         return ({"samples": output_tensor},)
 
-NODE_CLASS_MAPPINGS = {
-    "XIS_DynamicKSampler": XIS_DynamicKSampler,
-    "XIS_LatentBlendNode": XIS_LatentBlendNode,
-}
+class XIS_DynamicKSamplerV3(io.ComfyNode):
+    """v3 版本：复用 legacy 动态采样逻辑。"""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_DynamicKSampler",
+            display_name="XIS DynamicKSampler",
+            category="XISER_Nodes/Sampling",
+            inputs=[
+                io.Model.Input("model"),
+                io.Latent.Input("latent_image"),
+                io.Conditioning.Input("positive"),
+                io.Conditioning.Input("negative"),
+                io.Float.Input("start_denoise", default=1.0, min=0.0, max=1.0, step=0.01),
+                io.Float.Input("end_denoise", default=1.0, min=0.0, max=1.0, step=0.01),
+                io.Combo.Input("denoise_curve_type", options=["linear", "quadratic", "cubic", "exponential", "logarithmic", "sigmoid", "sine", "step"], default="linear"),
+                io.Int.Input("steps", default=20, min=1, max=100, step=1),
+                io.Float.Input("start_cfg", default=7.0, min=0.0, max=20.0, step=0.1),
+                io.Float.Input("end_cfg", default=7.0, min=0.0, max=20.0, step=0.1),
+                io.Combo.Input("CFG_curve_type", options=["linear", "quadratic", "cubic", "exponential", "logarithmic", "sigmoid", "sine", "step"], default="linear"),
+                io.Combo.Input("sampler_name", options=comfy.samplers.KSampler.SAMPLERS, default="dpmpp_sde"),
+                io.Combo.Input("scheduler", options=comfy.samplers.KSampler.SCHEDULERS, default="karras"),
+                io.Int.Input("seed", default=0, min=0, max=0xFFFFFFFFFFFFFFFF),
+                io.AnyType.Input("denoise_list", optional=True),
+                io.AnyType.Input("CFG_list", optional=True),
+            ],
+            outputs=[
+                io.Latent.Output("latent", display_name="latent"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, model, latent_image, positive, negative, start_denoise, end_denoise, denoise_curve_type, steps,
+                start_cfg, end_cfg, CFG_curve_type, sampler_name, scheduler, seed, denoise_list=None, CFG_list=None):
+        legacy = XIS_DynamicKSampler()
+        (latent_out,) = legacy.sample(
+            model=model,
+            latent_image=latent_image,
+            positive=positive,
+            negative=negative,
+            start_denoise=start_denoise,
+            end_denoise=end_denoise,
+            denoise_curve_type=denoise_curve_type,
+            steps=steps,
+            start_cfg=start_cfg,
+            end_cfg=end_cfg,
+            CFG_curve_type=CFG_curve_type,
+            sampler_name=sampler_name,
+            scheduler=scheduler,
+            seed=seed,
+            denoise_list=denoise_list,
+            CFG_list=CFG_list,
+        )
+        return io.NodeOutput(latent_out)
+
+
+class XIS_LatentBlendNodeV3(io.ComfyNode):
+    """v3 版本：复用 legacy latent 混合逻辑。"""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_LatentBlendNode",
+            display_name="XIS LatentBlendNode",
+            category="XISER_Nodes/Sampling",
+            inputs=[
+                io.Latent.Input("latent1"),
+                io.Latent.Input("latent2"),
+                io.Float.Input("start_strength", default=0.0, min=0.0, max=1.0, step=0.01),
+                io.Float.Input("end_strength", default=1.0, min=0.0, max=1.0, step=0.01),
+                io.Int.Input("batch_size", default=16, min=1, max=100, step=1),
+                io.Combo.Input("blend_mode", options=["linear", "sigmoid", "ease_in", "ease_out", "ease_in_out"], default="linear"),
+            ],
+            outputs=[
+                io.Latent.Output("latent_batch", display_name="latent_batch"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, latent1, latent2, start_strength, end_strength, batch_size, blend_mode):
+        legacy = XIS_LatentBlendNode()
+        (latent_batch,) = legacy.blend_latents(
+            latent1=latent1,
+            latent2=latent2,
+            start_strength=start_strength,
+            end_strength=end_strength,
+            batch_size=batch_size,
+            blend_mode=blend_mode,
+        )
+        return io.NodeOutput(latent_batch)
+
+
+class XISSamplingExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_DynamicKSamplerV3, XIS_LatentBlendNodeV3]
+
+
+async def comfy_entrypoint():
+    return XISSamplingExtension()
+
+
+NODE_CLASS_MAPPINGS = None
+NODE_DISPLAY_NAME_MAPPINGS = None

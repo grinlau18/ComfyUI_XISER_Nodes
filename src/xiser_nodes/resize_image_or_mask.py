@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import numpy as np
 from typing import Optional, Tuple, Union, List
 import math
+from comfy_api.latest import io, ComfyExtension
 from .utils import standardize_tensor, hex_to_rgb, resize_tensor, INTERPOLATION_MODES, logger
 
 INTERPOLATION_MODES = {
@@ -185,8 +186,8 @@ class XIS_ResizeImageOrMask:
             if num_channels == base.numel():
                 return base
             if num_channels == 4 and base.numel() == 3:
-                # Default to transparent alpha for RGBA to preserve transparency
-                return torch.cat([base, torch.zeros(1, device=device, dtype=dtype)])
+                # 默认填充为不透明的填充色（Alpha=1）
+                return torch.cat([base, torch.ones(1, device=device, dtype=dtype)])
             if base.numel() == 1:
                 return base.expand(num_channels)
             return torch.cat([base, torch.zeros(max(0, num_channels - base.numel()), device=device, dtype=dtype)])
@@ -206,15 +207,19 @@ class XIS_ResizeImageOrMask:
             if resize_mode == "force_resize":
                 return target_width, target_height, 0, 0
             elif resize_mode in ["scale_proportionally", "limited_by_canvas"]:
-                if target_width / target_height > aspect:
-                    h = target_height
-                    w = int(h * aspect)
+                # 以画布为边界按比例缩放，保证 w/h 不超过画布；limited_by_canvas 使用向下取整避免溢出
+                scale = min(target_width / orig_w, target_height / orig_h)
+                w = orig_w * scale
+                h = orig_h * scale
+                if resize_mode == "limited_by_canvas":
+                    w = max(min_unit, int(math.floor(w / min_unit)) * min_unit)
+                    h = max(min_unit, int(math.floor(h / min_unit)) * min_unit)
+                    w = min(w, target_width)
+                    h = min(h, target_height)
                 else:
-                    w = target_width
-                    h = int(w / aspect)
-                w = (w + min_unit - 1) // min_unit * min_unit
-                h = (h + min_unit - 1) // min_unit * min_unit
-                return w, h, (target_width - w) // 2, (target_height - h) // 2
+                    w = (int(round(w / min_unit)) * min_unit)
+                    h = (int(round(h / min_unit)) * min_unit)
+                return int(w), int(h), (target_width - int(w)) // 2, (target_height - int(h)) // 2
             elif resize_mode == "fill_the_canvas":
                 if target_width / target_height < aspect:
                     h = target_height
@@ -288,12 +293,13 @@ class XIS_ResizeImageOrMask:
             batch_size, orig_h, orig_w, channels = image.shape
             fill_color = get_fill_color(channels, image.device, image.dtype)
 
-            if should_resize(orig_w, orig_h, target_width, target_height):
+            force_canvas = resize_mode == "limited_by_canvas"
+            if should_resize(orig_w, orig_h, target_width, target_height) or force_canvas:
                 w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
                 resized_img = resize_tensor(image, (h, w), INTERPOLATION_MODES[interpolation])
                 if resize_mode == "limited_by_canvas":
-                    output = torch.full((batch_size, target_height, target_width, channels), 0, device=image.device, dtype=image.dtype)
-                    output.copy_(fill_color.view(1, 1, 1, -1).expand(batch_size, target_height, target_width, channels))
+                    fill = fill_color.view(1, 1, 1, -1).expand(batch_size, target_height, target_width, channels)
+                    output = fill.clone()
                     output[:, offset_y:offset_y+h, offset_x:offset_x+w] = resized_img
                     resized_img = output
                 elif resize_mode == "fill_the_canvas":
@@ -321,7 +327,8 @@ class XIS_ResizeImageOrMask:
             batch_size, orig_h, orig_w = mask_input.shape
             mask_fill_value = torch.tensor(0.0, device=mask.device, dtype=mask.dtype)
 
-            if should_resize(orig_w, orig_h, target_width, target_height):
+            force_canvas = resize_mode == "limited_by_canvas"
+            if should_resize(orig_w, orig_h, target_width, target_height) or force_canvas:
                 w, h, offset_x, offset_y = compute_size(orig_w, orig_h)
                 resized_mask = resize_tensor(mask_input.unsqueeze(-1), (h, w), INTERPOLATION_MODES[interpolation]).squeeze(-1)
                 if resize_mode == "limited_by_canvas":
@@ -535,10 +542,74 @@ class XIS_ResizeImageOrMask:
         return resized_img
 
 
-NODE_CLASS_MAPPINGS = {
-    "XIS_ResizeImageOrMask": XIS_ResizeImageOrMask,
-}
+class XIS_ResizeImageOrMaskV3(io.ComfyNode):
+    """v3 版本：复用 legacy 逻辑，包装为 Comfy API 节点。"""
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "XIS_ResizeImageOrMask": "Resize Image Or Mask (XISER)",
-}
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_ResizeImageOrMask",
+            display_name="XIS ResizeImageOrMask",
+            category="XISER_Nodes/Image_And_Mask",
+            inputs=[
+                io.Combo.Input("resize_mode", options=["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas", "total_pixels"], default="force_resize"),
+                io.Combo.Input("scale_condition", options=["downscale_only", "upscale_only", "always"], default="always"),
+                io.Combo.Input("interpolation", options=list(INTERPOLATION_MODES.keys()), default="bilinear"),
+                io.Int.Input("min_unit", default=16, min=1, max=64, step=1),
+                io.Image.Input("image", optional=True),
+                io.Mask.Input("mask", optional=True),
+                io.AnyType.Input("pack_images", optional=True),
+                io.Image.Input("reference_image", optional=True),
+                io.Int.Input("manual_width", default=1024, min=1, max=8192, step=1, optional=True),
+                io.Int.Input("manual_height", default=1024, min=1, max=8192, step=1, optional=True),
+                io.String.Input("fill_hex", default="#000000"),
+            ],
+            outputs=[
+                io.Image.Output("resized_image", display_name="resized_image", is_output_list=True),  
+                io.Mask.Output("resized_mask", display_name="resized_mask"),
+                io.Int.Output("width", display_name="width"),
+                io.Int.Output("height", display_name="height"),
+                io.AnyType.Output("pack_images_out", display_name="pack_images_out"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, resize_mode, scale_condition, interpolation, min_unit,
+                image=None, mask=None, pack_images=None, reference_image=None,
+                manual_width=None, manual_height=None, fill_hex="#000000"):
+        # 将 0 视为未填写
+        manual_width = manual_width if manual_width and manual_width > 0 else None
+        manual_height = manual_height if manual_height and manual_height > 0 else None
+        legacy = XIS_ResizeImageOrMask()
+        resized_image, resized_mask, width, height, resized_pack = legacy.resize_image_or_mask(
+            resize_mode=resize_mode,
+            scale_condition=scale_condition,
+            interpolation=interpolation,
+            min_unit=min_unit,
+            image=image,
+            mask=mask,
+            pack_images=pack_images,
+            reference_image=reference_image,
+            manual_width=manual_width,
+            manual_height=manual_height,
+            fill_hex=fill_hex,
+        )
+        # v1 返回列表，保持列表语义（is_output_list=True）
+        if resized_image is None:
+            resized_image = []
+        elif not isinstance(resized_image, list):
+            resized_image = [resized_image]
+        return io.NodeOutput(resized_image, resized_mask, width, height, resized_pack)
+
+
+class XISResizeImageOrMaskExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_ResizeImageOrMaskV3]
+
+
+async def comfy_entrypoint():
+    return XISResizeImageOrMaskExtension()
+
+
+NODE_CLASS_MAPPINGS = None
+NODE_DISPLAY_NAME_MAPPINGS = None

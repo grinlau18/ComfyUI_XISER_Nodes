@@ -170,7 +170,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     width: boardWidth + 2 * borderWidth,
     height: boardHeight + 2 * borderWidth,
     fill: borderColor,
-    stroke: '#808080',
+    stroke: '#80808000',
     strokeWidth: 2,
     listening: false,
   });
@@ -180,7 +180,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
     y: borderWidth,
     width: boardWidth,
     height: boardHeight,
-    stroke: '#808080',
+    stroke: '#ffffff40',
     strokeWidth: 2,
     fill: null,
     listening: false,

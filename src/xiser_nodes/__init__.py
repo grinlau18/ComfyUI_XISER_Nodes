@@ -6,38 +6,38 @@ import inspect
 # ==================== 新的加载策略 ====================
 # 原则：已迁移的v3节点加载，未迁移节点暂时不加载，等待迁移
 
-# 已迁移的v3模块（B级节点已完成）
+# 已迁移的 v3 模块
 V3_MIGRATED_MODULES = [
-    "logic",           # 9个节点 ✅ 已迁移
-    "ui_control",      # 8个节点 ✅ 已迁移
-    "list_processing", # 9个节点 ✅ 已迁移
-    "data_processing", # 6个节点 ✅ 已迁移
-    "label",           # 1个节点 ✅ 已迁移（双模式）
-    "set_color",       # 1个节点 ✅ 已迁移
-    "image_and_mask",  # 9个节点 ✅ 已迁移（A级阶段开始）
-    "canvas",          # 1个节点 ✅ 已迁移（A级阶段）
+    "logic",
+    "ui_control",
+    "list_processing",
+    "data_processing",
+    "label",
+    "set_color",
+    "image_and_mask",
+    "canvas_mask_processor_v3",
+    "canvas",
+    "resize_image_or_mask",
+    "sampling",
 ]
 
-# 待迁移的A级模块（暂时不加载）
+# 待迁移的 A 级模块（暂时不加载）
 A_LEVEL_MODULES = [
-    "resize_image_or_mask", # A级节点
-    "psd_layer_extract",    # A级节点
-    "adjust_image",         # A级节点
-    "image_puzzle",         # A级节点
-    "shape_data",           # A级节点
-    "sampling",             # 包含A级节点
+    "psd_layer_extract",
+    "adjust_image",
+    "image_puzzle",
+    "shape_data",
 ]
 
-# 待迁移的S级模块（暂时不加载）
+# 待迁移的 S 级模块（暂时不加载）
 S_LEVEL_MODULES = [
-    "curve_editor",          # S级节点
-    "coordinate_path",       # S级节点
-    "reorder_images",        # S级节点
-    "shape_and_text",        # S级节点
-    "canvas_mask_processor", # S级节点
-    "multi_point_gradient",  # S级节点
-    "llm.orchestrator",      # S级节点
-    "image_manager.node",    # S级节点
+    "curve_editor",
+    "coordinate_path",
+    "reorder_images",
+    "shape_and_text",
+    "multi_point_gradient",
+    "llm.orchestrator",
+    "image_manager.node",
 ]
 
 # 当前只加载已迁移的v3模块
@@ -49,14 +49,7 @@ NODE_DISPLAY_NAME_MAPPINGS = None
 
 
 async def comfy_entrypoint():
-    """
-    v3入口点：只加载已迁移的v3节点，未迁移节点暂时不加载。
-
-    迁移策略：
-    1. ✅ B级节点：已全部迁移完成 (27个节点)
-    2. 🔄 A级节点：待迁移 (15个节点) - 暂时不加载
-    3. 🔄 S级节点：待迁移 (13个节点) - 暂时不加载
-    """
+    """v3 入口：只加载 V3_MODULES 列表中的已迁移模块。"""
     try:
         from comfy_api.latest import ComfyExtension  # type: ignore
     except Exception as exc:
@@ -129,7 +122,6 @@ async def comfy_entrypoint():
     print(f"[XISER] ✅ v3节点加载完成")
     print(f"[XISER] 加载模块: {', '.join(loaded_modules)}")
     print(f"[XISER] 总节点数: {loaded_nodes}个")
-    print(f"[XISER] 迁移进度: B级节点100%完成，A/S级节点待迁移")
     print("=" * 60)
 
     return CombinedExtension()
