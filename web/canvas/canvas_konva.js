@@ -91,6 +91,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   stageWrapper.style.position = 'relative';
   stageWrapper.style.overflow = 'hidden';
   stageWrapper.style.pointerEvents = 'auto';
+  stageWrapper.style.zIndex = '5'; // 保持在底层，层叠时按钮/面板在上方
   boardContainer.appendChild(stageWrapper);
 
   const stageContainer = document.createElement('div');
@@ -98,7 +99,7 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   stageContainer.style.position = 'absolute';
   stageContainer.style.top = '0';
   stageContainer.style.left = '0';
-  stageContainer.style.zIndex = '10';
+  stageContainer.style.zIndex = '5';
   stageContainer.style.pointerEvents = 'auto';
   stageContainer.style.touchAction = 'none'; // allow custom gesture handling
   stageContainer.style.userSelect = 'none';

@@ -16,6 +16,14 @@ import { persistImageStates } from './layer_store.js';
 export function initializeUI(node, nodeState, widgetContainer) {
   const log = nodeState.log || console;
   let cutoutButton;
+  const uiConfig = node.properties?.ui_config || {};
+  const defaultBoardWidth = uiConfig.board_width || 1024;
+  const defaultBoardHeight = uiConfig.board_height || 1024;
+  const defaultBorderWidth = uiConfig.border_width || 120;
+  const sidePadding = 1;            // 画布左右各 12px
+  const horizontalPadding = sidePadding * 2; // 总横向留白
+  const titleBarHeight = 48;         // 标题栏高度预估
+  const controlsHeight = 350;        // 标准控件区高度预估
 
   // Configurable button positions (px, at displayScale = 1)
   const BUTTON_POSITIONS = {
@@ -27,6 +35,138 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   // Auto-hide timeout for status text (ms)
   const STATUS_AUTO_HIDE_TIMEOUT = 3000;
+
+  /**
+   * 让节点大小跟随画布（画布做主）：根据 board_width/height 和 display_scale 计算节点和容器尺寸。
+   * - 固定 widgetContainer 和外层 .lg-node 的宽高/最小/最大，禁用拖拽手柄
+   * - 画布容器尺寸 = 画布基准（board+border）
+   * @param {number} displayScale
+   */
+  function applySizeFromCanvas(displayScale) {
+    const scale = Math.min(Math.max(displayScale || 1, 0.1), 2);
+    const boardWidth = parseFloat(node.properties?.ui_config?.board_width) || defaultBoardWidth;
+    const boardHeight = parseFloat(node.properties?.ui_config?.board_height) || defaultBoardHeight;
+    const borderWidth = parseFloat(node.properties?.ui_config?.border_width) || defaultBorderWidth;
+
+    const canvasBaseW = boardWidth + 2 * borderWidth;
+    const canvasBaseH = boardHeight + 2 * borderWidth;
+    const canvasDisplayW = canvasBaseW * scale;
+    const canvasDisplayH = canvasBaseH * scale;
+
+    // 节点宽度 = 画板展示宽度 + 左右各 12px
+    const desiredW = canvasDisplayW + sidePadding * 2;
+    // 节点高度 = 标题栏 + 控件区 + 画板展示高度 + 底部 12px 余量
+    const desiredH = titleBarHeight + controlsHeight + canvasDisplayH + sidePadding;
+
+    // 设置 widget 容器尺寸，避免内容溢出
+    widgetContainer.style.boxSizing = 'border-box';
+    widgetContainer.style.width = `${desiredW}px`;
+    widgetContainer.style.height = `${desiredH}px`;
+    widgetContainer.style.minWidth = `${desiredW}px`;
+    widgetContainer.style.maxWidth = `${desiredW}px`;
+    widgetContainer.style.minHeight = `${desiredH}px`;
+    widgetContainer.style.maxHeight = `${desiredH}px`;
+    widgetContainer.style.resize = 'none';
+    widgetContainer.style.overflow = 'hidden';
+
+    // 同步外层节点尺寸并禁用拖拽手柄
+    const lgNode = widgetContainer.closest('.lg-node');
+    if (lgNode) {
+      lgNode.style.setProperty('--node-width', `${desiredW}px`);
+      lgNode.style.setProperty('--node-height', `${desiredH}px`);
+      lgNode.style.width = `${desiredW}px`;
+      lgNode.style.height = `${desiredH}px`;
+      lgNode.style.minWidth = `${desiredW}px`;
+      lgNode.style.maxWidth = `${desiredW}px`;
+      lgNode.style.minHeight = `${desiredH}px`;
+      lgNode.style.maxHeight = `${desiredH}px`;
+      lgNode.querySelectorAll("[aria-label^='从']").forEach((el) => {
+        el.style.display = 'none';
+        el.style.pointerEvents = 'none';
+      });
+    }
+
+    // 画布容器尺寸 = 画板展示尺寸
+    const canvasContainer = widgetContainer.querySelector(`.xiser-canvas-container-${nodeState.nodeId}`);
+    if (canvasContainer) {
+      canvasContainer.style.boxSizing = 'border-box';
+      canvasContainer.style.width = `${canvasDisplayW}px`;
+      canvasContainer.style.height = `${canvasDisplayH}px`;
+      canvasContainer.style.minWidth = `${canvasDisplayW}px`;
+      canvasContainer.style.minHeight = `${canvasDisplayH}px`;
+      canvasContainer.style.maxWidth = `${canvasDisplayW}px`;
+      canvasContainer.style.maxHeight = `${canvasDisplayH}px`;
+      canvasContainer.style.overflow = 'hidden';
+      canvasContainer.style.marginLeft = `${sidePadding}px`;
+      canvasContainer.style.marginRight = `${sidePadding}px`;
+    }
+  }
+
+  // 绑定 display_scale 控件，数值变化时同步尺寸与 UI 缩放
+  function bindDisplayScaleControl() {
+    const inputEl = widgetContainer.querySelector('input[aria-label="display_scale"]');
+    if (!inputEl) {
+      // 控件尚未渲染，稍后重试
+      setTimeout(bindDisplayScaleControl, 100);
+      return;
+    }
+    inputEl.type = 'number';
+    inputEl.step = '0.01';
+    inputEl.min = '0.1';
+    inputEl.max = '1';
+    inputEl.inputMode = 'decimal';
+    const applyFromInput = () => {
+      const raw = (inputEl.value || '').replace(',', '.');
+      const val = parseFloat(raw);
+      if (!Number.isFinite(val)) return;
+      const clamped = Math.min(Math.max(val, 0.1), 1.0);
+      inputEl.value = clamped;
+      // 保存到 ui_config 便于刷新后保持
+      node.properties = node.properties || {};
+      node.properties.ui_config = node.properties.ui_config || {};
+      node.properties.ui_config.display_scale = clamped;
+      node.setProperty?.('display_scale', clamped);
+      applyScaleAndSize(clamped);
+    };
+    const handler = (evt) => {
+      if (evt.type === 'keydown' && evt.key !== 'Enter') return;
+      applyFromInput();
+    };
+    ['change', 'input', 'blur', 'keydown'].forEach(evt =>
+      inputEl.addEventListener(evt, handler)
+    );
+  }
+
+  // 绑定 board_width / board_height / border_width 控件，修改后实时应用并持久化 ui_config
+  function bindNumberControl(label, key) {
+    const inputEl = widgetContainer.querySelector(`input[aria-label="${label}"]`);
+    if (!inputEl) {
+      return false;
+    }
+    inputEl.type = 'number';
+    inputEl.step = key === 'border_width' ? '1' : '16';
+    inputEl.min = key === 'border_width' ? '10' : '256';
+    inputEl.max = key === 'border_width' ? '200' : '8192';
+    inputEl.inputMode = 'decimal';
+    const applyFromInput = () => {
+      const raw = (inputEl.value || '').replace(',', '.');
+      const val = parseFloat(raw);
+      if (!Number.isFinite(val)) return;
+      node.properties = node.properties || {};
+      node.properties.ui_config = node.properties.ui_config || {};
+      node.properties.ui_config[key] = val;
+      node.setProperty?.(key, val);
+      applyScaleAndSize(currentScale);
+    };
+    const handler = (evt) => {
+      if (evt.type === 'keydown' && evt.key !== 'Enter') return;
+      applyFromInput();
+    };
+    ['change', 'input', 'blur', 'keydown'].forEach(evt =>
+      inputEl.addEventListener(evt, handler)
+    );
+    return true;
+  }
 
   /**
    * Creates and appends CSS styles for the UI components with node-specific scoping.
@@ -57,14 +197,16 @@ export function initializeUI(node, nodeState, widgetContainer) {
       .xiser-status-text-${nodeState.nodeId} {
         position: absolute;
         bottom: 10px;
-        left: 50%;
-        transform: translateX(-50%);
+        left: 0;
+        right: 0;
+        text-align: center;
+        transform: none;
         color: #fff;
         background-color: rgba(0, 0, 0, 0.7);
         border-radius: 5px;
         padding: 5px;
         font-size: 20px;
-        z-index: 10;
+        z-index: 25;
         pointer-events: none;
         transition: opacity 0.3s ease;
       }
@@ -79,7 +221,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
         display: flex;
         gap: 6px;
         pointer-events: auto;
-        z-index: 15;
+        z-index: 30;
       }
       .xiser-button-${nodeState.nodeId} {
         color: #fff;
@@ -109,7 +251,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
         color: #fff;
         padding: 0px;
         font-size: 16px;
-        z-index: 10;
+        z-index: 25;
         max-height: 320px;
         overflow: hidden;
         border-radius: 8px;
@@ -896,8 +1038,30 @@ export function initializeUI(node, nodeState, widgetContainer) {
   // Add node-specific CSS class
   node.addCustomCssClass?.("xiser-node");
 
-  // Initialize scaling
-  updateUIScale(node.properties?.ui_config?.display_scale || 0.75);
+  // 画布做主：根据 board 宽高 + display_scale 设定节点/容器尺寸，并随缩放更新
+  const initialScale = parseFloat(node.properties?.ui_config?.display_scale || 0.75) || 0.75;
+  let currentScale = initialScale;
+  const applyScaleAndSize = (scaleVal) => {
+    currentScale = Math.min(Math.max(scaleVal || 1, 0.1), 2);
+    updateUIScale(currentScale);
+    applySizeFromCanvas(currentScale);
+  };
+  applyScaleAndSize(initialScale);
+  const sizeObserver = new ResizeObserver(() => applySizeFromCanvas(currentScale));
+  sizeObserver.observe(widgetContainer);
+  bindDisplayScaleControl();
+  bindNumberControl('board_width', 'board_width');
+  bindNumberControl('board_height', 'board_height');
+  bindNumberControl('border_width', 'border_width');
+
+  // 监听节点控件区域变动（Vue 重渲染时重新绑定）
+  const mutationObserver = new MutationObserver(() => {
+    bindDisplayScaleControl();
+    bindNumberControl('board_width', 'board_width');
+    bindNumberControl('board_height', 'board_height');
+    bindNumberControl('border_width', 'border_width');
+  });
+  mutationObserver.observe(widgetContainer, { childList: true, subtree: true });
 
 
   return {
@@ -908,7 +1072,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
     layerPanel,
     buttons,
     updateLayerPanel,
-    updateUIScale,
+    updateUIScale: applyScaleAndSize,
     updateStatusText,
     styleElement // Return style element for cleanup
   };
