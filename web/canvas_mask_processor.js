@@ -2,7 +2,8 @@ import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
 const DEBUG = false; // 调试模式开关
-const BASE_NODE_HEIGHT = 150; // 最小高度
+const BASE_NODE_HEIGHT = 0; // 最小高度，允许随控件收缩
+const HEADER_PADDING = 32;  // 预留标题/输入行的基础高度
 const DEFAULT_SPACER_HEIGHT = 10; // 默认不可见控件高度
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 800;
@@ -57,16 +58,13 @@ app.registerExtension({
 
         nodeType.prototype.layerCount = 8;
 
-        const getSpacerHeight = (node) => Math.max(0, node.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT);
-        const getFixedWidth = (node, fallbackWidth) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, node.properties?.fixedWidth || fallbackWidth || MIN_WIDTH));
-
         // 确保底部有一个透明占位 widget，用高度来撑出下边距（不依赖样式）
         function ensureBottomSpacer(node) {
             node.widgets = node.widgets || [];
             // 移除旧的 spacer，避免多个
             node.widgets = node.widgets.filter(w => w.name !== "__bottom_padding");
             const spacer = node.addWidget("info", "__bottom_padding", "", null, { serialize: false });
-            spacer.computeSize = () => [node.size?.[0] || 0, getSpacerHeight(node)];
+            spacer.computeSize = () => [node.size?.[0] || 0, DEFAULT_SPACER_HEIGHT];
             spacer.draw = () => {}; // 不绘制，只占高度
             return spacer;
         }
@@ -77,14 +75,31 @@ app.registerExtension({
             node.widgets = node.widgets.filter(w => w.name !== "__bottom_padding");
         }
 
-        // 统一的高度计算方法：依赖实际 widget 高度（含 spacer）动态计算
+        // 自适应尺寸：按当前 widgets 计算宽高，宽度限制在 MIN/MAX，忽略传入高度
         const origComputeSize = nodeType.prototype.computeSize;
-        nodeType.prototype.computeSize = function (out) {
+        nodeType.prototype.computeSize = function(out) {
             const base = origComputeSize
                 ? origComputeSize.call(this, out ? [0, 0] : undefined)
-                : [this.size?.[0] || 0, this.size?.[1] || BASE_NODE_HEIGHT];
-            const width = getFixedWidth(this, base?.[0] || this.size?.[0] || MIN_WIDTH);
-            const height = Math.max(BASE_NODE_HEIGHT, base?.[1] || BASE_NODE_HEIGHT);
+                : [this.size?.[0] || MIN_WIDTH, BASE_NODE_HEIGHT];
+            let width = Math.max(base?.[0] || MIN_WIDTH, MIN_WIDTH);
+            let height = HEADER_PADDING; // 标题/端口的基础高度
+            const targetW = width;
+
+            if (Array.isArray(this.widgets)) {
+                for (const w of this.widgets) {
+                    let sz = DEFAULT_SPACER_HEIGHT;
+                    if (w?.computeSize) {
+                        const res = w.computeSize(targetW);
+                        sz = Array.isArray(res) ? (res[1] || 0) : (res || DEFAULT_SPACER_HEIGHT);
+                        width = Math.max(width, Array.isArray(res) ? (res[0] || width) : width);
+                    }
+                    height += sz || 0;
+                }
+            }
+
+            height = Math.max(height + 4, BASE_NODE_HEIGHT) - 200;
+            width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width));
+
             if (out) {
                 out[0] = width;
                 out[1] = height;
@@ -174,12 +189,15 @@ app.registerExtension({
             try {
                 if (origOnNodeCreated) origOnNodeCreated.apply(this);
                 await ensureNodeId(this);
-                this.resizable = false;
+                this.resizable = true; // 允许调整宽度
                 this.properties = this.properties || {};
 
                 const buttonContainer = document.createElement("div");
                 buttonContainer.className = "xis-canvas-mask-buttons";
                 buttonContainer.dataset.nodeId = this.id;
+
+                // 默认显示 8 个开关
+                this.layerCount = Math.min(Math.max(1, this.layerCount || 8), MAX_LAYER_COUNT);
 
                 const addButton = document.createElement("button");
                 addButton.innerText = "Add Layer";
@@ -188,7 +206,7 @@ app.registerExtension({
                     if (this.layerCount < MAX_LAYER_COUNT) {
                         this.layerCount++;
                         this.rebuildWidgets();
-                        app.graph.setDirtyCanvas(true, false);
+                        app.graph.setDirtyCanvas(true, true);
                         if (DEBUG) console.log(`Node ${this.id}: Added layer, total: ${this.layerCount}`);
                     }
                 };
@@ -201,7 +219,7 @@ app.registerExtension({
                     if (this.layerCount > 1) {
                         this.layerCount--;
                         this.rebuildWidgets();
-                        app.graph.setDirtyCanvas(true, false);
+                        app.graph.setDirtyCanvas(true, true);
                         if (DEBUG) console.log(`Node ${this.id}: Removed layer, total: ${this.layerCount}`);
                     }
                 };
@@ -212,16 +230,14 @@ app.registerExtension({
 
                 if (DEBUG) console.log(`Node ${this.id}: Added buttons DOM widget, current widgets:`, this.widgets?.map(w => w.name));
 
-                // 初始化固定宽度与 spacer 高度，但不暴露 UI 控件
-                this.properties.fixedWidth = getFixedWidth(this, this.properties.fixedWidth || this.size?.[0] || MIN_WIDTH);
-                this.properties.spacerHeight = getSpacerHeight(this);
-
-                ensureBottomSpacer(this);
-                reorderWidgets(this);
-                this.setSize(this.computeSize());
-
                 updateLayerCount(this);
                 this.rebuildWidgets();
+                ensureBottomSpacer(this);
+                reorderWidgets(this);
+                // 高度完全由内容决定，宽度保留当前值
+                const newSize = this.computeSize([this.size?.[0] || MIN_WIDTH, 0]);
+                this.setSize([newSize[0], newSize[1]]);
+                app.graph.setDirtyCanvas(true, true);
             } catch (error) {
                 console.error(`Node ${this.id}: Error in onNodeCreated: ${error.message}`);
             }
@@ -313,16 +329,14 @@ app.registerExtension({
                 // 5. 重新排列widgets数组，确保按钮在上、spacer在下
                 reorderWidgets(this);
 
-                // 6. 调整节点大小 - 使用requestAnimationFrame减少闪烁
-                requestAnimationFrame(() => {
-                    this.setSize(this.computeSize());
-                    this.onResize?.();
-                    app.graph.setDirtyCanvas(true, false);
+                // 6. 调整节点大小 - 直接同步，避免首帧跳变
+                this.setSize(this.computeSize());
+                this.onResize?.();
+                app.graph.setDirtyCanvas(true, true);
 
-                    if (DEBUG) {
-                        console.log(`Node ${this.id}: Incremental rebuild completed - Added: ${toAdd.length}, Removed: ${toRemove.length}`);
-                    }
-                });
+                if (DEBUG) {
+                    console.log(`Node ${this.id}: Incremental rebuild completed - Added: ${toAdd.length}, Removed: ${toRemove.length}`);
+                }
 
             } catch (error) {
                 console.error(`Node ${this.id}: Error in rebuildWidgets:`, error);
@@ -339,26 +353,25 @@ app.registerExtension({
                 if (DEBUG) console.log(`Node ${this.id}: Using fallback rebuild`);
                 this.properties = this.properties || {};
 
-                // 清理所有Layer_Mask控件 - 使用requestAnimationFrame减少闪烁
-                requestAnimationFrame(() => {
-                    removeBottomSpacer(this);
-                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
+                // 清理所有Layer_Mask控件并同步重建
+                removeBottomSpacer(this);
+                this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
 
-                    // 重新创建所有控件 - 按数字顺序
-                    for (let i = 1; i <= this.layerCount; i++) {
-                        const widgetName = `Layer_Mask_${i}`;
-                        ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app);
-                    }
+                // 重新创建所有控件 - 按数字顺序
+                for (let i = 1; i <= this.layerCount; i++) {
+                    const widgetName = `Layer_Mask_${i}`;
+                    ComfyWidgets.BOOLEAN(this, widgetName, ["BOOLEAN", { default: false }], app);
+                }
 
-                    ensureBottomSpacer(this);
-                    reorderWidgets(this);
+                ensureBottomSpacer(this);
+                reorderWidgets(this);
 
-                    // 调整节点大小
-                    this.setSize(this.computeSize());
-                    app.graph.setDirtyCanvas(true, false);
+                // 调整节点大小
+                const newSize = this.computeSize([this.size?.[0] || MIN_WIDTH, 0]);
+                this.setSize([newSize[0], newSize[1]]);
+                app.graph.setDirtyCanvas(true, true);
 
-                    if (DEBUG) console.log(`Node ${this.id}: Fallback rebuild completed successfully`);
-                });
+                if (DEBUG) console.log(`Node ${this.id}: Fallback rebuild completed successfully`);
 
                 } catch (fallbackError) {
                 console.error(`Node ${this.id}: Fallback rebuild also failed:`, fallbackError);
@@ -372,26 +385,25 @@ app.registerExtension({
             try {
                 if (DEBUG) console.log(`Node ${this.id}: Using ultimate recovery`);
 
-                // 重置到默认状态 - 使用requestAnimationFrame减少闪烁
-                requestAnimationFrame(() => {
-                    this.layerCount = 8;
-                    this.properties = this.properties || {};
-                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
+                // 重置到默认状态
+                this.layerCount = 8;
+                this.properties = this.properties || {};
+                this.widgets = this.widgets?.filter(w => !w.name?.startsWith("Layer_Mask_")) || [];
 
-                    // 创建默认控件 - 按数字顺序
-                    for (let i = 1; i <= this.layerCount; i++) {
-                        ComfyWidgets.BOOLEAN(this, `Layer_Mask_${i}`, ["BOOLEAN", { default: false }], app);
-                    }
+                // 创建默认控件 - 按数字顺序
+                for (let i = 1; i <= this.layerCount; i++) {
+                    ComfyWidgets.BOOLEAN(this, `Layer_Mask_${i}`, ["BOOLEAN", { default: false }], app);
+                }
 
-                    ensureBottomSpacer(this);
-                    reorderWidgets(this);
+                ensureBottomSpacer(this);
+                reorderWidgets(this);
 
-                    // 重置节点大小
-                    this.setSize(this.computeSize());
-                    app.graph.setDirtyCanvas(true, false);
+                // 重置节点大小
+                const newSize = this.computeSize([this.size?.[0] || MIN_WIDTH, 0]);
+                this.setSize([newSize[0], newSize[1]]);
+                app.graph.setDirtyCanvas(true, true);
 
-                    if (DEBUG) console.log(`Node ${this.id}: Ultimate recovery completed`);
-                });
+                if (DEBUG) console.log(`Node ${this.id}: Ultimate recovery completed`);
 
             } catch (ultimateError) {
                 console.error(`Node ${this.id}: Ultimate recovery failed:`, ultimateError);
@@ -407,9 +419,6 @@ app.registerExtension({
                 const data = origSerialize ? origSerialize.apply(this) : {};
                 data.properties = data.properties || {};
                 data.properties.layerCount = this.layerCount;
-                data.properties.width = this.size[0];
-                data.properties.fixedWidth = this.properties?.fixedWidth || this.size[0];
-                data.properties.spacerHeight = this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT;
 
                 // 记录正确的控件状态用于修正
                 const correctStates = {};
@@ -467,20 +476,6 @@ app.registerExtension({
                 if (config.properties) {
                     // 验证和清理配置数据
                     this.layerCount = Math.min(MAX_LAYER_COUNT, Math.max(1, parseInt(config.properties.layerCount) || 8));
-                    this.properties.fixedWidth = getFixedWidth(this, parseInt(config.properties.fixedWidth) || this.size?.[0] || MIN_WIDTH);
-                    this.properties.spacerHeight = Math.max(0, parseInt(config.properties.spacerHeight) || DEFAULT_SPACER_HEIGHT);
-
-                    if (config.properties.width) {
-                        const width = parseInt(config.properties.width);
-                        if (width > 0) {
-                            const size = this.computeSize([width, 0]);
-                            this.setSize([width, size[1]]);
-                        } else {
-                            this.setSize(this.computeSize());
-                        }
-                    } else {
-                        this.setSize(this.computeSize());
-                    }
                 }
 
                 // 延迟重建以确保DOM已准备好
@@ -490,6 +485,10 @@ app.registerExtension({
 
                         // 执行状态修正 - 这会修正所有控件的状态
                         correctWidgetStates(this);
+                        // 根据内容更新高度
+                        const size = this.computeSize([this.size?.[0] || MIN_WIDTH, 0]);
+                        this.setSize([size[0], size[1]]);
+                        app.graph.setDirtyCanvas(true, true);
 
                         if (DEBUG) console.log(`Node ${this.id}: Configured with correctWidgetStates: ${JSON.stringify(config.properties?.correctWidgetStates)}, Widgets: ${this.widgets.map(w => `${w.name}: ${w.value}`)}`);
                     } catch (rebuildError) {
@@ -517,6 +516,20 @@ app.registerExtension({
                 if (container) container.remove();
             } catch (error) {
                 console.error(`Node ${this.id}: Error in onRemoved: ${error.message}`);
+            }
+        };
+
+        // 禁止手动拖动改变高度，仅允许宽度，并在每次尺寸变更后按内容重算高度
+        const origOnResize = nodeType.prototype.onResize;
+        nodeType.prototype.onResize = function (size) {
+            try {
+                const targetW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, size?.[0] ?? this.size?.[0] ?? MIN_WIDTH));
+                const computed = this.computeSize([targetW, 0]);
+                this.size = [targetW, computed[1]];
+                if (origOnResize) origOnResize.apply(this, [this.size]);
+                app.graph.setDirtyCanvas(true, true);
+            } catch (error) {
+                console.error(`Node ${this.id}: Error in onResize: ${error.message}`);
             }
         };
 

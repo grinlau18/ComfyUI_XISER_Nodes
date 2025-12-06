@@ -94,6 +94,12 @@ export function initializeKonva(node, nodeState, boardContainer, boardWidth, boa
   stageWrapper.style.zIndex = '5'; // 保持在底层，层叠时按钮/面板在上方
   boardContainer.appendChild(stageWrapper);
 
+  // 将状态提示文字移入 wrapper 内，确保定位相对于画板区域
+  const statusEl = boardContainer.querySelector(`.xiser-status-text-${node.id}`);
+  if (statusEl) {
+    stageWrapper.appendChild(statusEl);
+  }
+
   const stageContainer = document.createElement('div');
   stageContainer.className = `xiser-canvas-stage-${node.id}`;
   stageContainer.style.position = 'absolute';

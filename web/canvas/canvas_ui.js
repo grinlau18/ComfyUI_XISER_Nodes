@@ -16,6 +16,7 @@ import { persistImageStates } from './layer_store.js';
 export function initializeUI(node, nodeState, widgetContainer) {
   const log = nodeState.log || console;
   let cutoutButton;
+  let mutationDebounce;
   const uiConfig = node.properties?.ui_config || {};
   const defaultBoardWidth = uiConfig.board_width || 1024;
   const defaultBoardHeight = uiConfig.board_height || 1024;
@@ -23,7 +24,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
   const sidePadding = 1;            // 画布左右各 12px
   const horizontalPadding = sidePadding * 2; // 总横向留白
   const titleBarHeight = 48;         // 标题栏高度预估
-  const controlsHeight = 350;        // 标准控件区高度预估
+  const controlsHeightFallback = 260; // 控件区高度兜底，避免空白过大
 
   // Configurable button positions (px, at displayScale = 1)
   const BUTTON_POSITIONS = {
@@ -55,8 +56,40 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
     // 节点宽度 = 画板展示宽度 + 左右各 12px
     const desiredW = canvasDisplayW + sidePadding * 2;
-    // 节点高度 = 标题栏 + 控件区 + 画板展示高度 + 底部 12px 余量
-    const desiredH = titleBarHeight + controlsHeight + canvasDisplayH + sidePadding;
+    // 尝试动态测量：画布容器距顶部的偏移即为控件高度；失败则用兜底
+    let controlsH = controlsHeightFallback;
+    const canvasContainer = widgetContainer.querySelector(`.xiser-canvas-container-${nodeState.nodeId}`);
+    if (canvasContainer) {
+      const offset = canvasContainer.offsetTop;
+      if (Number.isFinite(offset) && offset > 0) {
+        controlsH = offset;
+      }
+    }
+    // 节点高度 = 控件区 + 画板展示高度 + 底部 12px 余量
+    let desiredH = controlsH + canvasDisplayH + 12;
+
+    // 画布容器尺寸 = 画板展示尺寸，并同步 wrapper 尺寸
+    if (canvasContainer) {
+      canvasContainer.style.boxSizing = 'border-box';
+      canvasContainer.style.width = `${canvasDisplayW}px`;
+      canvasContainer.style.height = `${canvasDisplayH}px`;
+      canvasContainer.style.minWidth = `${canvasDisplayW}px`;
+      canvasContainer.style.minHeight = `${canvasDisplayH}px`;
+      canvasContainer.style.maxWidth = `${canvasDisplayW}px`;
+      canvasContainer.style.maxHeight = `${canvasDisplayH}px`;
+      canvasContainer.style.overflow = 'hidden';
+      canvasContainer.style.marginLeft = `${sidePadding}px`;
+      canvasContainer.style.marginRight = `${sidePadding}px`;
+
+      const wrapper = canvasContainer.querySelector(`.xiser-canvas-wrapper-${nodeState.nodeId}`);
+      if (wrapper) {
+        wrapper.style.width = `${canvasDisplayW}px`;
+        wrapper.style.height = `${canvasDisplayH}px`;
+        const wrapperH = wrapper.offsetHeight || canvasDisplayH;
+        const wrapperOffset = wrapper.offsetTop || 0;
+        desiredH = wrapperOffset + wrapperH + 12; // 精确高度：控件区到 wrapper 顶 + wrapper 高度 + 底部余量
+      }
+    }
 
     // 设置 widget 容器尺寸，避免内容溢出
     widgetContainer.style.boxSizing = 'border-box';
@@ -84,21 +117,6 @@ export function initializeUI(node, nodeState, widgetContainer) {
         el.style.display = 'none';
         el.style.pointerEvents = 'none';
       });
-    }
-
-    // 画布容器尺寸 = 画板展示尺寸
-    const canvasContainer = widgetContainer.querySelector(`.xiser-canvas-container-${nodeState.nodeId}`);
-    if (canvasContainer) {
-      canvasContainer.style.boxSizing = 'border-box';
-      canvasContainer.style.width = `${canvasDisplayW}px`;
-      canvasContainer.style.height = `${canvasDisplayH}px`;
-      canvasContainer.style.minWidth = `${canvasDisplayW}px`;
-      canvasContainer.style.minHeight = `${canvasDisplayH}px`;
-      canvasContainer.style.maxWidth = `${canvasDisplayW}px`;
-      canvasContainer.style.maxHeight = `${canvasDisplayH}px`;
-      canvasContainer.style.overflow = 'hidden';
-      canvasContainer.style.marginLeft = `${sidePadding}px`;
-      canvasContainer.style.marginRight = `${sidePadding}px`;
     }
   }
 
@@ -168,6 +186,18 @@ export function initializeUI(node, nodeState, widgetContainer) {
     return true;
   }
 
+  // 首帧先隐藏，尺寸算完再显示，避免加载抖动
+  widgetContainer.style.visibility = 'hidden';
+  widgetContainer.style.opacity = '0';
+  function revealContainer() {
+    if (widgetContainer.dataset._xiser_shown) return;
+    widgetContainer.dataset._xiser_shown = '1';
+    requestAnimationFrame(() => {
+      widgetContainer.style.visibility = 'visible';
+      widgetContainer.style.opacity = '1';
+    });
+  }
+
   /**
    * Creates and appends CSS styles for the UI components with node-specific scoping.
    * @private
@@ -181,7 +211,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
       .xiser-canvas-container-${nodeState.nodeId} {
         position: relative;
         box-sizing: border-box;
-        overflow: visible;
+        overflow: hidden;
         z-index: 10;
         pointer-events: none;
         display: block;
@@ -196,16 +226,17 @@ export function initializeUI(node, nodeState, widgetContainer) {
       }
       .xiser-status-text-${nodeState.nodeId} {
         position: absolute;
-        bottom: 10px;
-        left: 0;
-        right: 0;
+        bottom: 12px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: calc(100% - 24px);
+        width: auto;
         text-align: center;
-        transform: none;
         color: #fff;
         background-color: rgba(0, 0, 0, 0.7);
         border-radius: 5px;
-        padding: 5px;
-        font-size: 20px;
+        padding: 5px 8px;
+        font-size: 16px;
         z-index: 25;
         pointer-events: none;
         transition: opacity 0.3s ease;
@@ -1047,6 +1078,7 @@ export function initializeUI(node, nodeState, widgetContainer) {
     applySizeFromCanvas(currentScale);
   };
   applyScaleAndSize(initialScale);
+  revealContainer();
   const sizeObserver = new ResizeObserver(() => applySizeFromCanvas(currentScale));
   sizeObserver.observe(widgetContainer);
   bindDisplayScaleControl();
@@ -1056,10 +1088,14 @@ export function initializeUI(node, nodeState, widgetContainer) {
 
   // 监听节点控件区域变动（Vue 重渲染时重新绑定）
   const mutationObserver = new MutationObserver(() => {
-    bindDisplayScaleControl();
-    bindNumberControl('board_width', 'board_width');
-    bindNumberControl('board_height', 'board_height');
-    bindNumberControl('border_width', 'border_width');
+    clearTimeout(mutationDebounce);
+    mutationDebounce = setTimeout(() => {
+      bindDisplayScaleControl();
+      bindNumberControl('board_width', 'board_width');
+      bindNumberControl('board_height', 'board_height');
+      bindNumberControl('border_width', 'border_width');
+      applySizeFromCanvas(currentScale);
+    }, 60);
   });
   mutationObserver.observe(widgetContainer, { childList: true, subtree: true });
 

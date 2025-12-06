@@ -12,7 +12,8 @@ class XIS_CanvasMaskProcessor(io.ComfyNode):
     @classmethod
     def define_schema(cls):
         optional_layers = [
-            io.Boolean.Input(f"Layer_Mask_{i}", default=False) for i in range(1, MAX_LAYER_COUNT + 1)
+            io.Boolean.Input(f"Layer_Mask_{i}", default=False, optional=True, force_input=False)
+            for i in range(1, MAX_LAYER_COUNT + 1)
         ]
         return io.Schema(
             node_id="XIS_CanvasMaskProcessor",
