@@ -36,8 +36,8 @@ class XIS_ResizeImageOrMask:
                 "mask": ("MASK",),
                 "pack_images": ("IMAGE",),
                 "reference_image": ("IMAGE",),
-                "manual_width": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),
-                "manual_height": ("INT", {"default": 512, "min": 1, "max": 4096, "step": 1}),
+                "scale_width": ("INT", {"default": 512, "min": 1, "max": 65536, "step": 1}),
+                "scale_height": ("INT", {"default": 512, "min": 1, "max": 65536, "step": 1}),
                 "fill_hex": ("STRING", {"default": "#000000"}),
             }
         }
@@ -51,8 +51,8 @@ class XIS_ResizeImageOrMask:
     def resize_image_or_mask(self, resize_mode: str, scale_condition: str, interpolation: str, min_unit: int,
                             image: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None,
                             pack_images: Optional[List[torch.Tensor]] = None,
-                            reference_image: Optional[torch.Tensor] = None, manual_width: Optional[int] = None,
-                            manual_height: Optional[int] = None, fill_hex: str = "#000000") -> Tuple:
+                            reference_image: Optional[torch.Tensor] = None, scale_width: Optional[int] = None,
+                            scale_height: Optional[int] = None, fill_hex: str = "#000000") -> Tuple:
         """
         调整图像或蒙版的尺寸，并返回调整后的图像、蒙版以及实际的宽度和高度。
 
@@ -65,8 +65,8 @@ class XIS_ResizeImageOrMask:
             mask (Optional[torch.Tensor]): 输入蒙版，形状为 [H, W] 或 [B, H, W]
             pack_images (Optional[List[torch.Tensor]]): 输入图像包，包含多个图像
             reference_image (Optional[torch.Tensor]): 参考图像，用于确定目标尺寸
-            manual_width (Optional[int]): 手动指定的目标宽度
-            manual_height (Optional[int]): 手动指定的目标高度
+            scale_width (Optional[int]): 手动指定的目标宽度
+            scale_height (Optional[int]): 手动指定的目标高度
             fill_hex (str): 填充颜色，十六进制格式
 
         Returns:
@@ -94,7 +94,7 @@ class XIS_ResizeImageOrMask:
 
         # 解包 v3 数据格式
         pack_images = _unwrap_v3_data(pack_images)
-        reference_image = _unwrap_v3_data(reference_image) if reference_image else None
+        reference_image = _unwrap_v3_data(reference_image) if reference_image is not None else None
 
         # 处理 pack_images 输入
         resized_pack_images = None
@@ -109,7 +109,7 @@ class XIS_ResizeImageOrMask:
 
             # 获取目标尺寸用于 pack_images 处理
             target_width, target_height = self._get_target_size(
-                reference_image, manual_width, manual_height
+                reference_image, scale_width, scale_height
             )
 
             # 处理每个 pack_images 中的图像
@@ -167,10 +167,10 @@ class XIS_ResizeImageOrMask:
             if reference_image.dim() != 4:
                 raise ValueError(f"reference_image must be 4D [B, H, W, C], got {reference_image.shape}")
             target_width, target_height = reference_image.shape[2], reference_image.shape[1]
-        elif manual_width is not None and manual_height is not None:
-            target_width, target_height = manual_width, manual_height
+        elif scale_width is not None and scale_height is not None:
+            target_width, target_height = scale_width, scale_height
         else:
-            raise ValueError("Must provide either reference_image or both manual_width and manual_height")
+            raise ValueError("Must provide either reference_image or both scale_width and scale_height")
 
         raw_target_width, raw_target_height = target_width, target_height
         target_pixels = max(1, raw_target_width * raw_target_height)
@@ -394,16 +394,16 @@ class XIS_ResizeImageOrMask:
 
         return (resized_img_list, resized_mask, final_width, final_height, resized_pack_images)
 
-    def _get_target_size(self, reference_image: Optional[torch.Tensor], manual_width: Optional[int], manual_height: Optional[int]) -> Tuple[int, int]:
+    def _get_target_size(self, reference_image: Optional[torch.Tensor], scale_width: Optional[int], scale_height: Optional[int]) -> Tuple[int, int]:
         """获取目标尺寸"""
         if reference_image is not None:
             if reference_image.dim() != 4:
                 raise ValueError(f"reference_image must be 4D [B, H, W, C], got {reference_image.shape}")
             target_width, target_height = reference_image.shape[2], reference_image.shape[1]
-        elif manual_width is not None and manual_height is not None:
-            target_width, target_height = manual_width, manual_height
+        elif scale_width is not None and scale_height is not None:
+            target_width, target_height = scale_width, scale_height
         else:
-            raise ValueError("Must provide either reference_image or both manual_width and manual_height")
+            raise ValueError("Must provide either reference_image or both scale_width and scale_height")
         return target_width, target_height
 
     def _process_single_image(self, image: torch.Tensor, resize_mode: str, scale_condition: str, interpolation: str,
@@ -421,8 +421,8 @@ class XIS_ResizeImageOrMask:
             if num_channels == base.numel():
                 return base
             if num_channels == 4 and base.numel() == 3:
-                # Default to transparent alpha for RGBA to preserve transparency
-                return torch.cat([base, torch.zeros(1, device=device, dtype=dtype)])
+                # Default to opaque alpha for RGBA fill (alpha=1)
+                return torch.cat([base, torch.ones(1, device=device, dtype=dtype)])
             if base.numel() == 1:
                 return base.expand(num_channels)
             return torch.cat([base, torch.zeros(max(0, num_channels - base.numel()), device=device, dtype=dtype)])
@@ -442,15 +442,19 @@ class XIS_ResizeImageOrMask:
             if resize_mode == "force_resize":
                 return target_width, target_height, 0, 0
             elif resize_mode in ["scale_proportionally", "limited_by_canvas"]:
-                if target_width / target_height > aspect:
-                    h = target_height
-                    w = int(h * aspect)
+                # 以画布为边界按比例缩放，保证 w/h 不超过画布；limited_by_canvas 使用向下取整避免溢出
+                scale = min(target_width / orig_w, target_height / orig_h)
+                w = orig_w * scale
+                h = orig_h * scale
+                if resize_mode == "limited_by_canvas":
+                    w = max(min_unit, int(math.floor(w / min_unit)) * min_unit)
+                    h = max(min_unit, int(math.floor(h / min_unit)) * min_unit)
+                    w = min(w, target_width)
+                    h = min(h, target_height)
                 else:
-                    w = target_width
-                    h = int(w / aspect)
-                w = (w + min_unit - 1) // min_unit * min_unit
-                h = (h + min_unit - 1) // min_unit * min_unit
-                return w, h, (target_width - w) // 2, (target_height - h) // 2
+                    w = (int(round(w / min_unit)) * min_unit)
+                    h = (int(round(h / min_unit)) * min_unit)
+                return int(w), int(h), (target_width - int(w)) // 2, (target_height - int(h)) // 2
             elif resize_mode == "fill_the_canvas":
                 if target_width / target_height < aspect:
                     h = target_height
@@ -552,17 +556,17 @@ class XIS_ResizeImageOrMaskV3(io.ComfyNode):
             display_name="XIS ResizeImageOrMask",
             category="XISER_Nodes/Image_And_Mask",
             inputs=[
-                io.Combo.Input("resize_mode", options=["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas", "total_pixels"], default="force_resize"),
-                io.Combo.Input("scale_condition", options=["downscale_only", "upscale_only", "always"], default="always"),
-                io.Combo.Input("interpolation", options=list(INTERPOLATION_MODES.keys()), default="bilinear"),
-                io.Int.Input("min_unit", default=16, min=1, max=64, step=1),
+                io.Combo.Input("resize_mode", options=["force_resize", "scale_proportionally", "limited_by_canvas", "fill_the_canvas", "total_pixels"], default="force_resize", optional=True),
+                io.Combo.Input("scale_condition", options=["downscale_only", "upscale_only", "always"], default="always", optional=True),
+                io.Combo.Input("interpolation", options=list(INTERPOLATION_MODES.keys()), default="bilinear", optional=True),
+                io.Int.Input("min_unit", default=16, min=1, max=64, step=1, optional=True),
                 io.Image.Input("image", optional=True),
                 io.Mask.Input("mask", optional=True),
-                io.AnyType.Input("pack_images", optional=True),
+                io.Image.Input("pack_images", optional=True),
                 io.Image.Input("reference_image", optional=True),
-                io.Int.Input("manual_width", default=1024, min=1, max=8192, step=1, optional=True),
-                io.Int.Input("manual_height", default=1024, min=1, max=8192, step=1, optional=True),
-                io.String.Input("fill_hex", default="#000000"),
+                io.Int.Input("scale_width", default=1024, min=1, max=65536, step=1, optional=True),
+                io.Int.Input("scale_height", default=1024, min=1, max=65536, step=1, optional=True),
+                io.String.Input("fill_hex", default="#000000", optional=True),
             ],
             outputs=[
                 io.Image.Output("resized_image", display_name="resized_image", is_output_list=True),  
@@ -576,10 +580,10 @@ class XIS_ResizeImageOrMaskV3(io.ComfyNode):
     @classmethod
     def execute(cls, resize_mode, scale_condition, interpolation, min_unit,
                 image=None, mask=None, pack_images=None, reference_image=None,
-                manual_width=None, manual_height=None, fill_hex="#000000"):
+                scale_width=None, scale_height=None, fill_hex="#000000"):
         # 将 0 视为未填写
-        manual_width = manual_width if manual_width and manual_width > 0 else None
-        manual_height = manual_height if manual_height and manual_height > 0 else None
+        scale_width = scale_width if scale_width and scale_width > 0 else None
+        scale_height = scale_height if scale_height and scale_height > 0 else None
         legacy = XIS_ResizeImageOrMask()
         resized_image, resized_mask, width, height, resized_pack = legacy.resize_image_or_mask(
             resize_mode=resize_mode,
@@ -590,8 +594,8 @@ class XIS_ResizeImageOrMaskV3(io.ComfyNode):
             mask=mask,
             pack_images=pack_images,
             reference_image=reference_image,
-            manual_width=manual_width,
-            manual_height=manual_height,
+            scale_width=scale_width,
+            scale_height=scale_height,
             fill_hex=fill_hex,
         )
         # v1 返回列表，保持列表语义（is_output_list=True）

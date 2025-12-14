@@ -2,35 +2,36 @@ from PIL import Image
 import torch
 import numpy as np
 from typing import Optional, List, Tuple
+from comfy_api.latest import io, ComfyExtension
 
-class XIS_ImagePuzzle:
+
+class XIS_ImagePuzzle(io.ComfyNode):
     """
     ImagePuzzle 是基于 PIL 库开发的图片拼接工具，支持四种核心拼接布局：
     左主右副、右主左副、上主下副、下主上副。
     """
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "pack_images": ("IMAGE", {"default": None}),
-                "main_count": ("INT", {"default": 1, "min": 1, "max": 10, "step": 1}),
-                "layout_type": (["left-main", "right-main", "top-main", "bottom-main"], {"default": "left-main"}),
-                "gap": ("INT", {"default": 0, "min": 0, "max": 100, "step": 1}),
-                "main_base_width": ("INT", {"default": 800, "min": 100, "max": 4096, "step": 10}),
-                "bg_color": ("STRING", {"default": "#FFFFFF"}),
-            }
-        }
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_ImagePuzzle",
+            display_name="XIS ImagePuzzle",
+            category="XISER_Nodes/Image_Processing",
+            inputs=[
+                io.Image.Input("pack_images", display_name="Pack Images"),
+                io.Int.Input("main_count", default=1, min=1, max=10, step=1, display_name="Main Image Count"),
+                io.Combo.Input("layout_type", options=["left-main", "right-main", "top-main", "bottom-main"], default="left-main", display_name="Layout Type"),
+                io.Int.Input("gap", default=0, min=0, max=100, step=1, display_name="Gap"),
+                io.Int.Input("main_base_width", default=800, min=100, max=4096, step=10, display_name="Main Base Width"),
+                io.String.Input("bg_color", default="#FFFFFF", display_name="Background Color"),
+            ],
+            outputs=[
+                io.Image.Output("image", display_name="image"),
+            ],
+        )
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
-    FUNCTION = "generate_puzzle"
-    CATEGORY = "XISER_Nodes/Image_Processing"
-
-    def __init__(self):
-        pass
-
-    def get_image_info(self, img_tensor: torch.Tensor) -> Tuple[Image.Image, int, int, float]:
+    @classmethod
+    def get_image_info(cls, img_tensor: torch.Tensor) -> Tuple[Image.Image, int, int, float]:
         """
         从张量获取图片信息（尺寸、宽高比）
         """
@@ -47,7 +48,8 @@ class XIS_ImagePuzzle:
         ratio = w / h
         return img, w, h, ratio
 
-    def calc_main_image_size(self, ratio: float, main_base_width: int) -> Tuple[int, int]:
+    @classmethod
+    def calc_main_image_size(cls, ratio: float, main_base_width: int) -> Tuple[int, int]:
         """
         计算主图展示尺寸（统一基准宽度，高度按比例）
         """
@@ -55,7 +57,8 @@ class XIS_ImagePuzzle:
         display_h = int(main_base_width / ratio)
         return display_w, display_h
 
-    def combine_sub_vertical(self, sub_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def combine_sub_vertical(cls, sub_imgs_info: List[Tuple[Image.Image, int, int, float]],
                            main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Tuple[Optional[Image.Image], int, int]:
         """
         副图竖向组合（图间间距=gap）→ 适配左主右副/右主左副
@@ -89,7 +92,8 @@ class XIS_ImagePuzzle:
 
         return sub_long_img, sub_w, total_height
 
-    def combine_sub_horizontal(self, sub_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def combine_sub_horizontal(cls, sub_imgs_info: List[Tuple[Image.Image, int, int, float]],
                               main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Tuple[Optional[Image.Image], int, int]:
         """
         副图横向组合（图间间距=gap）→ 适配上主下副/下主上副
@@ -125,7 +129,8 @@ class XIS_ImagePuzzle:
 
         return sub_long_img, total_width, sub_h
 
-    def resize_image_keep_ratio(self, img: Image.Image, target_h: Optional[int] = None,
+    @classmethod
+    def resize_image_keep_ratio(cls, img: Image.Image, target_h: Optional[int] = None,
                                target_w: Optional[int] = None) -> Tuple[Image.Image, int, int]:
         """
         等比缩放图片
@@ -146,7 +151,8 @@ class XIS_ImagePuzzle:
         resized_img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         return resized_img, new_w, new_h
 
-    def combine_main_vertical(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def combine_main_vertical(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                              main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Tuple[Image.Image, int, int]:
         """
         主图竖向组合（图间间距=gap）→ 适配左右布局
@@ -161,7 +167,7 @@ class XIS_ImagePuzzle:
         # 调整主图尺寸
         for img_info in main_imgs_info:
             img, _, _, ratio = img_info
-            resize_w, resize_h = self.calc_main_image_size(ratio, main_base_width)
+            resize_w, resize_h = cls.calc_main_image_size(ratio, main_base_width)
             img_resized = img.resize((resize_w, resize_h), Image.Resampling.LANCZOS)
             main_imgs_resized.append(img_resized)
             total_height += resize_h + gap  # 主图间间距
@@ -181,7 +187,8 @@ class XIS_ImagePuzzle:
 
         return main_long_img, main_w, total_height
 
-    def combine_main_horizontal(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def combine_main_horizontal(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                                main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Tuple[Image.Image, int, int]:
         """
         主图横向组合（图间间距=gap）→ 适配上下布局
@@ -193,7 +200,7 @@ class XIS_ImagePuzzle:
         main_h = 0
         for img_info in main_imgs_info:
             img, _, _, ratio = img_info
-            resize_w, resize_h = self.calc_main_image_size(ratio, main_base_width)
+            resize_w, resize_h = cls.calc_main_image_size(ratio, main_base_width)
             main_h = max(main_h, resize_h)
 
         main_imgs_resized = []
@@ -202,7 +209,7 @@ class XIS_ImagePuzzle:
         # 调整主图尺寸
         for img_info in main_imgs_info:
             img, _, _, ratio = img_info
-            resize_w, resize_h = self.calc_main_image_size(ratio, main_base_width)
+            resize_w, resize_h = cls.calc_main_image_size(ratio, main_base_width)
             # 等比缩放到统一高度
             scale = main_h / resize_h
             final_w = int(resize_w * scale)
@@ -225,20 +232,21 @@ class XIS_ImagePuzzle:
 
         return main_long_img, total_width, main_h
 
-    def layout_left_main(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def layout_left_main(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                         sub_long_img: Optional[Image.Image], sub_long_w: int, sub_long_h: int,
                         main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
         """
         左主右副拼接（主图竖向拼接，对齐宽度，有间距）
         """
         # 1. 主图竖向拼接（对齐宽度，有间距）
-        main_long_img, main_area_w, main_area_h = self.combine_main_vertical(
+        main_long_img, main_area_w, main_area_h = cls.combine_main_vertical(
             main_imgs_info, main_base_width, gap, bg_color
         )
 
         # 2. 副图长图等比缩放到与主图区域高度一致
         if sub_long_img is not None and sub_long_h > 0:
-            sub_long_img, sub_long_w, sub_long_h = self.resize_image_keep_ratio(
+            sub_long_img, sub_long_w, sub_long_h = cls.resize_image_keep_ratio(
                 sub_long_img, target_h=main_area_h
             )
 
@@ -259,20 +267,21 @@ class XIS_ImagePuzzle:
 
         return final_img
 
-    def layout_right_main(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def layout_right_main(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                          sub_long_img: Optional[Image.Image], sub_long_w: int, sub_long_h: int,
                          main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
         """
         右主左副拼接（主图竖向拼接，对齐宽度，有间距）
         """
         # 1. 主图竖向拼接（对齐宽度，有间距）
-        main_long_img, main_area_w, main_area_h = self.combine_main_vertical(
+        main_long_img, main_area_w, main_area_h = cls.combine_main_vertical(
             main_imgs_info, main_base_width, gap, bg_color
         )
 
         # 2. 副图长图等比缩放
         if sub_long_img is not None and sub_long_h > 0:
-            sub_long_img, sub_long_w, sub_long_h = self.resize_image_keep_ratio(
+            sub_long_img, sub_long_w, sub_long_h = cls.resize_image_keep_ratio(
                 sub_long_img, target_h=main_area_h
             )
 
@@ -293,20 +302,21 @@ class XIS_ImagePuzzle:
 
         return final_img
 
-    def layout_top_main(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def layout_top_main(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                        sub_long_img: Optional[Image.Image], sub_long_w: int, sub_long_h: int,
                        main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
         """
         上主下副拼接（主图横向拼接，对齐高度，有间距）
         """
         # 1. 主图横向拼接（对齐高度，有间距）
-        main_long_img, main_area_w, main_area_h = self.combine_main_horizontal(
+        main_long_img, main_area_w, main_area_h = cls.combine_main_horizontal(
             main_imgs_info, main_base_width, gap, bg_color
         )
 
         # 2. 副图长图等比缩放到与主图区域宽度一致
         if sub_long_img is not None and sub_long_w > 0:
-            sub_long_img, sub_long_w, sub_long_h = self.resize_image_keep_ratio(
+            sub_long_img, sub_long_w, sub_long_h = cls.resize_image_keep_ratio(
                 sub_long_img, target_w=main_area_w
             )
 
@@ -327,20 +337,21 @@ class XIS_ImagePuzzle:
 
         return final_img
 
-    def layout_bottom_main(self, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
+    @classmethod
+    def layout_bottom_main(cls, main_imgs_info: List[Tuple[Image.Image, int, int, float]],
                           sub_long_img: Optional[Image.Image], sub_long_w: int, sub_long_h: int,
                           main_base_width: int, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
         """
         下主上副拼接（主图横向拼接，对齐高度，有间距）
         """
         # 1. 主图横向拼接（对齐高度，有间距）
-        main_long_img, main_area_w, main_area_h = self.combine_main_horizontal(
+        main_long_img, main_area_w, main_area_h = cls.combine_main_horizontal(
             main_imgs_info, main_base_width, gap, bg_color
         )
 
         # 2. 副图长图等比缩放到与主图区域宽度一致
         if sub_long_img is not None and sub_long_w > 0:
-            sub_long_img, sub_long_w, sub_long_h = self.resize_image_keep_ratio(
+            sub_long_img, sub_long_w, sub_long_h = cls.resize_image_keep_ratio(
                 sub_long_img, target_w=main_area_w
             )
 
@@ -361,7 +372,8 @@ class XIS_ImagePuzzle:
 
         return final_img
 
-    def add_outer_border(self, img: Image.Image, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
+    @classmethod
+    def add_outer_border(cls, img: Image.Image, gap: int, bg_color: Tuple[int, int, int]) -> Image.Image:
         """
         为最终拼图添加外扩边框（宽度=gap，背景色）
         """
@@ -379,7 +391,8 @@ class XIS_ImagePuzzle:
 
         return border_img
 
-    def hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
+    @classmethod
+    def hex_to_rgb(cls, hex_color: str) -> Tuple[int, int, int]:
         """
         将 HEX 颜色转换为 RGB 元组
         """
@@ -397,8 +410,8 @@ class XIS_ImagePuzzle:
         else:
             return (255, 255, 255)  # 默认白色
 
-    # 处理 v3 节点数据格式
-    def _unwrap_v3_data(self, data):
+    @classmethod
+    def _unwrap_v3_data(cls, data):
         """处理 v3 节点返回的数据格式，支持 io.NodeOutput 和原始数据"""
         if data is None:
             return None
@@ -412,25 +425,59 @@ class XIS_ImagePuzzle:
             # 原始数据
             return data
 
-    def generate_puzzle(self, pack_images: List[torch.Tensor], main_count: int, layout_type: str,
-                       gap: int, main_base_width: int, bg_color: str) -> Tuple[torch.Tensor]:
+    @classmethod
+    def _collect_images(cls, data, out: List[torch.Tensor]):
+        """收集图像数据到列表中，处理各种输入格式"""
+        if data is None:
+            return
+
+        data = cls._unwrap_v3_data(data)
+        if data is None:
+            return
+
+        # 处理常见的 (image_list, image_batch) 元组格式
+        if (isinstance(data, (list, tuple)) and len(data) == 2 and
+            isinstance(data[0], (list, tuple)) and isinstance(data[1], torch.Tensor)):
+            cls._collect_images(data[0], out)
+            return
+
+        if isinstance(data, torch.Tensor):
+            if data.dim() == 4:  # 批量张量 (N, H, W, C)
+                for i in range(data.shape[0]):
+                    out.append(data[i])
+            elif data.dim() == 3:  # 单张图像 (H, W, C)
+                out.append(data)
+            return
+
+        if isinstance(data, np.ndarray):
+            cls._collect_images(torch.from_numpy(data), out)
+            return
+
+        if isinstance(data, (list, tuple)):
+            for item in data:
+                cls._collect_images(item, out)
+            return
+
+    @classmethod
+    def execute(cls, pack_images, main_count, layout_type, gap, main_base_width, bg_color):
         """
         生成拼图主函数
         """
-        # 解包 v3 数据格式
-        pack_images = self._unwrap_v3_data(pack_images)
+        # 收集图像数据
+        image_tensors: List[torch.Tensor] = []
+        cls._collect_images(pack_images, image_tensors)
 
         # 验证输入
-        if not pack_images:
+        if not image_tensors:
             raise ValueError("pack_images 输入为空，请提供至少一张图片")
 
         # 转换背景色
-        bg_rgb = self.hex_to_rgb(bg_color)
+        bg_rgb = cls.hex_to_rgb(bg_color)
 
         # 1. 解析图片信息
         all_imgs_info = []
-        for img_tensor in pack_images:
-            all_imgs_info.append(self.get_image_info(img_tensor))
+        for img_tensor in image_tensors:
+            all_imgs_info.append(cls.get_image_info(img_tensor))
 
         # 2. 分离主副图
         if main_count > len(all_imgs_info):
@@ -446,7 +493,7 @@ class XIS_ImagePuzzle:
             # 处理主图
             for img_info in main_imgs_info:
                 img, _, _, ratio = img_info
-                resize_w, resize_h = self.calc_main_image_size(ratio, main_base_width)
+                resize_w, resize_h = cls.calc_main_image_size(ratio, main_base_width)
                 img_resized = img.resize((resize_w, resize_h), Image.Resampling.LANCZOS)
                 main_imgs_resized.append(img_resized)
 
@@ -475,57 +522,65 @@ class XIS_ImagePuzzle:
                     current_x += img.width
 
             # 添加外扩边框
-            final_img = self.add_outer_border(final_img, gap, bg_rgb)
+            final_img = cls.add_outer_border(final_img, gap, bg_rgb)
         else:
             # 4. 组合副图长图
             sub_long_img, sub_long_w, sub_long_h = None, 0, 0
             if layout_type in ["left-main", "right-main"]:
-                sub_long_img, sub_long_w, sub_long_h = self.combine_sub_vertical(
+                sub_long_img, sub_long_w, sub_long_h = cls.combine_sub_vertical(
                     sub_imgs_info, main_base_width, gap, bg_rgb
                 )
             else:
-                sub_long_img, sub_long_w, sub_long_h = self.combine_sub_horizontal(
+                sub_long_img, sub_long_w, sub_long_h = cls.combine_sub_horizontal(
                     sub_imgs_info, main_base_width, gap, bg_rgb
                 )
 
             # 5. 最终拼接
             if layout_type == "left-main":
-                final_img = self.layout_left_main(
+                final_img = cls.layout_left_main(
                     main_imgs_info, sub_long_img, sub_long_w, sub_long_h,
                     main_base_width, gap, bg_rgb
                 )
             elif layout_type == "right-main":
-                final_img = self.layout_right_main(
+                final_img = cls.layout_right_main(
                     main_imgs_info, sub_long_img, sub_long_w, sub_long_h,
                     main_base_width, gap, bg_rgb
                 )
             elif layout_type == "top-main":
-                final_img = self.layout_top_main(
+                final_img = cls.layout_top_main(
                     main_imgs_info, sub_long_img, sub_long_w, sub_long_h,
                     main_base_width, gap, bg_rgb
                 )
             elif layout_type == "bottom-main":
-                final_img = self.layout_bottom_main(
+                final_img = cls.layout_bottom_main(
                     main_imgs_info, sub_long_img, sub_long_w, sub_long_h,
                     main_base_width, gap, bg_rgb
                 )
             else:
                 # 默认使用左主右副布局
-                final_img = self.layout_left_main(
+                final_img = cls.layout_left_main(
                     main_imgs_info, sub_long_img, sub_long_w, sub_long_h,
                     main_base_width, gap, bg_rgb
                 )
 
             # 6. 添加外扩边框
-            final_img = self.add_outer_border(final_img, gap, bg_rgb)
+            final_img = cls.add_outer_border(final_img, gap, bg_rgb)
 
         # 7. 转换为 ComfyUI IMAGE 格式
         final_img_np = np.array(final_img).astype(np.float32) / 255.0
         final_tensor = torch.from_numpy(final_img_np).unsqueeze(0)
 
-        return (final_tensor,)
+        return io.NodeOutput(final_tensor)
 
 
-NODE_CLASS_MAPPINGS = {
-    "XIS_ImagePuzzle": XIS_ImagePuzzle,
-}
+class XISImagePuzzleExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_ImagePuzzle]
+
+
+async def comfy_entrypoint():
+    return XISImagePuzzleExtension()
+
+
+NODE_CLASS_MAPPINGS = None
+NODE_DISPLAY_NAME_MAPPINGS = None

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-from comfy_api.latest import ComfyExtension, io
+from comfy_api.latest import io, ComfyExtension
 
 from .canvas_mask_processor import XIS_CanvasMaskProcessor
 from .utils import standardize_tensor
@@ -17,49 +17,6 @@ Image and mask processing nodes (pure v3).
 """
 
 
-class XIS_LoadImage(io.ComfyNode):
-    """Load an image from disk and produce an accompanying mask."""
-
-    @classmethod
-    def define_schema(cls):
-        return io.Schema(
-            node_id="XIS_LoadImage",
-            display_name="Load Image",
-            category="XISER_Nodes/Image_And_Mask",
-            inputs=[
-                io.String.Input("image", default=""),
-                io.Mask.Input("mask", optional=True),
-            ],
-            outputs=[
-                io.Image.Output("image_out", display_name="image"),
-                io.Mask.Output("mask_out", display_name="mask"),
-            ],
-        )
-
-    @classmethod
-    def execute(cls, image: str, mask: Optional[torch.Tensor] = None):
-        img = Image.open(image).convert("RGBA")
-        image_np = np.array(img).astype(np.float32) / 255.0
-        rgb = image_np[:, :, :3]
-        alpha = image_np[:, :, 3]
-
-        if mask is not None:
-            output_mask = standardize_tensor(mask, expected_dims=3, is_image=False).squeeze(0)
-        else:
-            output_mask = 1.0 - alpha if np.any(alpha < 1.0) else np.ones_like(alpha)
-
-        image_tensor = torch.from_numpy(rgb).unsqueeze(0)
-        mask_tensor = torch.from_numpy(output_mask).unsqueeze(0)
-        return io.NodeOutput(image_tensor, mask_tensor)
-
-    @classmethod
-    def IS_CHANGED(cls, image: str, mask: Optional[torch.Tensor] = None) -> float:
-        change_id = 0.0
-        if os.path.exists(image):
-            change_id += os.path.getmtime(image)
-        if mask is not None:
-            change_id += hash(mask.cpu().numpy().tobytes())
-        return change_id
 
 
 class XIS_ResizeToDivisible(io.ComfyNode):
@@ -547,7 +504,6 @@ class XIS_CompositorProcessor(io.ComfyNode):
 class XISImageAndMaskExtension(ComfyExtension):
     async def get_node_list(self):
         return [
-            XIS_LoadImage,
             XIS_ResizeToDivisible,
             XIS_CropImage,
             XIS_InvertMask,

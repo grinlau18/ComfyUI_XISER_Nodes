@@ -205,6 +205,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
       img.onload = () => {
         imageCache.set(imgData.filename, img);
         loadedImageUrls.set(imgData.filename, imgUrl);
+        log.info(`Image loaded successfully: ${imgData.filename}, dimensions: ${img.width}x${img.height}, URL: ${imgUrl}`);
         resolve({ img, index: i, success: true });
       };
       img.onerror = () => {

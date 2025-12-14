@@ -917,8 +917,10 @@ app.registerExtension({
             newImagePaths = message.image_paths.filter(p => typeof p === 'string' && p.trim().length > 0);
           }
         } else if (message?.pack_images) {
+          log.info(`Received pack_images in onExecuted for node ${node.id}: type=${typeof message.pack_images}, isArray=${Array.isArray(message.pack_images)}`);
           if (Array.isArray(message.pack_images)) {
             newImagePaths = message.pack_images.filter(p => typeof p === 'string' && p.trim().length > 0);
+            log.info(`pack_images array length: ${message.pack_images.length}, valid paths: ${newImagePaths.length}`);
           } else {
             log.warn(`Invalid pack_images format in onExecuted for node ${node.id}: ${typeof message.pack_images}`);
           }
@@ -930,16 +932,21 @@ app.registerExtension({
         }
 
         // Skip execution if all inputs haven't changed
-          if (
-            newImagePaths.length &&
-            nodeState.lastImagePaths &&
-            arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
-            transformStateArraysEqual(states, nodeState.initialStates) &&
-            objectsEqual(file_data, nodeState.file_data) &&
-            canvasSig === nodeState.lastCanvasSig
-          ) {
-            return;
-          }
+        if (
+          newImagePaths.length &&
+          nodeState.lastImagePaths &&
+          arraysEqual(newImagePaths, nodeState.lastImagePaths) &&
+          transformStateArraysEqual(states, nodeState.initialStates) &&
+          objectsEqual(file_data, nodeState.file_data) &&
+          canvasSig === nodeState.lastCanvasSig
+        ) {
+          log.info(`Skipping execution for node ${node.id}: no changes detected`);
+          log.info(`  newImagePaths: ${JSON.stringify(newImagePaths)}`);
+          log.info(`  lastImagePaths: ${JSON.stringify(nodeState.lastImagePaths)}`);
+          log.info(`  canvasSig: ${canvasSig}`);
+          log.info(`  lastCanvasSig: ${nodeState.lastCanvasSig}`);
+          return;
+        }
 
         // If backend returns board dimensions (e.g., auto_size), sync widgets/properties before layout
         const toScalar = (val) => {
@@ -1015,6 +1022,8 @@ app.registerExtension({
 
         if (newImagePaths.length) {
           log.info(`onExecuted for node ${node.id}, new paths: ${JSON.stringify(newImagePaths)}`);
+          log.info(`  lastImagePaths: ${JSON.stringify(nodeState.lastImagePaths)}`);
+          log.info(`  paths equal? ${arraysEqual(newImagePaths, nodeState.lastImagePaths)}`);
           imagePaths = newImagePaths;
           nodeState.imageNodes = new Array(imagePaths.length).fill(null);
 
@@ -1024,7 +1033,8 @@ app.registerExtension({
             node.setProperty('ui_config', node.properties.ui_config);
           }
 
-          applyStates(nodeState);
+          // Don't call applyStates here - imageNodes are not yet loaded
+          // applyStates will be called inside loadImages after images are loaded
           nodeState.imageLayer.batchDraw();
 
           // Update image_states: merge incoming with filename/order to preserve stacking

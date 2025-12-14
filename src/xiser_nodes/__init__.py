@@ -15,18 +15,19 @@ V3_MIGRATED_MODULES = [
     "label",
     "set_color",
     "image_and_mask",
-    "canvas_mask_processor_v3",
+    "image_preview",
+    "canvas_mask_processor",
     "canvas",
     "resize_image_or_mask",
     "sampling",
+    "image_puzzle",
+    "shape_data",
+    "psd_layer_extract",
+    "adjust_image",
 ]
 
 # 待迁移的 A 级模块（暂时不加载）
 A_LEVEL_MODULES = [
-    "psd_layer_extract",
-    "adjust_image",
-    "image_puzzle",
-    "shape_data",
 ]
 
 # 待迁移的 S 级模块（暂时不加载）

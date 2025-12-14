@@ -15,6 +15,7 @@ import folder_paths
 import base64
 from io import BytesIO
 import json
+import hashlib
 
 from comfy_api.latest import io, ComfyExtension
 
@@ -35,9 +36,14 @@ def _unwrap_v3_data(data):
 class XISER_Canvas:
     """Legacy-stable canvas implementation."""
 
-    def __init__(self):
+    def __init__(self, instance_id=None):
         self.properties = {}
-        self.instance_id = uuid.uuid4().hex
+        # Use provided instance_id or generate stable one based on node parameters
+        if instance_id:
+            self.instance_id = instance_id
+        else:
+            # Generate stable instance_id for backward compatibility
+            self.instance_id = uuid.uuid4().hex
         self.output_dir = os.path.join(folder_paths.get_output_directory(), "xiser_canvas")
         os.makedirs(self.output_dir, exist_ok=True)
         self.max_cache_files = 50
@@ -168,11 +174,76 @@ class XISER_Canvas:
             else:
                 encoded = data_str
             img = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
-            fname = holder.get("filename") or fname_fallback or f"xiser_canvas_{self.instance_id}_{uuid.uuid4().hex}.png"
-            path = os.path.join(self.output_dir, fname)
-            img.save(path, format="PNG")
+
+            # Save image first, then calculate hash from saved file to ensure consistency
+            # Generate temporary filename
+            temp_fname = f"xiser_canvas_{self.instance_id}_{uuid.uuid4().hex[:8]}.png"
+            temp_path = os.path.join(self.output_dir, temp_fname)
+            img.save(temp_path, format="PNG")
+
+            # Calculate hash from saved file
+            with open(temp_path, 'rb') as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()[:8]
+
+            # Check if we should reuse existing filename
+            fname = None
+            existing_fname = holder.get("filename") or fname_fallback
+            if existing_fname:
+                existing_path = os.path.join(self.output_dir, existing_fname)
+                if os.path.exists(existing_path):
+                    try:
+                        with open(existing_path, 'rb') as f:
+                            existing_hash = hashlib.md5(f.read()).hexdigest()[:8]
+                        if existing_hash == file_hash:
+                            # Same content, reuse filename and delete temp file
+                            fname = existing_fname
+                            os.remove(temp_path)
+                            logger.info(f"Reusing existing inline image file {existing_fname}")
+                        else:
+                            logger.info(f"Not reusing inline {existing_fname}: hash different ({existing_hash} != {file_hash})")
+                    except Exception as e:
+                        logger.warning(f"Failed to check existing inline file hash: {e}")
+                else:
+                    logger.info(f"Existing inline file not found: {existing_path}")
+
+            # Generate new filename if needed
+            if not fname:
+                # Check if a file with this hash already exists
+                potential_fname = f"xiser_canvas_{self.instance_id}_{file_hash}.png"
+                potential_path = os.path.join(self.output_dir, potential_fname)
+
+                if os.path.exists(potential_path):
+                    # File exists, check if it's the same content
+                    try:
+                        with open(potential_path, 'rb') as f:
+                            existing_hash = hashlib.md5(f.read()).hexdigest()[:8]
+                        if existing_hash == file_hash:
+                            # Same content, reuse and delete temp file
+                            fname = potential_fname
+                            os.remove(temp_path)
+                        else:
+                            # Hash collision, use temp filename
+                            fname = temp_fname
+                            # Rename temp file to final name
+                            final_path = os.path.join(self.output_dir, fname)
+                            if temp_path != final_path:
+                                os.rename(temp_path, final_path)
+                    except Exception as e:
+                        logger.warning(f"Failed to check existing file: {e}")
+                        fname = temp_fname
+                else:
+                    # New file, rename temp to final name
+                    fname = potential_fname
+                    final_path = os.path.join(self.output_dir, fname)
+                    os.rename(temp_path, final_path)
+
+                holder["filename"] = fname
+            else:
+                # We're reusing existing file, delete temp file
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
             self.created_files.add(fname)
-            holder["filename"] = fname
             return fname
         except Exception as exc:
             logger.warning(f"Instance {self.instance_id} - Failed to decode inline image: {exc}")
@@ -255,6 +326,7 @@ class XISER_Canvas:
         if not images_list:
             raise ValueError("At least one image must be provided")
 
+
         # parse image_states/layer_data
         image_paths = []
         image_base64_chunks = []
@@ -271,17 +343,29 @@ class XISER_Canvas:
             # align images_list length with states (if inline provided replaced)
             for idx, st in enumerate(states_raw):
                 fname = st.get("filename")
-                if fname:
-                    # try load file as tensor to replace
-                    try:
-                        img = Image.open(os.path.join(self.output_dir, fname)).convert("RGBA")
-                        arr = np.array(img).astype(np.float32) / 255.0
-                        tensor = torch.from_numpy(arr)
-                        if idx < len(images_list):
-                            images_list[idx] = tensor
-                        else:
-                            images_list.append(tensor)
-                    except Exception:
+                if fname and idx < len(images_list):
+                    # Check if file exists and has same content as input
+                    file_path = os.path.join(self.output_dir, fname)
+                    if os.path.exists(file_path):
+                        try:
+                            # Load file content
+                            img = Image.open(file_path).convert("RGBA")
+                            file_arr = np.array(img).astype(np.float32) / 255.0
+                            file_tensor = torch.from_numpy(file_arr)
+
+                            # Get input tensor
+                            input_tensor = images_list[idx]
+
+                            # Compare content (approximate comparison)
+                            input_mean = input_tensor.mean().item()
+                            file_mean = file_tensor.mean().item()
+
+                            # Only replace if content is similar (within tolerance)
+                            if abs(input_mean - file_mean) < 0.01:  # 1% tolerance
+                                images_list[idx] = file_tensor
+                        except Exception:
+                            pass
+                    else:
                         pass
             image_paths = [st.get("filename") for st in states_raw if st.get("filename")]
         else:
@@ -295,38 +379,140 @@ class XISER_Canvas:
                 if isinstance(st, dict):
                     self._decode_inline_image(st, st.get("filename"))
                     fname = st.get("filename")
-                    if fname:
-                        try:
-                            img = Image.open(os.path.join(self.output_dir, fname)).convert("RGBA")
-                            arr = np.array(img).astype(np.float32) / 255.0
-                            tensor = torch.from_numpy(arr)
-                            if idx < len(images_list):
-                                images_list[idx] = tensor
-                            else:
-                                images_list.append(tensor)
-                        except Exception:
+                    if fname and idx < len(images_list):
+                        # Check if file exists and has same content as input
+                        file_path = os.path.join(self.output_dir, fname)
+                        if os.path.exists(file_path):
+                            try:
+                                # Load file content
+                                img = Image.open(file_path).convert("RGBA")
+                                file_arr = np.array(img).astype(np.float32) / 255.0
+                                file_tensor = torch.from_numpy(file_arr)
+
+                                # Get input tensor
+                                input_tensor = images_list[idx]
+
+                                # Compare content (approximate comparison)
+                                input_mean = input_tensor.mean().item()
+                                file_mean = file_tensor.mean().item()
+
+                                # Only replace if content is similar (within tolerance)
+                                if abs(input_mean - file_mean) < 0.01:  # 1% tolerance
+                                    images_list[idx] = file_tensor
+                            except Exception:
+                                pass
+                        else:
                             pass
             image_states = [
                 self._normalize_state(state, border_width, board_width, board_height)
                 for state in image_states
             ]
 
-        # Save images_list to files (stable filenames)
+        # Save images_list to files with content-based filenames
         image_paths = []
+        logger.info(f"Instance {self.instance_id} - Processing {len(images_list)} images")
+
         for i, img_tensor in enumerate(images_list):
             img = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
             pil_img = Image.fromarray(img, mode="RGBA")
+
+            # Calculate image hash from tensor data (not PIL bytes) to avoid PNG compression differences
+            # Use the numpy array directly for consistent hashing
+            img_hash = hashlib.md5(img.tobytes()).hexdigest()[:8]  # Use first 8 chars for brevity
+
+            # Log image info
+            logger.info(f"Instance {self.instance_id} - Image {i}: shape={img.shape}, hash={img_hash}")
+
+            # Check if we should reuse existing filename
             fname = None
+            reuse_existing = False
             if i < len(image_states) and isinstance(image_states[i], dict):
-                fname = image_states[i].get("filename")
+                existing_fname = image_states[i].get("filename")
+                if existing_fname:
+                    # Check if file exists
+                    existing_path = os.path.join(self.output_dir, existing_fname)
+                    if os.path.exists(existing_path):
+                        # We'll check hash after saving to ensure consistency
+                        fname = existing_fname
+                        reuse_existing = True
+                        logger.info(f"Will attempt to reuse existing file {existing_fname}")
+                    else:
+                        logger.info(f"Existing file not found: {existing_path}")
+
+            # Generate new filename if needed
             if not fname:
-                fname = f"xiser_canvas_{self.instance_id}_{uuid.uuid4().hex}.png"
-                if i < len(image_states):
+                # Check if a file with this hash already exists
+                potential_fname = f"xiser_canvas_{self.instance_id}_{img_hash}.png"
+                potential_path = os.path.join(self.output_dir, potential_fname)
+
+                if os.path.exists(potential_path):
+                    # File exists, check if it's the same content
+                    try:
+                        with open(potential_path, 'rb') as f:
+                            existing_hash = hashlib.md5(f.read()).hexdigest()[:8]
+                        if existing_hash == img_hash:
+                            # Same content, reuse
+                            fname = potential_fname
+                        else:
+                            # Hash collision, add UUID
+                            fname = f"xiser_canvas_{self.instance_id}_{img_hash}_{uuid.uuid4().hex[:8]}.png"
+                    except Exception as e:
+                        logger.warning(f"Failed to check existing file: {e}")
+                        fname = f"xiser_canvas_{self.instance_id}_{img_hash}_{uuid.uuid4().hex[:8]}.png"
+                else:
+                    # New file
+                    fname = potential_fname
+
+                if i < len(image_states) and isinstance(image_states[i], dict):
                     image_states[i]["filename"] = fname
+
+            # Save image
             path = os.path.join(self.output_dir, fname)
+
+            # If reusing existing file, check its hash before overwriting
+            old_file_hash = None
+            if reuse_existing and os.path.exists(path):
+                with open(path, 'rb') as f:
+                    old_file_hash = hashlib.md5(f.read()).hexdigest()[:8]
+
             pil_img.save(path, format="PNG")
+
+            # Calculate actual file hash after saving
+            with open(path, 'rb') as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()[:8]
+
+            # Check if content actually changed when reusing
+            if reuse_existing and old_file_hash:
+                if old_file_hash == file_hash:
+                    # File content unchanged (or changed in same way due to PNG compression)
+                    logger.info(f"Instance {self.instance_id} - Reused file {fname} with same content")
+                else:
+                    # Content changed - need new filename
+                    logger.info(f"Instance {self.instance_id} - Image {i} content changed, creating new file")
+                    reuse_existing = False
+
+                    # Generate new filename based on file hash
+                    new_fname = f"xiser_canvas_{self.instance_id}_{file_hash}.png"
+                    new_path = os.path.join(self.output_dir, new_fname)
+                    if not os.path.exists(new_path):
+                        os.rename(path, new_path)
+                        fname = new_fname
+                        path = new_path
+                        if i < len(image_states) and isinstance(image_states[i], dict):
+                            image_states[i]["filename"] = fname
+                    else:
+                        # File with this hash already exists, delete duplicate
+                        os.remove(path)
+                        fname = new_fname
+                        path = new_path
+
             self.created_files.add(fname)
             image_paths.append(fname)
+
+            if reuse_existing:
+                logger.info(f"Instance {self.instance_id} - Reused file: {fname}")
+            else:
+                logger.info(f"Instance {self.instance_id} - Saved new file: {fname} with hash {file_hash}")
             # base64 chunks for UI
             chunk = base64.b64encode(pil_img.tobytes()).decode("utf-8") if False else None  # kept minimal
 
@@ -582,7 +768,12 @@ class XIS_Canvas(io.ComfyNode):
         canvas_config=None,
         layer_data=None,
     ):
-        helper = XISER_Canvas()
+        # Generate stable instance_id based on node configuration
+        # This ensures same node configuration produces same instance_id across executions
+        config_str = f"{board_width}_{board_height}_{border_width}_{canvas_color}_{display_scale}_{auto_size}"
+        instance_id = hashlib.md5(config_str.encode()).hexdigest()[:32]
+
+        helper = XISER_Canvas(instance_id=instance_id)
         rendered = helper.render(
             pack_images=pack_images,
             board_width=board_width,

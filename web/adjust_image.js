@@ -46,8 +46,9 @@ async function ensureNodeId(node) {
  * @param {Object} node - ComfyUI 节点对象
  * @param {string} filename - 图像文件名
  * @param {HTMLElement} imageElement - HTML <img> 元素
+ * @param {HTMLElement} imagesContainer - 图像容器元素
  */
-async function loadImage(node, filename, imageElement, isOriginal = false) {
+async function loadImage(node, filename, imageElement, imagesContainer, isOriginal = false) {
     const url = `/view?filename=${encodeURIComponent(filename)}&subfolder=xis_nodes_cached/xis_image_adjust_and_blend&type=output&rand=${Math.random()}`;
     if (loadedImageUrls.has(url) && !isOriginal) return;
 
@@ -424,7 +425,7 @@ app.registerExtension({
             // 调试信息
             console.log(`显示图像: ${filename}, 容器尺寸: ${imagesContainer.offsetWidth}x${imagesContainer.offsetHeight}, 图像在DOM中: ${document.contains(imageElement)}`);
             
-            loadImage(node, filename, imageElement);
+            loadImage(node, filename, imageElement, imagesContainer);
             
         }
 

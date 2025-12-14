@@ -9,6 +9,7 @@ import torch
 import math
 from typing import List, Dict, Any, Tuple
 import logging
+from comfy_api.latest import io, ComfyExtension
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -262,6 +263,81 @@ class XIS_ShapeData:
         logger.info(f"Final shape_data_list content: {shape_data_list}")
         return (shape_data_list,)
 
-NODE_CLASS_MAPPINGS = {
-    "XIS_ShapeData": XIS_ShapeData
-}
+class XIS_ShapeDataV3(io.ComfyNode):
+    """v3 版本：复用 legacy 形状数据聚合逻辑。"""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_ShapeData",
+            display_name="XIS ShapeData",
+            category="XISER_Nodes/Data_Processing",
+            inputs=[
+                io.Int.Input("count", default=1, min=1, max=1000, step=1),
+                # 位置属性接口 - 浮点数坐标列表
+                io.AnyType.Input("position_x", optional=True),
+                io.AnyType.Input("position_y", optional=True),
+                # 旋转属性接口 - 角度值列表
+                io.AnyType.Input("rotation", optional=True),
+                # 缩放属性接口 - 缩放因子列表
+                io.AnyType.Input("scale_x", optional=True),
+                io.AnyType.Input("scale_y", optional=True),
+                # 倾斜属性接口 - 倾斜角度列表
+                io.AnyType.Input("skew_x", optional=True),
+                io.AnyType.Input("skew_y", optional=True),
+                # 颜色属性接口 - 字符串颜色值列表
+                io.AnyType.Input("shape_color", optional=True),
+                io.AnyType.Input("bg_color", optional=True),
+                io.AnyType.Input("stroke_color", optional=True),
+                # 其他属性接口 - 线宽值列表
+                io.AnyType.Input("stroke_width", optional=True),
+                # 新增控制接口 - 透明背景、模式、类型与参数
+                io.AnyType.Input("transparent_bg", optional=True),
+                io.AnyType.Input("mode_selection", optional=True),
+                io.AnyType.Input("shape_type", optional=True),
+                io.AnyType.Input("shape_params", optional=True),
+            ],
+            outputs=[
+                io.AnyType.Output("shape_data", display_name="shape_data"),
+            ],
+        )
+
+    @classmethod
+    def execute(cls, count, position_x=None, position_y=None, rotation=None,
+                scale_x=None, scale_y=None, skew_x=None, skew_y=None,
+                shape_color=None, bg_color=None, stroke_color=None,
+                stroke_width=None, transparent_bg=None, mode_selection=None,
+                shape_type=None, shape_params=None):
+        legacy = XIS_ShapeData()
+        (shape_data,) = legacy.execute(
+            count=count,
+            position_x=position_x,
+            position_y=position_y,
+            rotation=rotation,
+            scale_x=scale_x,
+            scale_y=scale_y,
+            skew_x=skew_x,
+            skew_y=skew_y,
+            shape_color=shape_color,
+            bg_color=bg_color,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            transparent_bg=transparent_bg,
+            mode_selection=mode_selection,
+            shape_type=shape_type,
+            shape_params=shape_params,
+        )
+        return io.NodeOutput(shape_data)
+
+
+class XISShapeDataExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_ShapeDataV3]
+
+
+async def comfy_entrypoint():
+    return XISShapeDataExtension()
+
+
+NODE_CLASS_MAPPINGS = None
+NODE_DISPLAY_NAME_MAPPINGS = None

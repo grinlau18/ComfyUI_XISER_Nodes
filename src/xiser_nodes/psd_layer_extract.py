@@ -7,57 +7,47 @@ import folder_paths
 import logging
 import shutil
 import math
+from comfy_api.latest import io, ComfyExtension
 
 # 设置日志
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class XIS_PSDLayerExtractor:
-    """
-    A node for extracting layers from a PSD file, outputting images and metadata.
 
-    @class XIS_PSDLayerExtractor
+class XIS_PSDLayerExtractorV3(io.ComfyNode):
+    """
+    A V3 node for extracting layers from a PSD file, outputting images and metadata.
+
+    @class XIS_PSDLayerExtractorV3
     @description Extracts individual layers from a PSD file as images and provides file metadata including canvas size and layer information.
     """
 
     @classmethod
-    def INPUT_TYPES(cls):
-        """
-        Defines the input types for the node.
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_PSDLayerExtractor",
+            display_name="XIS PSDLayerExtractor",
+            category="XISER_Nodes/Import_Data",
+            inputs=[
+                io.String.Input("uploaded_file", default="", multiline=False, optional=True),
+                io.Boolean.Input("crop_by_canvas", default=False, optional=True),
+            ],
+            outputs=[
+                io.Image.Output("pack_images", display_name="pack_images", is_output_list=True),
+                io.AnyType.Output("file_data", display_name="file_data"),
+            ],
+        )
 
-        @method INPUT_TYPES
-        @returns {Object} Input configuration
-        @returns {Object} uploaded_file - Path to the PSD file (string)
-        @returns {Object} crop_by_canvas - Whether to crop images to canvas size (boolean)
-        """
-        return {
-            "required": {
-                "uploaded_file": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "dynamicPrompts": False
-                }),
-                "crop_by_canvas": ("BOOLEAN", {
-                    "default": False,  # Updated default value
-                    "label": "Crop Image by Canvas"
-                }),
-            },
-        }
-
-    RETURN_TYPES = ("IMAGE", "FILE_DATA")
-    RETURN_NAMES = ("pack_images", "file_data")
-    FUNCTION = "extract_layers"
-    CATEGORY = "XISER_Nodes/Import_Data"
-
-    def extract_layers(self, uploaded_file, crop_by_canvas):
+    @classmethod
+    def execute(cls, uploaded_file="", crop_by_canvas=False):
         """
         Extracts layers from a PSD file and returns images and metadata.
 
-        @method extract_layers
+        @method execute
         @param {string} uploaded_file - Path to the PSD file (e.g., 'input/psd_files/file.psd')
         @param {boolean} crop_by_canvas - If true, crops images to canvas size; if false, outputs full layer images
-        @returns {tuple} (pack_images, file_data)
-        @returns {list} pack_images - List of image tensors (XIS_IMAGES format)
+        @returns {io.NodeOutput} (pack_images, file_data)
+        @returns {list} pack_images - List of image tensors in ComfyUI format (B, H, W, C=4) RGBA
         @returns {dict} file_data - Metadata including canvas size and layer information (width, height, position, transform)
         @throws {ValueError} If file is invalid or no valid layers are found
         """
@@ -115,7 +105,7 @@ class XIS_PSDLayerExtractor:
 
         # 生成空白画布图片（用于前端auto_size参考）
         try:
-            # 创建透明空白图片张量
+            # 创建透明空白图片张量 (H, W, 4) - 保持RGBA格式
             blank_image_tensor = torch.zeros((canvas_height, canvas_width, 4), dtype=torch.float32)
             normalized_images.append(blank_image_tensor)
 
@@ -146,11 +136,11 @@ class XIS_PSDLayerExtractor:
                 # 获取图层图像
                 pil_image = layer.composite()
                 logger.debug(f"Processing layer: {layer.name}, size: {pil_image.size}, offset: {layer.offset}")
-                
+
                 # 转换为 RGBA
                 if pil_image.mode != 'RGBA':
                     pil_image = pil_image.convert('RGBA')
-                
+
                 # 转换为 numpy 数组
                 image_np = np.array(pil_image).astype(np.float32) / 255.0
                 layer_width, layer_height = pil_image.size
@@ -196,7 +186,7 @@ class XIS_PSDLayerExtractor:
 
                 file_data["layers"].append(layer_info)
 
-                # 处理图像输出
+                # 处理图像输出 - 保持RGBA格式
                 if crop_by_canvas:
                     # 裁剪到画布尺寸
                     canvas_tensor = torch.zeros((canvas_height, canvas_width, 4), dtype=torch.float32)
@@ -214,13 +204,13 @@ class XIS_PSDLayerExtractor:
                         )
                     output_tensor = canvas_tensor
                 else:
-                    # 输出完整图层图像
+                    # 输出完整图层图像 - 保持RGBA格式
                     output_tensor = torch.from_numpy(image_np)
 
-                # 验证张量
+                # 验证张量 - 期望RGBA格式 (H, W, 4)
                 if len(output_tensor.shape) != 3 or output_tensor.shape[-1] != 4:
                     logger.error(f"Invalid image tensor shape for layer {layer.name}: {output_tensor.shape}")
-                    raise ValueError(f"Invalid image tensor shape: {output_tensor.shape}")
+                    raise ValueError(f"Invalid image tensor shape: {output_tensor.shape}, expected (H, W, 4)")
 
                 normalized_images.append(output_tensor)
 
@@ -233,8 +223,34 @@ class XIS_PSDLayerExtractor:
             raise ValueError("No valid layers found in PSD file")
 
         logger.info(f"Extracted {len(normalized_images)} layers from PSD file")
-        return (normalized_images, file_data)
 
-NODE_CLASS_MAPPINGS = {
-    "XIS_PSDLayerExtractor": XIS_PSDLayerExtractor
-}
+        # 调试：记录图像张量信息
+        for i, img_tensor in enumerate(normalized_images):
+            logger.debug(f"Image {i}: shape={img_tensor.shape}, dtype={img_tensor.dtype}, min={img_tensor.min():.3f}, max={img_tensor.max():.3f}")
+
+        # 确保所有图像张量都是正确的格式 (H, W, 4)
+        # 转换为ComfyUI期望的批次格式 (B, H, W, C)
+        batch_images = []
+        for img_tensor in normalized_images:
+            # 确保是3D张量 (H, W, 4)
+            if img_tensor.dim() == 3:
+                # 添加批次维度 -> (1, H, W, 4)
+                batch_img = img_tensor.unsqueeze(0)
+                batch_images.append(batch_img)
+            else:
+                logger.warning(f"Unexpected tensor dimension: {img_tensor.shape}, skipping")
+
+        # 如果没有有效的图像，返回空列表
+        if not batch_images:
+            return io.NodeOutput([], file_data)
+
+        return io.NodeOutput(batch_images, file_data)
+
+
+class XISPSDLayerExtractorExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_PSDLayerExtractorV3]
+
+
+async def comfy_entrypoint():
+    return XISPSDLayerExtractorExtension()

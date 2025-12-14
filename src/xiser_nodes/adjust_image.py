@@ -6,6 +6,7 @@ from PIL import Image, ImageEnhance
 import folder_paths
 import logging
 import torch.nn.functional as F
+from comfy_api.latest import io, ComfyExtension, ui
 
 # 设置日志
 logger = logging.getLogger("XIS_ImageAdjustAndBlend")
@@ -283,3 +284,73 @@ class XIS_ImageAdjustAndBlend:
 NODE_CLASS_MAPPINGS = {
     "XIS_ImageAdjustAndBlend": XIS_ImageAdjustAndBlend
 }
+
+
+class XIS_ImageAdjustAndBlendV3(io.ComfyNode):
+    """v3 版本：复用 legacy 逻辑，包装为 Comfy API 节点。"""
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="XIS_ImageAdjustAndBlend",
+            display_name="XIS ImageAdjustAndBlend",
+            category="XISER_Nodes/Image_And_Mask",
+            inputs=[
+                io.Image.Input("image"),
+                io.Float.Input("brightness", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("contrast", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("saturation", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("hue", default=0.0, min=-0.5, max=0.5, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("r_gain", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("g_gain", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("b_gain", default=1.0, min=0.0, max=2.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Float.Input("opacity", default=1.0, min=0.0, max=1.0, step=0.01, display_mode=io.NumberDisplay.slider),
+                io.Mask.Input("mask", optional=True),
+                io.Image.Input("background_image", optional=True),
+                io.Combo.Input("blend_mode", options=["normal", "overlay", "screen", "add", "multiply", "soft_light", "hard_light"], default="normal", optional=True),
+            ],
+            outputs=[
+                io.Image.Output("adjusted_image", display_name="adjusted_image"),
+                io.String.Output("image_paths", display_name="image_paths"),
+            ],
+            is_output_node=True,
+        )
+
+    @classmethod
+    def execute(cls, image, brightness=1.0, contrast=1.0, saturation=1.0, hue=0.0,
+                r_gain=1.0, g_gain=1.0, b_gain=1.0, opacity=1.0,
+                mask=None, background_image=None, blend_mode="normal"):
+
+        legacy = XIS_ImageAdjustAndBlend()
+        result = legacy.adjust_image(
+            image=image,
+            brightness=brightness,
+            contrast=contrast,
+            saturation=saturation,
+            hue=hue,
+            r_gain=r_gain,
+            g_gain=g_gain,
+            b_gain=b_gain,
+            opacity=opacity,
+            mask=mask,
+            background_image=background_image,
+            blend_mode=blend_mode,
+        )
+
+        # 从 legacy 结果中提取数据
+        # result 格式: {"ui": {...}, "result": (output_image, image_paths_string)}
+        ui_data = result.get("ui", {})
+        output_image, image_paths_string = result.get("result", (None, ""))
+
+        # 在 v3 中，UI 数据可以直接作为字典传递
+        # 参考 image_preview.py 的实现
+        return io.NodeOutput(output_image, image_paths_string, ui=ui_data)
+
+
+class XISImageAdjustAndBlendExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_ImageAdjustAndBlendV3]
+
+
+async def comfy_entrypoint():
+    return XISImageAdjustAndBlendExtension()

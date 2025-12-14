@@ -1,5 +1,5 @@
 import torch
-from comfy_api.latest import io
+from comfy_api.latest import io, ComfyExtension
 
 MAX_LAYER_COUNT = 50
 
@@ -85,3 +85,16 @@ class XIS_CanvasMaskProcessor(io.ComfyNode):
             output_mask = 1.0 - output_mask
 
         return io.NodeOutput(output_mask.unsqueeze(0))
+
+
+class XISCanvasMaskProcessorExtension(ComfyExtension):
+    async def get_node_list(self):
+        return [XIS_CanvasMaskProcessor]
+
+
+async def comfy_entrypoint():
+    return XISCanvasMaskProcessorExtension()
+
+
+NODE_CLASS_MAPPINGS = None
+NODE_DISPLAY_NAME_MAPPINGS = None

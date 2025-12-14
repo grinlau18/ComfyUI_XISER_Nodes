@@ -192,8 +192,8 @@ class XIS_PackImages(io.ComfyNode):
                     single_img = torch.cat([single_img, alpha], dim=-1)  # 转换为 RGBA
                 elif single_img.shape[-1] == 4:  # RGBA
                     if alpha is not None:
-                        # 替换 Alpha 通道
-                        single_img = torch.cat([single_img[..., :3], alpha], dim=-1)
+                        # 蒙版与原始 Alpha 通道相乘，保留透明区域
+                        single_img = torch.cat([single_img[..., :3], alpha * single_img[..., 3:4]], dim=-1)
                 else:
                     logger.error(f"Image has invalid channels: {single_img.shape[-1]}")
                     raise ValueError(f"Image has invalid channels: {single_img.shape[-1]}")

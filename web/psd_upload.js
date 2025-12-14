@@ -18,6 +18,9 @@ const styles = `
     display: none;
     position: relative;
   }
+  .${NAMESPACE}_progress_container.${NAMESPACE}_progress_container_visible {
+    display: block !important;
+  }
   .${NAMESPACE}_progress_bar {
     width: 100%;
     height: 20px;
@@ -84,21 +87,95 @@ app.registerExtension({
 
         // 添加下拉列表
         const fileListWidget = node.addWidget("combo", "Select PSD File", "", (value) => {
+          // 尝试多种方式设置文件路径值，兼容 v1 和 v3 节点
+          let valueSet = false;
+
+          // 方法1: 查找小部件 (v1 兼容)
           const uploadedFileWidget = node.widgets.find(w => w.name === "uploaded_file");
           if (uploadedFileWidget) {
             uploadedFileWidget.value = value;
+            valueSet = true;
+            console.log(`[XIS_PSDLayerExtractor] Set value via widget: ${value}`);
+          }
+
+          // 方法2: 直接设置节点属性 (v3 兼容)
+          if (node.properties && typeof node.properties === 'object') {
+            node.properties.uploaded_file = value;
+            valueSet = true;
+            console.log(`[XIS_PSDLayerExtractor] Set value via properties: ${value}`);
+          }
+
+          // 方法3: 设置节点输入值
+          if (node.inputs && typeof node.inputs === 'object') {
+            // 尝试设置输入值
+            for (const input of node.inputs) {
+              if (input.name === 'uploaded_file' || input.label === 'uploaded_file') {
+                input.value = value;
+                valueSet = true;
+                console.log(`[XIS_PSDLayerExtractor] Set value via inputs: ${value}`);
+                break;
+              }
+            }
+          }
+
+          // 方法4: 设置 widgets_values (v3 兼容 - 最重要的方法)
+          if (Array.isArray(node.widgets_values)) {
+            // 找到 uploaded_file 输入的索引
+            let uploadedFileIndex = -1;
+            if (node.inputs) {
+              for (let i = 0; i < node.inputs.length; i++) {
+                if (node.inputs[i].name === 'uploaded_file' || node.inputs[i].label === 'uploaded_file') {
+                  uploadedFileIndex = i;
+                  break;
+                }
+              }
+            }
+            if (uploadedFileIndex >= 0) {
+              // 确保 widgets_values 数组足够长
+              while (node.widgets_values.length <= uploadedFileIndex) {
+                node.widgets_values.push("");
+              }
+              node.widgets_values[uploadedFileIndex] = value;
+              valueSet = true;
+              console.log(`[XIS_PSDLayerExtractor] Set value via widgets_values[${uploadedFileIndex}]: ${value}`);
+            }
+          }
+
+          if (valueSet) {
             app.graph.setDirtyCanvas(true);
             console.log(`[XIS_PSDLayerExtractor] Selected PSD file: ${value}`);
+          } else {
+            console.warn(`[XIS_PSDLayerExtractor] Failed to set value: ${value}`);
           }
         }, {
-          values: () => cachedFiles,
+          values: () => {
+            console.log(`[XIS_PSDLayerExtractor] Combo values function called, returning:`, cachedFiles);
+            return cachedFiles;
+          },
           multiselect: false
         });
 
         // 初始加载文件列表
         fetchPsdFiles().then(() => {
-          fileListWidget.options.values = cachedFiles;
+          // 更新 cachedFiles，values 函数会自动返回最新值
+          // 不需要直接设置 fileListWidget.options.values，因为 values 是一个函数
           app.graph.setDirtyCanvas(true);
+
+          // 确保小部件正确初始化
+          setTimeout(() => {
+            if (fileListWidget.draw) {
+              fileListWidget.draw();
+            }
+            app.graph.setDirtyCanvas(true, false);
+
+            // 强制刷新combo小部件
+            setTimeout(() => {
+              if (fileListWidget.draw) {
+                fileListWidget.draw();
+              }
+              app.graph.setDirtyCanvas(true, false);
+            }, 50);
+          }, 100);
         });
 
         // 添加上传按钮
@@ -129,12 +206,17 @@ app.registerExtension({
             const progressFill = document.createElement("div");
             progressFill.className = `${NAMESPACE}_progress_fill`;
             progressFill.style.width = "0%";
+            progressFill.id = `${NAMESPACE}_progress_fill_${Date.now()}`; // 添加唯一ID用于调试
             progressBar.appendChild(progressFill);
             const progressText = document.createElement("div");
             progressText.className = `${NAMESPACE}_progress_text`;
+            progressText.id = `${NAMESPACE}_progress_text_${Date.now()}`; // 添加唯一ID用于调试
             progressText.textContent = "Uploading: 0%";
             progressContainer.appendChild(progressBar);
             progressContainer.appendChild(progressText);
+
+            // 调试：确保元素创建成功
+            console.log(`[XIS_PSDLayerExtractor] Created progress elements:`, progressContainer, progressBar, progressFill, progressText);
 
             // 添加样式到文档
             if (!document.getElementById(`${NAMESPACE}_styles`)) {
@@ -145,13 +227,27 @@ app.registerExtension({
             }
 
             // 添加进度条到节点
+            console.log(`[XIS_PSDLayerExtractor] Adding progress DOM widget...`);
             const progressWidget = node.addDOMWidget(
               `${NAMESPACE}_progress`,
               "progress",
               progressContainer,
               { serialize: false }
             );
+            console.log(`[XIS_PSDLayerExtractor] progressWidget created:`, progressWidget);
+            // 确保进度条容器显示 - 使用CSS类控制显示
+            progressContainer.classList.add(`${NAMESPACE}_progress_container_visible`);
             progressContainer.style.display = "block";
+            console.log(`[XIS_PSDLayerExtractor] progressContainer display set to block`);
+
+            // 强制重绘画布以确保DOM widget显示
+            app.graph.setDirtyCanvas(true, false);
+            setTimeout(() => {
+              app.graph.setDirtyCanvas(true, false);
+            }, 100);
+
+            // 调试：检查节点的小部件列表
+            console.log(`[XIS_PSDLayerExtractor] node.widgets after adding progress:`, node.widgets?.length, node.widgets);
 
             // 使用 XMLHttpRequest 监听上传进度
             const xhr = new XMLHttpRequest();
@@ -160,9 +256,17 @@ app.registerExtension({
             xhr.upload.onprogress = (event) => {
               if (event.lengthComputable) {
                 const percent = (event.loaded / event.total) * 100;
-                progressFill.style.width = `${percent}%`;
-                progressText.textContent = `Uploading: ${Math.round(percent)}%`;
-                console.log(`[XIS_PSDLayerExtractor] Progress: ${Math.round(percent)}%`);
+                // 确保元素仍然存在
+                if (progressFill.parentNode && progressText.parentNode) {
+                  // 使用 requestAnimationFrame 确保平滑动画
+                  requestAnimationFrame(() => {
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = `Uploading: ${Math.round(percent)}%`;
+                    console.log(`[XIS_PSDLayerExtractor] Progress: ${Math.round(percent)}%, fill element:`, progressFill);
+                  });
+                } else {
+                  console.warn(`[XIS_PSDLayerExtractor] Progress elements not found in DOM`);
+                }
               }
             };
 
@@ -174,12 +278,66 @@ app.registerExtension({
                   if (result.name && result.type === "input") {
                     const subfolder = result.subfolder ? result.subfolder : "psd_files";
                     const file_path = `input/${subfolder}/${result.name}`.replace(/\/+/g, "/");
+
+                    // 尝试多种方式设置文件路径值，兼容 v1 和 v3 节点
+                    let valueSet = false;
+
+                    // 方法1: 查找小部件 (v1 兼容)
                     const uploadedFileWidget = node.widgets.find(w => w.name === "uploaded_file");
                     if (uploadedFileWidget) {
                       uploadedFileWidget.value = file_path;
-                      app.graph.setDirtyCanvas(true);
+                      valueSet = true;
+                      console.log(`[XIS_PSDLayerExtractor] Upload success - set value via widget: ${file_path}`);
+                    }
+
+                    // 方法2: 直接设置节点属性 (v3 兼容)
+                    if (node.properties && typeof node.properties === 'object') {
+                      node.properties.uploaded_file = file_path;
+                      valueSet = true;
+                      console.log(`[XIS_PSDLayerExtractor] Upload success - set value via properties: ${file_path}`);
+                    }
+
+                    // 方法3: 设置节点输入值
+                    if (node.inputs && typeof node.inputs === 'object') {
+                      // 尝试设置输入值
+                      for (const input of node.inputs) {
+                        if (input.name === 'uploaded_file' || input.label === 'uploaded_file') {
+                          input.value = file_path;
+                          valueSet = true;
+                          console.log(`[XIS_PSDLayerExtractor] Upload success - set value via inputs: ${file_path}`);
+                          break;
+                        }
+                      }
+                    }
+
+                    // 方法4: 设置 widgets_values (v3 兼容 - 最重要的方法)
+                    if (Array.isArray(node.widgets_values)) {
+                      // 找到 uploaded_file 输入的索引
+                      let uploadedFileIndex = -1;
+                      if (node.inputs) {
+                        for (let i = 0; i < node.inputs.length; i++) {
+                          if (node.inputs[i].name === 'uploaded_file' || node.inputs[i].label === 'uploaded_file') {
+                            uploadedFileIndex = i;
+                            break;
+                          }
+                        }
+                      }
+                      if (uploadedFileIndex >= 0) {
+                        // 确保 widgets_values 数组足够长
+                        while (node.widgets_values.length <= uploadedFileIndex) {
+                          node.widgets_values.push("");
+                        }
+                        node.widgets_values[uploadedFileIndex] = file_path;
+                        valueSet = true;
+                        console.log(`[XIS_PSDLayerExtractor] Upload success - set value via widgets_values[${uploadedFileIndex}]: ${file_path}`);
+                      }
+                    }
+
+                    if (!valueSet) {
+                      console.warn(`[XIS_PSDLayerExtractor] Upload success but failed to set value: ${file_path}`);
+                      // 不抛出错误，继续执行
                     } else {
-                      throw new Error("Uploaded file widget not found");
+                      app.graph.setDirtyCanvas(true);
                     }
 
                     // 立即刷新文件列表
@@ -195,9 +353,65 @@ app.registerExtension({
                       await new Promise(resolve => setTimeout(resolve, 500));
                     }
 
-                    fileListWidget.options.values = cachedFiles;
-                    fileListWidget.value = file_path;
-                    app.graph.setDirtyCanvas(true);
+                    // 调试：检查fileListWidget对象
+                    console.log(`[XIS_PSDLayerExtractor] fileListWidget:`, fileListWidget);
+                    console.log(`[XIS_PSDLayerExtractor] fileListWidget.options:`, fileListWidget?.options);
+                    console.log(`[XIS_PSDLayerExtractor] cachedFiles:`, cachedFiles);
+                    console.log(`[XIS_PSDLayerExtractor] file_path:`, file_path);
+
+                    // 更新下拉列表值 - 不需要设置 options.values，因为 values 是函数
+                    if (fileListWidget) {
+                      fileListWidget.value = file_path;
+                      console.log(`[XIS_PSDLayerExtractor] Updated fileListWidget: values=${cachedFiles.length}, value=${file_path}`);
+
+                      // 尝试触发小部件重绘
+                      if (fileListWidget.draw) {
+                        fileListWidget.draw();
+                        console.log(`[XIS_PSDLayerExtractor] Called fileListWidget.draw()`);
+                      }
+
+                      // 强制触发小部件的回调函数
+                      if (fileListWidget.callback) {
+                        fileListWidget.callback(file_path);
+                        console.log(`[XIS_PSDLayerExtractor] Called fileListWidget.callback()`);
+                      }
+
+                      // 强制刷新combo小部件的显示
+                      setTimeout(() => {
+                        // 触发小部件重绘
+                        if (fileListWidget.draw) {
+                          fileListWidget.draw();
+                        }
+                        // 如果小部件有值，确保它在选项中
+                        if (cachedFiles.includes(file_path)) {
+                          fileListWidget.value = file_path;
+                          console.log(`[XIS_PSDLayerExtractor] Ensured value is in options: ${file_path}`);
+                        }
+                        app.graph.setDirtyCanvas(true, false);
+                      }, 50);
+                    } else {
+                      console.warn(`[XIS_PSDLayerExtractor] fileListWidget is null/undefined`);
+                    }
+
+                    // 强制刷新界面
+                    app.graph.setDirtyCanvas(true, false);
+                    console.log(`[XIS_PSDLayerExtractor] Called setDirtyCanvas(true, false)`);
+
+                    // 额外的强制刷新，确保值被正确传递
+                    setTimeout(() => {
+                      app.graph.setDirtyCanvas(true, true);
+                      console.log(`[XIS_PSDLayerExtractor] Called additional setDirtyCanvas(true, true)`);
+                    }, 200);
+
+                    // 额外刷新：尝试触发节点重绘
+                    if (node.onDraw) {
+                      node.onDraw();
+                      console.log(`[XIS_PSDLayerExtractor] Called node.onDraw()`);
+                    }
+                    if (node.setDirty) {
+                      node.setDirty();
+                      console.log(`[XIS_PSDLayerExtractor] Called node.setDirty()`);
+                    }
 
                     progressContainer.classList.add(`${NAMESPACE}_success`);
                     progressText.textContent = "Upload Successful!";

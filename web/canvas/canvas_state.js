@@ -7,25 +7,20 @@
  * Logging utility for the XISER_Canvas node with configurable log levels.
  * @type {Object}
  */
-const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'debug'; // Default to 'debug' if not specified
+const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'error'; // Default to 'error' if not specified
 export const log = {
   debug: (message, ...args) => {
-    if (LOG_LEVEL === 'debug') {
-      console.log(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
-    }
+    // Disabled in production
   },
   info: (message, ...args) => {
-    if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info') {
-      console.log(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
-    }
+    // Disabled in production
   },
   warn: (message, ...args) => {
-    if (LOG_LEVEL === 'debug' || LOG_LEVEL === 'info' || LOG_LEVEL === 'warn') {
-      console.warn(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
-    }
+    // Only show warnings and errors in production
+    console.warn(`[XISER_Canvas] ${message}`, ...args);
   },
   error: (message, ...args) => {
-    console.error(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
+    console.error(`[XISER_Canvas] ${message}`, ...args);
   }
 };
 
