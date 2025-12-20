@@ -24,6 +24,7 @@ V3_MIGRATED_MODULES = [
     "shape_data",
     "psd_layer_extract",
     "adjust_image",
+    "llm.orchestrator_v3",
 ]
 
 # 待迁移的 A 级模块（暂时不加载）
@@ -37,7 +38,6 @@ S_LEVEL_MODULES = [
     "reorder_images",
     "shape_and_text",
     "multi_point_gradient",
-    "llm.orchestrator",
     "image_manager.node",
 ]
 

@@ -16,7 +16,8 @@ class DeepSeekChatProvider(BaseLLMProvider):
                 name="deepseek",
                 label="DeepSeek",
                 endpoint="https://api.deepseek.com/v1/chat/completions",
-                model="deepseek-chat",
+                model="deepseek-chat",  # 文本模型
+                vision_model="deepseek-vision",  # 视觉模型
                 default_system_prompt="You are DeepSeek, a helpful assistant for visual workflows.",
                 timeout=120,
                 max_images=8,
@@ -36,33 +37,47 @@ class DeepSeekChatProvider(BaseLLMProvider):
         if image_payloads:
             if not user_prompt.strip():
                 raise ValueError("Instruction cannot be empty when sending images to DeepSeek.")
-            endpoint = "https://api.deepseek.com/v1/responses"
-            content: List[Dict[str, Any]] = []
+
+            # DeepSeek视觉模型使用chat/completions端点，但需要特定格式
+            endpoint = "https://api.deepseek.com/v1/chat/completions"
+
+            # 构建消息内容
+            content = []
             if user_prompt.strip():
-                content.append({"type": "input_text", "text": user_prompt})
+                content.append({"type": "text", "text": user_prompt})
+
+            # 添加图像
             for encoded in image_payloads:
-                content.append({"type": "input_image", "image_base64": encoded})
-
-            inputs: List[Dict[str, Any]] = []
-            if system_prompt:
-                inputs.append(
-                    {
-                        "role": "system",
-                        "content": [{"type": "input_text", "text": system_prompt}],
+                content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{encoded}",
+                        "detail": "auto"
                     }
-                )
-            inputs.append({"role": "user", "content": content})
+                })
 
-            payload: Dict[str, Any] = {
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": content})
+
+            payload = {
                 "model": model,
-                "input": inputs,
+                "messages": messages,
                 "temperature": temperature,
                 "top_p": top_p,
             }
             if max_tokens:
-                payload["max_output_tokens"] = int(max_tokens)
-            headers = {"OpenAI-Beta": "responses-v1"}
-            return endpoint, payload, headers
+                payload["max_tokens"] = int(max_tokens)
+
+            # 使用视觉模型（如果配置了）或默认模型
+            if self.config.vision_model:
+                payload["model"] = self.config.vision_model
+            elif "vision" not in model.lower() and "vl" not in model.lower():
+                # 如果不是视觉模型，尝试使用默认的视觉模型名称
+                payload["model"] = "deepseek-vision"
+
+            return endpoint, payload, {}
 
         content = []
         if user_prompt.strip():

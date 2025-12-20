@@ -119,6 +119,7 @@ class LLMProviderConfig:
     request_format: str = "openai_chat"
     default_params: Dict[str, Any] = field(default_factory=dict)
     extra_headers: Dict[str, str] = field(default_factory=dict)
+    vision_model: Optional[str] = None  # 视觉模型名称，如果与文本模型不同
 
 
 class BaseLLMProvider(ABC):

@@ -17,12 +17,42 @@ app.registerExtension({
         const imageParams = ["negative_prompt", "image_size", "n_images", "style", "quality", "watermark"];
         const storageKey = "xiser.llm.profileMap"; // nodeId -> profile
         const providerHints = {
+            // 图像生成/编辑模型（需要图像参数）
             "qwen-image-edit-plus": {
                 hasImageParams: true,
             },
-            qwen_image_plus: {
+            "qwen_image_plus": {
                 sizes: ["1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"],
                 hasImageParams: true,
+            },
+            "qwen-mt-image": {
+                hasImageParams: true,
+            },
+            // 视觉语言模型（支持图像输入，但不需要图像生成参数）
+            "qwen_vl": {
+                hasImageParams: false,
+            },
+            "qwen-vl-plus": {
+                hasImageParams: false,
+            },
+            "qwen3-vl-flash": {
+                hasImageParams: false,
+            },
+            "moonshot_vision": {
+                hasImageParams: false,
+            },
+            // 纯文本模型（不需要图像参数）
+            "qwen": {
+                hasImageParams: false,
+            },
+            "qwen-flash": {
+                hasImageParams: false,
+            },
+            "moonshot": {
+                hasImageParams: false,
+            },
+            "deepseek": {
+                hasImageParams: false,
             },
         };
 
@@ -72,6 +102,10 @@ app.registerExtension({
         };
 
         const applyProvider = (node, providerVal) => {
+            // 处理向后兼容的别名
+            if (providerVal === "qwen_image") {
+                providerVal = "qwen-image-edit-plus";
+            }
             const hint = providerHints[providerVal] || {};
             const needImageParams = !!hint.hasImageParams;
             (node.widgets || []).forEach(w => {

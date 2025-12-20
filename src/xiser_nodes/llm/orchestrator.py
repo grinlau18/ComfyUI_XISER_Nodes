@@ -55,6 +55,7 @@ class XIS_LLMOrchestrator:
                         "max": 2147483647,
                         "step": 1,
                         "randomizable": True,
+                        "control_after_generate": True,
                         "tooltip": "Seed: -1 random each run, -2 incremental counter, >=0 fixed",
                     },
                 ),
@@ -69,6 +70,9 @@ class XIS_LLMOrchestrator:
                 "quality": ("STRING", {"default": "standard"}),
                 "watermark": ("BOOLEAN", {"default": False}),
                 "prompt_extend": ("BOOLEAN", {"default": True}),
+            },
+            "hidden": {
+                "control_after_generate": ("BOOLEAN", {"default": False}),
             },
         }
 

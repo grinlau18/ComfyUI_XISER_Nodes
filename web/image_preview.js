@@ -126,35 +126,24 @@ function injectStyles() {
     }
     
     /* -------------------------------------- */
-    /* 小圆点分页 */
+    /* 分辨率显示区域 */
     /* -------------------------------------- */
-    .xis-preview-dots {
-        height: 16px; /* 节省空间 */
+    .xis-resolution-display {
+        height: 24px; /* 稍微增加高度 */
         display: flex;
         justify-content: center;
         align-items: center;
-        gap: 6px;
         padding: 4px 0;
         box-sizing: border-box;
         flex-shrink: 0;
-    }
-
-    .xis-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: rgba(100, 100, 100, 0.5);
-        cursor: pointer;
-        transition: background 0.2s;
-        flex-shrink: 0;
-    }
-
-    .xis-dot:hover {
-        background: rgba(100, 100, 100, 0.8);
-    }
-
-    .xis-dot-active {
-        background: #c3c8ccff; /* 突出显示当前页 */
+        font-size: 13px;
+        color: #666;
+        font-family: monospace;
+        user-select: none;
+        font-weight: 500;
+        background: rgba(0, 0, 0, 0.03);
+        border-radius: 4px;
+        margin: 4px 8px;
     }
 
     /* 方格容器 */
@@ -233,7 +222,7 @@ function injectStyles() {
 
 function buildImageUrls(nodeId, output) {
     if (nodeId === -1 || !nodeId) {
-        return { urls: [], animated: [] };
+        return { urls: [], animated: [], resolutions: [] };
     }
 
     const previewParam = app.getPreviewFormatParam ? app.getPreviewFormatParam() : "";
@@ -253,10 +242,13 @@ function buildImageUrls(nodeId, output) {
 
     let urls = [];
     let animated = [];
+    let resolutions = [];
 
     try {
         const outputData = output?.xiser_images || output?.images;
-        // ... (URL 构建逻辑与 Vue 版本一致，此处省略以节省空间，但代码中应包含完整逻辑)
+        // 从后端获取分辨率信息
+        resolutions = output?.resolutions || [];
+
         if (outputData && Array.isArray(outputData) && outputData.length > 0) {
             urls = outputData.map(img => {
                 // Simplified URL construction for brevity in this response
@@ -270,18 +262,24 @@ function buildImageUrls(nodeId, output) {
                 params.set("type", type);
                 return `${api.apiURL("/view")}?${params.toString()}${finalPreviewParam}${rand}`;
             });
-            
+
             const outputAnimated = output.animated || [];
             animated = urls.map((_, index) => !!outputAnimated[index]);
+
+            // 确保resolutions数组长度与urls一致
+            if (resolutions.length < urls.length) {
+                resolutions = resolutions.concat(Array(urls.length - resolutions.length).fill("N/A"));
+            }
         }
         // ... (处理 app.nodePreviewImages 逻辑)
     } catch (err) {
         console.error(`[${EXTENSION_NAME}] 构建图片URL失败:`, err);
         urls = [];
         animated = [];
+        resolutions = [];
     }
 
-    return { urls, animated };
+    return { urls, animated, resolutions };
 }
 
 // --- LiteGraph 节点绑定逻辑 (纯 DOM/JS 实现) ---
@@ -297,6 +295,7 @@ function attachToNode(node) {
         mode: "grid", // "grid" or "page"
         images: [],
         animated: [],
+        resolutions: [], // 新增：分辨率信息
         currentPage: 0,
         loading: false,
         container: null,
@@ -333,6 +332,8 @@ function attachToNode(node) {
         } else if (actualMode === 'page') {
             const currentImg = state.images[state.currentPage];
             const isAnimated = state.animated[state.currentPage];
+            const currentResolution = state.resolutions[state.currentPage] || "N/A";
+            const pageInfo = count > 1 ? `${state.currentPage + 1}/${count}` : "";
 
             // 构造分页模式 HTML
             innerHTML = `
@@ -348,8 +349,8 @@ function attachToNode(node) {
                     ` : ''}
                 </div>
 
-                ${count > 1 ? `<div class="xis-preview-dots">
-                    ${state.images.map((_, idx) => `<span class="xis-dot${idx === state.currentPage ? ' xis-dot-active' : ''}" data-index="${idx}"></span>`).join('')}
+                ${count > 0 ? `<div class="xis-resolution-display">
+                    ${currentResolution}${pageInfo ? ` | ${pageInfo}` : ''}
                 </div>` : ''}
             </div>`;
 
@@ -385,11 +386,6 @@ function attachToNode(node) {
             // 上一页/下一页
             container.querySelector('.xis-nav-left')?.addEventListener('click', () => changePage(-1));
             container.querySelector('.xis-nav-right')?.addEventListener('click', () => changePage(1));
-
-            // 点点分页
-            container.querySelectorAll('.xis-dot').forEach(dot => {
-                dot.addEventListener('click', (e) => selectImage(parseInt(e.target.dataset.index)));
-            });
 
             // 图片加载完成回调（重要！）
             const imgEl = container.querySelector('.xis-preview-image');
@@ -427,9 +423,10 @@ function attachToNode(node) {
     }
 
     // 外部 API
-    node.setImages = (urls = [], animatedFlags = []) => {
+    node.setImages = (urls = [], animatedFlags = [], resolutions = []) => {
         state.images = urls.filter(url => url && url.trim());
         state.animated = animatedFlags || Array(state.images.length).fill(false);
+        state.resolutions = resolutions || Array(state.images.length).fill("N/A");
         state.currentPage = 0;
         state.loading = false;
         render();
@@ -464,8 +461,8 @@ function attachToNode(node) {
             origOnExecuted?.apply(this, arguments);
             node.setLoading(true);
             setTimeout(() => {
-                const { urls, animated } = buildImageUrls(this.id, output);
-                node.setImages(urls, animated);
+                const { urls, animated, resolutions } = buildImageUrls(this.id, output);
+                node.setImages(urls, animated, resolutions);
             }, 100);
         };
 
@@ -477,8 +474,8 @@ function attachToNode(node) {
 
         // 初始化渲染
         const output = app.nodeOutputs?.[node.id] || {};
-        const { urls, animated } = buildImageUrls(node.id, output);
-        node.setImages(urls, animated);
+        const { urls, animated, resolutions } = buildImageUrls(node.id, output);
+        node.setImages(urls, animated, resolutions);
 
 
         // 确保在移除时销毁

@@ -74,6 +74,23 @@ class XIS_ImagePreview(io.ComfyNode):
             cls=cls,
             compress_level=1,
         )
+
+        # 提取图像分辨率信息
+        resolutions = []
+        for img_tensor in image_list:
+            if isinstance(img_tensor, torch.Tensor):
+                # Tensor格式: [H, W, C] 或 [C, H, W]
+                if img_tensor.dim() == 3:
+                    if img_tensor.shape[0] in (3, 4):  # CHW格式
+                        height, width = img_tensor.shape[1], img_tensor.shape[2]
+                    else:  # HWC格式
+                        height, width = img_tensor.shape[0], img_tensor.shape[1]
+                    resolutions.append(f"{width}×{height}")
+                else:
+                    resolutions.append("N/A")
+            else:
+                resolutions.append("N/A")
+
         if save_images:
             save_ui = ui.ImageSaveHelper.get_save_images_ui(batched_images, filename_prefix=safe_prefix, cls=cls)  # type: ignore[attr-defined]
             # 保存文件但不返回路径
@@ -84,7 +101,13 @@ class XIS_ImagePreview(io.ComfyNode):
 
         # 自定义 UI 字段，前端读取 xiser_images，默认预览不会触发
         # 同时设置 images 和 animated 为空数组，防止默认预览机制触发
-        custom_ui = {"xiser_images": preview_results, "images": [], "animated": []}
+        # 添加分辨率信息到UI数据中
+        custom_ui = {
+            "xiser_images": preview_results,
+            "images": [],
+            "animated": [],
+            "resolutions": resolutions  # 新增分辨率信息
+        }
 
         return io.NodeOutput(ui=custom_ui)
 
