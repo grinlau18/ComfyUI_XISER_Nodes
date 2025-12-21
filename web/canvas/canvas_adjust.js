@@ -9,86 +9,38 @@ import { updateHistory } from './canvas_history.js';
 import { withAdjustmentDefaults } from './canvas_state.js';
 import { persistImageStates } from './layer_store.js';
 
-const BRIGHTNESS_SLIDER_FACTOR = 100;
-const SATURATION_RANGE = { min: -100, max: 100 };
-const OPACITY_RANGE = { min: 0, max: 100 };
+// 导入统一的调节工具
+import {
+  brightnessToSlider,
+  sliderToBrightness,
+  contrastToSlider,
+  sliderToContrast,
+  saturationToSlider,
+  sliderToSaturation,
+  opacityToSlider,
+  sliderToOpacity
+} from './adjustment_utils.js';
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+// 导入调节算法
+import {
+  createXiserBrightnessFilter,
+  createXiserContrastFilter,
+  createXiserSaturationFilter,
+  applyAdjustmentsToKonvaLayer
+} from './adjustment_algorithms.js';
 
-const toSliderValue = (brightness) => Math.round(clamp(brightness, -1, 1) * BRIGHTNESS_SLIDER_FACTOR);
-const fromSliderValue = (value) => clamp(value / BRIGHTNESS_SLIDER_FACTOR, -1, 1);
-
-const ensureSaturationFilter = (() => {
+const ensureAdjustmentFilters = (() => {
   let initialized = false;
-  const rgbToHsv = (r, g, b) => {
-    const rn = r / 255;
-    const gn = g / 255;
-    const bn = b / 255;
-    const max = Math.max(rn, gn, bn);
-    const min = Math.min(rn, gn, bn);
-    const delta = max - min;
-    let h = 0;
-    if (delta !== 0) {
-      if (max === rn) {
-        h = ((gn - bn) / delta) % 6;
-      } else if (max === gn) {
-        h = (bn - rn) / delta + 2;
-      } else {
-        h = (rn - gn) / delta + 4;
-      }
-      h *= 60;
-      if (h < 0) h += 360;
-    }
-    const s = max === 0 ? 0 : delta / max;
-    const v = max;
-    return { h, s, v };
-  };
-
-  const hsvToRgb = (h, s, v) => {
-    const c = v * s;
-    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-    const m = v - c;
-    let r1 = 0, g1 = 0, b1 = 0;
-    if (h >= 0 && h < 60) {
-      r1 = c; g1 = x; b1 = 0;
-    } else if (h < 120) {
-      r1 = x; g1 = c; b1 = 0;
-    } else if (h < 180) {
-      r1 = 0; g1 = c; b1 = x;
-    } else if (h < 240) {
-      r1 = 0; g1 = x; b1 = c;
-    } else if (h < 300) {
-      r1 = x; g1 = 0; b1 = c;
-    } else {
-      r1 = c; g1 = 0; b1 = x;
-    }
-    return {
-      r: Math.round((r1 + m) * 255),
-      g: Math.round((g1 + m) * 255),
-      b: Math.round((b1 + m) * 255),
-    };
-  };
 
   return () => {
     if (initialized) return;
     if (!window.Konva || !window.Konva.Filters) return;
-    window.Konva.Filters.XiserSaturation = function xiserSaturationFilter(imageData) {
-      const rawValue = typeof this?.xiserSaturation === 'number'
-        ? this.xiserSaturation
-        : parseFloat(this?.xiserSaturation) || 0;
-      const percent = clamp(rawValue, SATURATION_RANGE.min, SATURATION_RANGE.max);
-      if (Math.abs(percent) < 0.001) return;
-      const factor = Math.max(0, (percent + 100) / 100);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const hsv = rgbToHsv(data[i], data[i + 1], data[i + 2]);
-        hsv.s = Math.min(1, Math.max(0, hsv.s * factor));
-        const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
-        data[i] = rgb.r;
-        data[i + 1] = rgb.g;
-        data[i + 2] = rgb.b;
-      }
-    };
+
+    // 使用统一的调节算法创建所有滤镜
+    window.Konva.Filters.XiserBrightness = createXiserBrightnessFilter();
+    window.Konva.Filters.XiserContrast = createXiserContrastFilter();
+    window.Konva.Filters.XiserSaturation = createXiserSaturationFilter();
+
     initialized = true;
   };
 })();
@@ -103,7 +55,7 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     logger.warn(`Adjustment controls skipped for node ${node?.id}: Konva resources unavailable`);
     return null;
   }
-  ensureSaturationFilter();
+  ensureAdjustmentFilters();
 
   let currentLayerIndex = null;
   let panelVisible = false;
@@ -297,10 +249,10 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   };
 
   const updateSliderDisplays = (state) => {
-    const brightness = toSliderValue(state?.brightness ?? 0);
-    const contrast = Math.round(state?.contrast ?? 0);
-    const saturation = Math.round(state?.saturation ?? 0);
-    const opacity = Math.round(state?.opacity ?? 100);
+    const brightness = brightnessToSlider(state?.brightness ?? 0);
+    const contrast = contrastToSlider(state?.contrast ?? 0);
+    const saturation = saturationToSlider(state?.saturation ?? 0);
+    const opacity = opacityToSlider(state?.opacity ?? 100);
     brightnessControl.slider.value = `${brightness}`;
     brightnessControl.valueLabel.textContent = `${brightness}`;
     contrastControl.slider.value = `${contrast}`;
@@ -318,10 +270,10 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     saturationControl.valueLabel.textContent = saturationControl.slider.value;
     opacityControl.valueLabel.textContent = opacityControl.slider.value;
     applyStateUpdate(currentLayerIndex, {
-      brightness: fromSliderValue(parseInt(brightnessControl.slider.value, 10)),
-      contrast: clamp(parseInt(contrastControl.slider.value, 10), -100, 100),
-      saturation: clamp(parseInt(saturationControl.slider.value, 10), SATURATION_RANGE.min, SATURATION_RANGE.max),
-      opacity: clamp(parseInt(opacityControl.slider.value, 10), OPACITY_RANGE.min, OPACITY_RANGE.max),
+      brightness: sliderToBrightness(parseInt(brightnessControl.slider.value, 10)),
+      contrast: sliderToContrast(parseInt(contrastControl.slider.value, 10)),
+      saturation: sliderToSaturation(parseInt(saturationControl.slider.value, 10)),
+      opacity: sliderToOpacity(parseInt(opacityControl.slider.value, 10)),
     });
   };
 
@@ -526,43 +478,8 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
       return;
     }
 
-    const filters = [];
-
-    // 亮度滤镜
-    if (Math.abs(state.brightness) > 0.001) {
-      filters.push(Konva.Filters.Brighten);
-      layer.brightness(state.brightness);
-    } else {
-      layer.brightness(0);
-    }
-
-    // 对比度滤镜
-    if (Math.abs(state.contrast) > 0.001) {
-      filters.push(Konva.Filters.Contrast);
-      layer.contrast(state.contrast);
-    } else {
-      layer.contrast(0);
-    }
-
-    // 饱和度滤镜 - 与后端一致的HSV转换
-    if (Math.abs(state.saturation) > 0.001 && Konva.Filters.XiserSaturation) {
-      filters.push(Konva.Filters.XiserSaturation);
-      layer.xiserSaturation = clamp(state.saturation, SATURATION_RANGE.min, SATURATION_RANGE.max);
-    } else {
-      layer.xiserSaturation = 0;
-    }
-
-    // 透明度处理
-    const opacity = state.opacity !== undefined ? state.opacity : 100;
-    layer.opacity(opacity / 100);
-
-    if (filters.length) {
-      layer.cache();
-      layer.filters(filters);
-    } else {
-      layer.filters([]);
-      layer.clearCache();
-    }
+    // 使用统一的调节算法应用调整到Konva图层
+    applyAdjustmentsToKonvaLayer(layer, state);
     stageLayer.batchDraw();
   };
 

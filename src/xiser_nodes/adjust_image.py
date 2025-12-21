@@ -7,6 +7,10 @@ import folder_paths
 import logging
 import torch.nn.functional as F
 
+# 导入统一的调节工具模块
+from .adjustment_utils import AdjustmentUtils, create_adjustment_slider_config
+from .adjustment_algorithms import AdjustmentAlgorithms
+
 # 设置日志
 logger = logging.getLogger("XIS_ImageAdjustAndBlend")
 
@@ -26,17 +30,27 @@ class XIS_ImageAdjustAndBlend:
         Returns:
             dict: 输入配置，包含 required 和 optional 字段。
         """
+        # 使用统一的调节参数配置
+        adjustment_config = create_adjustment_slider_config()
+
         return {
             "required": {
                 "image": ("IMAGE", {}),
-                "brightness": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
-                "contrast": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
-                "saturation": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
+                "brightness": adjustment_config["brightness"],
+                "contrast": adjustment_config["contrast"],
+                "saturation": adjustment_config["saturation"],
                 "hue": ("FLOAT", {"default": 0.0, "min": -0.5, "max": 0.5, "step": 0.01, "display": "slider"}),
                 "r_gain": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
                 "g_gain": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
                 "b_gain": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.01, "display": "slider"}),
-                "opacity": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "display": "slider"}),
+                # 注意：这里使用统一的透明度范围，但需要转换为0-1范围供PIL使用
+                "opacity": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.01,
+                    "display": "slider"
+                }),
             },
             "optional": {
                 "mask": ("MASK", {}),
@@ -51,19 +65,20 @@ class XIS_ImageAdjustAndBlend:
     CATEGORY = "XISER_Nodes/Image_And_Mask"
     OUTPUT_NODE = True
 
-    def adjust_image(self, image, brightness=1.0, contrast=1.0, saturation=1.0, hue=0.0, r_gain=1.0, g_gain=1.0, b_gain=1.0, opacity=1.0, mask=None, background_image=None, blend_mode="normal"):
+    def adjust_image(self, image, brightness=0.0, contrast=0.0, saturation=0.0, hue=0.0, r_gain=1.0, g_gain=1.0, b_gain=1.0, opacity=1.0, mask=None, background_image=None, blend_mode="normal"):
         """
         调整图像的亮度、对比度、饱和度、色相、RGB 通道和透明度，支持蒙版抠图和背景图合并。
+        使用统一的调节参数范围，确保与Canvas节点一致。
 
         Args:
             image (torch.Tensor): 输入图像张量，形状为 (B, H, W, C)。
-            brightness (float): 亮度调整因子（0.0 全黑，1.0 原始，2.0 全白）。
-            contrast (float): 对比度调整因子。
-            saturation (float): 饱和度调整因子。
-            hue (float): 色相调整因子。
-            r_gain (float): 红色通道增益。
-            g_gain (float): 绿色通道增益。
-            b_gain (float): 蓝色通道增益。
+            brightness (float): 亮度调整值（-1.0 到 1.0，0.0 为原始亮度）。
+            contrast (float): 对比度调整值（-100 到 100，0.0 为原始对比度）。
+            saturation (float): 饱和度调整值（-100 到 100，0.0 为原始饱和度）。
+            hue (float): 色相调整因子（-0.5 到 0.5）。
+            r_gain (float): 红色通道增益（0.0 到 2.0）。
+            g_gain (float): 绿色通道增益（0.0 到 2.0）。
+            b_gain (float): 蓝色通道增益（0.0 到 2.0）。
             opacity (float): 透明度因子（0.0 完全透明，1.0 不透明）。
             mask (torch.Tensor, optional): 单通道蒙版，形状为 (B, H, W, 1)。
             background_image (torch.Tensor, optional): 背景图像，形状为 (B, H, W, C)。
@@ -116,18 +131,23 @@ class XIS_ImageAdjustAndBlend:
                     if pil_background.size != image_size:
                         pil_background = pil_background.resize(image_size, Image.BILINEAR)
 
-                # 应用亮度、对比度、饱和度、色相、RGB 增益
-                if brightness != 1.0:
-                    img_np = np.array(pil_image.convert("RGB")).astype(np.float32)
-                    img_np = img_np * brightness  # 亮度调整：0 全黑，1 原始，2 全白
-                    img_np = np.clip(img_np, 0, 255).astype(np.uint8)
-                    pil_image = Image.fromarray(img_np, mode="RGB")
+                # 应用亮度、对比度、饱和度调整（使用统一的调节算法）
+                # 注意：这里需要将contrast和saturation从百分比转换为因子
+                # 对于contrast：0表示无变化，需要转换为1.0
+                # 对于saturation：0表示无变化，需要转换为1.0
+
+                # 首先应用亮度、对比度、饱和度
+                if abs(brightness) > 0.001 or abs(contrast) > 0.001 or abs(saturation) > 0.001:
+                    # 使用统一的调节算法
+                    pil_image = AdjustmentAlgorithms.apply_adjustments(
+                        pil_image,
+                        brightness=brightness,
+                        contrast=contrast,
+                        saturation=saturation
+                    )
                     if pil_mask is not None:
                         pil_image = pil_image.convert("RGBA")
                         pil_image.putalpha(pil_mask)
-
-                pil_image = ImageEnhance.Contrast(pil_image).enhance(contrast)
-                pil_image = ImageEnhance.Color(pil_image).enhance(saturation)
 
                 if hue != 0:
                     pil_image = pil_image.convert("HSV")
@@ -156,6 +176,7 @@ class XIS_ImageAdjustAndBlend:
                         pil_image = pil_image.convert("RGBA")
                     if pil_mask is None:
                         pil_mask = Image.new("L", image_size, 255)
+                    # 使用统一的透明度处理
                     alpha_np = np.array(pil_mask).astype(np.float32) * opacity
                     alpha_np = np.clip(alpha_np, 0, 255).astype(np.uint8)
                     pil_image.putalpha(Image.fromarray(alpha_np, mode="L"))
