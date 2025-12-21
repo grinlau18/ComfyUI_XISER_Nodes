@@ -6,6 +6,9 @@
 import { log, mergeStateWithAdjustments } from './canvas_state.js';
 import { updateHistory } from './canvas_history.js';
 
+// 导入统一的调节工具
+import { opacityToAlpha } from './adjustment_utils.js';
+
 /**
  * Initializes the Konva.js stage and layers for the canvas.
  * @param {Object} node - The ComfyUI node instance.
@@ -419,6 +422,14 @@ export function applyStates(nodeState) {
       // 设置图层是否可被选中（锁定状态）
       const isLocked = state.locked === true;
       node.listening(!isLocked);
+
+      // 直接应用透明度，不依赖applyLayerAdjustments
+      // 使用统一的调节工具转换透明度
+      const opacity = state.opacity !== undefined ? state.opacity : 100;
+      const alpha = opacityToAlpha(opacity);
+      log.debug(`applyStates: layer=${i}, state.opacity=${state.opacity}, computed opacity=${opacity}, konva opacity=${alpha}`);
+      node.opacity(alpha);
+
       nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation, locked: isLocked });
       if (typeof nodeState.applyLayerAdjustments === 'function') {
         try {

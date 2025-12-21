@@ -35,10 +35,20 @@ export const log = {
  * @param {Object} app - The ComfyUI app instance.
  * @returns {Object|null} The initialized node state, or null if initialization fails.
  */
-export const BRIGHTNESS_RANGE = { min: -1, max: 1 };
-export const CONTRAST_RANGE = { min: -100, max: 100 };
-export const SATURATION_RANGE = { min: -100, max: 100 };
+// 导入统一的调节工具
+import {
+  ADJUSTMENT_RANGES,
+  normalizeAdjustmentState,
+  getDefaultAdjustmentState
+} from './adjustment_utils.js';
 
+// 保持向后兼容的导出
+export const BRIGHTNESS_RANGE = ADJUSTMENT_RANGES.brightness;
+export const CONTRAST_RANGE = ADJUSTMENT_RANGES.contrast;
+export const SATURATION_RANGE = ADJUSTMENT_RANGES.saturation;
+export const OPACITY_RANGE = ADJUSTMENT_RANGES.opacity;
+
+// 保持向后兼容的clampValue函数
 const clampValue = (value, min, max, fallback = 0) => {
   const number = Number(value);
   if (Number.isNaN(number) || !Number.isFinite(number)) {
@@ -50,15 +60,20 @@ const clampValue = (value, min, max, fallback = 0) => {
 export function withAdjustmentDefaults(state = {}) {
   const orderVal = Number.isFinite(state?.order) ? state.order : undefined;
   const filenameVal = typeof state?.filename === 'string' ? state.filename : undefined;
+
+  // 使用统一的调节工具规范化调节参数
+  const normalizedAdjustment = normalizeAdjustmentState(state);
+
   return {
     ...state,
     visible: state?.visible !== false, // 默认可见，兼容旧数据
     locked: state?.locked === true, // 默认未锁定
     order: orderVal,
     filename: filenameVal,
-    brightness: clampValue(state?.brightness ?? 0, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, 0),
-    contrast: clampValue(state?.contrast ?? 0, CONTRAST_RANGE.min, CONTRAST_RANGE.max, 0),
-    saturation: clampValue(state?.saturation ?? 0, SATURATION_RANGE.min, SATURATION_RANGE.max, 0),
+    brightness: normalizedAdjustment.brightness,
+    contrast: normalizedAdjustment.contrast,
+    saturation: normalizedAdjustment.saturation,
+    opacity: normalizedAdjustment.opacity,
   };
 }
 
@@ -266,7 +281,10 @@ export function initializeCanvasProperties(node, nodeState) {
           break;
         case 'image_states':
           try {
-            nodeState.initialStates = JSON.parse(widget.value) || nodeState.initialStates;
+            const parsed = JSON.parse(widget.value);
+            if (Array.isArray(parsed)) {
+              nodeState.initialStates = parsed.map((state) => withAdjustmentDefaults(state || {}));
+            }
           } catch (e) {
             log.error(`Failed to parse image_states for node ${nodeState.nodeId}: ${e.message}`);
           }

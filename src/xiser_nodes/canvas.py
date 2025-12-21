@@ -18,6 +18,10 @@ import glob
 import json
 import time
 
+# 导入统一的调节工具模块
+from .adjustment_utils import AdjustmentUtils
+from .adjustment_algorithms import AdjustmentAlgorithms, create_adjusted_image
+
 logger = logging.getLogger("XISER_Canvas")
 logger.setLevel(logging.INFO)
 
@@ -162,9 +166,10 @@ class XISER_Canvas:
             "rotation": 0.0,
             "skewX": 0.0,
             "skewY": 0.0,
-            "brightness": 0.0,
-            "contrast": 0.0,
-            "saturation": 0.0,
+            "brightness": AdjustmentUtils.DEFAULT_BRIGHTNESS,
+            "contrast": AdjustmentUtils.DEFAULT_CONTRAST,
+            "saturation": AdjustmentUtils.DEFAULT_SATURATION,
+            "opacity": AdjustmentUtils.DEFAULT_OPACITY,
             "visible": True,
             "order": None,
             "filename": None,
@@ -180,12 +185,21 @@ class XISER_Canvas:
         normalized["rotation"] = float(state.get("rotation", normalized["rotation"]))
         normalized["skewX"] = float(state.get("skewX", normalized["skewX"]))
         normalized["skewY"] = float(state.get("skewY", normalized["skewY"]))
-        brightness = float(state.get("brightness", normalized["brightness"]))
-        contrast = float(state.get("contrast", normalized["contrast"]))
-        saturation = float(state.get("saturation", normalized["saturation"]))
-        normalized["brightness"] = max(-1.0, min(1.0, brightness))
-        normalized["contrast"] = max(-100.0, min(100.0, contrast))
-        normalized["saturation"] = max(-100.0, min(100.0, saturation))
+
+        # 使用统一的调节工具规范化调节参数
+        adjustment_state = {
+            "brightness": state.get("brightness"),
+            "contrast": state.get("contrast"),
+            "saturation": state.get("saturation"),
+            "opacity": state.get("opacity")
+        }
+        normalized_adjustment = AdjustmentUtils.normalize_adjustment_state(adjustment_state)
+
+        normalized["brightness"] = normalized_adjustment["brightness"]
+        normalized["contrast"] = normalized_adjustment["contrast"]
+        normalized["saturation"] = normalized_adjustment["saturation"]
+        normalized["opacity"] = normalized_adjustment["opacity"]
+
         normalized["visible"] = bool(state.get("visible", True))
         if isinstance(state.get("filename"), str):
             normalized["filename"] = state.get("filename")
@@ -359,40 +373,34 @@ class XISER_Canvas:
             return pil_img
 
     def _apply_brightness_contrast(self, pil_img, brightness=0.0, contrast=0.0, saturation=0.0):
-        if abs(brightness) < 1e-3 and abs(contrast) < 1e-3 and abs(saturation) < 1e-3:
-            return pil_img
+        """
+        应用亮度、对比度、饱和度调整，使用统一的调节算法。
+        注意：不处理透明度，透明度将在合成时单独处理，以匹配前端Konva的行为。
+        """
+        # 使用统一的调节算法
+        return AdjustmentAlgorithms.apply_adjustments(
+            pil_img,
+            brightness=brightness,
+            contrast=contrast,
+            saturation=saturation
+        )
 
-        img_array = np.array(pil_img).astype(np.float32)
-        rgb = img_array[..., :3]
+    def _alpha_composite(self, background, foreground, x, y, opacity=1.0):
+        """
+        使用预乘alpha（pre-multiplied alpha）合成算法将前景图像合成到背景上。
+        使用统一的调节算法，确保与前端Konva.js的GPU合成效果一致。
 
-        if abs(brightness) >= 1e-3:
-            rgb = np.clip(rgb + brightness * 255.0, 0, 255)
+        Args:
+            background: PIL.Image (RGBA) 背景图像
+            foreground: PIL.Image (RGBA) 前景图像
+            x, y: 前景图像在背景上的位置
+            opacity: 前景图像的透明度 (0.0-1.0)
 
-        if abs(contrast) >= 1e-3:
-            factor = ((contrast + 100.0) / 100.0) ** 2
-            rgb = rgb / 255.0
-            rgb -= 0.5
-            rgb *= factor
-            rgb += 0.5
-            rgb = np.clip(rgb * 255.0, 0, 255)
-
-        if abs(saturation) >= 1e-3:
-            # 将饱和度值从[-100, 100]映射到饱和度因子
-            saturation_factor = (saturation + 100.0) / 100.0
-            # 使用PIL的HSV转换
-            saturation_img = Image.fromarray(rgb.astype(np.uint8), mode="RGB")
-            saturation_img = saturation_img.convert("HSV")
-            hsv_array = np.array(saturation_img).astype(np.float32)
-            # 调整饱和度通道
-            hsv_array[:, :, 1] = np.clip(hsv_array[:, :, 1] * saturation_factor, 0, 255)
-            hsv_array = hsv_array.astype(np.uint8)
-            # 转换回RGB
-            saturation_img = Image.fromarray(hsv_array, mode="HSV")
-            rgb = np.array(saturation_img.convert("RGB"))
-
-        img_array[..., :3] = rgb
-        return Image.fromarray(img_array.astype(np.uint8), mode="RGBA")
-
+        Returns:
+            PIL.Image: 合成后的图像
+        """
+        # 直接使用统一的调节算法中的合成方法
+        return AdjustmentAlgorithms.alpha_composite(background, foreground, x, y, opacity)
 
     def _generate_base64_chunks(self, pil_img, format="PNG", quality=10, chunk_size=512 * 1024):
         """
@@ -899,6 +907,7 @@ class XISER_Canvas:
                 brightness = state.get("brightness", 0.0)
                 contrast = state.get("contrast", 0.0)
                 saturation = state.get("saturation", 0.0)
+                opacity = state.get("opacity", 100.0)
                 if abs(brightness) > 1e-3 or abs(contrast) > 1e-3 or abs(saturation) > 1e-3:
                     img = self._apply_brightness_contrast(img, brightness, contrast, saturation)
                 alpha = img.split()[3]
@@ -959,12 +968,16 @@ class XISER_Canvas:
                     layer_images.append(torch.zeros((board_height, board_width, 4), dtype=torch.float32))
                     continue
 
-                # Paste image and alpha channel
-                canvas_pil.paste(
-                    img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped
-                )
+                # 使用预乘alpha合成算法将图像合成到画布
+                # 使用统一的透明度转换工具
+                opacity_value = AdjustmentUtils.opacity_to_alpha(opacity)
+                canvas_pil = self._alpha_composite(canvas_pil, img_cropped, max(0, paste_x), max(0, paste_y), opacity_value)
+
+                # 更新mask
                 mask.paste(alpha_cropped, (max(0, paste_x), max(0, paste_y)))
                 mask_list[i] = torch.from_numpy(np.array(mask, dtype=np.float32) / 255.0)
+
+                # 创建单独的图层图像
                 layer_canvas = Image.new("RGBA", (board_width, board_height), (0, 0, 0, 0))
                 layer_canvas.paste(img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped)
                 layer_rgba = torch.from_numpy(np.array(layer_canvas).astype(np.float32) / 255.0)
@@ -1042,7 +1055,7 @@ class XISER_Canvas:
                 "brightness": state.get("brightness", 0.0),
                 "contrast": state.get("contrast", 0.0),
                 "saturation": state.get("saturation", 0.0),
-                "opacity": 1.0,  # Default opacity
+                "opacity": state.get("opacity", 100.0),  # Default opacity 100%
                 "visible": state.get("visible", True),   # Visibility from state
                 "order": state.get("order", i),
                 "filename": state.get("filename"),

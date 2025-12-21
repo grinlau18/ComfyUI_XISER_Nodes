@@ -7,86 +7,40 @@
 
 import { updateHistory } from './canvas_history.js';
 import { withAdjustmentDefaults } from './canvas_state.js';
+import { persistImageStates } from './layer_store.js';
 
-const BRIGHTNESS_SLIDER_FACTOR = 100;
-const SATURATION_RANGE = { min: -100, max: 100 };
+// 导入统一的调节工具
+import {
+  brightnessToSlider,
+  sliderToBrightness,
+  contrastToSlider,
+  sliderToContrast,
+  saturationToSlider,
+  sliderToSaturation,
+  opacityToSlider,
+  sliderToOpacity
+} from './adjustment_utils.js';
 
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+// 导入调节算法
+import {
+  createXiserBrightnessFilter,
+  createXiserContrastFilter,
+  createXiserSaturationFilter,
+  applyAdjustmentsToKonvaLayer
+} from './adjustment_algorithms.js';
 
-const toSliderValue = (brightness) => Math.round(clamp(brightness, -1, 1) * BRIGHTNESS_SLIDER_FACTOR);
-const fromSliderValue = (value) => clamp(value / BRIGHTNESS_SLIDER_FACTOR, -1, 1);
-
-const ensureSaturationFilter = (() => {
+const ensureAdjustmentFilters = (() => {
   let initialized = false;
-  const rgbToHsv = (r, g, b) => {
-    const rn = r / 255;
-    const gn = g / 255;
-    const bn = b / 255;
-    const max = Math.max(rn, gn, bn);
-    const min = Math.min(rn, gn, bn);
-    const delta = max - min;
-    let h = 0;
-    if (delta !== 0) {
-      if (max === rn) {
-        h = ((gn - bn) / delta) % 6;
-      } else if (max === gn) {
-        h = (bn - rn) / delta + 2;
-      } else {
-        h = (rn - gn) / delta + 4;
-      }
-      h *= 60;
-      if (h < 0) h += 360;
-    }
-    const s = max === 0 ? 0 : delta / max;
-    const v = max;
-    return { h, s, v };
-  };
-
-  const hsvToRgb = (h, s, v) => {
-    const c = v * s;
-    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-    const m = v - c;
-    let r1 = 0, g1 = 0, b1 = 0;
-    if (h >= 0 && h < 60) {
-      r1 = c; g1 = x; b1 = 0;
-    } else if (h < 120) {
-      r1 = x; g1 = c; b1 = 0;
-    } else if (h < 180) {
-      r1 = 0; g1 = c; b1 = x;
-    } else if (h < 240) {
-      r1 = 0; g1 = x; b1 = c;
-    } else if (h < 300) {
-      r1 = x; g1 = 0; b1 = c;
-    } else {
-      r1 = c; g1 = 0; b1 = x;
-    }
-    return {
-      r: Math.round((r1 + m) * 255),
-      g: Math.round((g1 + m) * 255),
-      b: Math.round((b1 + m) * 255),
-    };
-  };
 
   return () => {
     if (initialized) return;
     if (!window.Konva || !window.Konva.Filters) return;
-    window.Konva.Filters.XiserSaturation = function xiserSaturationFilter(imageData) {
-      const rawValue = typeof this?.xiserSaturation === 'number'
-        ? this.xiserSaturation
-        : parseFloat(this?.xiserSaturation) || 0;
-      const percent = clamp(rawValue, SATURATION_RANGE.min, SATURATION_RANGE.max);
-      if (Math.abs(percent) < 0.001) return;
-      const factor = Math.max(0, (percent + 100) / 100);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const hsv = rgbToHsv(data[i], data[i + 1], data[i + 2]);
-        hsv.s = Math.min(1, Math.max(0, hsv.s * factor));
-        const rgb = hsvToRgb(hsv.h, hsv.s, hsv.v);
-        data[i] = rgb.r;
-        data[i + 1] = rgb.g;
-        data[i + 2] = rgb.b;
-      }
-    };
+
+    // 使用统一的调节算法创建所有滤镜
+    window.Konva.Filters.XiserBrightness = createXiserBrightnessFilter();
+    window.Konva.Filters.XiserContrast = createXiserContrastFilter();
+    window.Konva.Filters.XiserSaturation = createXiserSaturationFilter();
+
     initialized = true;
   };
 })();
@@ -101,7 +55,7 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     logger.warn(`Adjustment controls skipped for node ${node?.id}: Konva resources unavailable`);
     return null;
   }
-  ensureSaturationFilter();
+  ensureAdjustmentFilters();
 
   let currentLayerIndex = null;
   let panelVisible = false;
@@ -195,10 +149,12 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   const brightnessControl = createSliderControl('亮度', -100, 100, 0);
   const contrastControl = createSliderControl('对比度', -100, 100, 0);
   const saturationControl = createSliderControl('饱和度', -100, 100, 0);
+  const opacityControl = createSliderControl('透明度', 0, 100, 100);
 
   controlsContainer.appendChild(brightnessControl.container);
   controlsContainer.appendChild(contrastControl.container);
   controlsContainer.appendChild(saturationControl.container);
+  controlsContainer.appendChild(opacityControl.container);
 
   panel.appendChild(header);
   panel.appendChild(controlsContainer);
@@ -259,17 +215,14 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   }
 
   const syncImageStates = () => {
-    node.properties.image_states = nodeState.initialStates;
-    const widget = node.widgets?.find((w) => w.name === 'image_states');
-    if (widget) {
-      widget.value = JSON.stringify(nodeState.initialStates);
-    }
-    node.setProperty?.('image_states', nodeState.initialStates);
+    // 使用标准的持久化函数，确保与其他控件一致
+    const imageStatesWidget = node.widgets?.find((w) => w.name === 'image_states');
+    persistImageStates(node, nodeState, imageStatesWidget);
 
-    // Debug: log saturation values for troubleshooting
+    // Debug: log adjustment values for troubleshooting
     if (currentLayerIndex !== null && nodeState.initialStates[currentLayerIndex]) {
       const state = nodeState.initialStates[currentLayerIndex];
-      logger.debug(`Saturation sync: layer=${currentLayerIndex}, saturation=${state.saturation}, brightness=${state.brightness}, contrast=${state.contrast}`);
+      logger.debug(`Adjustment sync: layer=${currentLayerIndex}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, opacity=${state.opacity}`);
     }
   };
 
@@ -296,15 +249,18 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   };
 
   const updateSliderDisplays = (state) => {
-    const brightness = toSliderValue(state?.brightness ?? 0);
-    const contrast = Math.round(state?.contrast ?? 0);
-    const saturation = Math.round(state?.saturation ?? 0);
+    const brightness = brightnessToSlider(state?.brightness ?? 0);
+    const contrast = contrastToSlider(state?.contrast ?? 0);
+    const saturation = saturationToSlider(state?.saturation ?? 0);
+    const opacity = opacityToSlider(state?.opacity ?? 100);
     brightnessControl.slider.value = `${brightness}`;
     brightnessControl.valueLabel.textContent = `${brightness}`;
     contrastControl.slider.value = `${contrast}`;
     contrastControl.valueLabel.textContent = `${contrast}`;
     saturationControl.slider.value = `${saturation}`;
     saturationControl.valueLabel.textContent = `${saturation}`;
+    opacityControl.slider.value = `${opacity}`;
+    opacityControl.valueLabel.textContent = `${opacity}`;
   };
 
   const handleSliderInput = () => {
@@ -312,21 +268,25 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     brightnessControl.valueLabel.textContent = brightnessControl.slider.value;
     contrastControl.valueLabel.textContent = contrastControl.slider.value;
     saturationControl.valueLabel.textContent = saturationControl.slider.value;
+    opacityControl.valueLabel.textContent = opacityControl.slider.value;
     applyStateUpdate(currentLayerIndex, {
-      brightness: fromSliderValue(parseInt(brightnessControl.slider.value, 10)),
-      contrast: clamp(parseInt(contrastControl.slider.value, 10), -100, 100),
-      saturation: clamp(parseInt(saturationControl.slider.value, 10), SATURATION_RANGE.min, SATURATION_RANGE.max),
+      brightness: sliderToBrightness(parseInt(brightnessControl.slider.value, 10)),
+      contrast: sliderToContrast(parseInt(contrastControl.slider.value, 10)),
+      saturation: sliderToSaturation(parseInt(saturationControl.slider.value, 10)),
+      opacity: sliderToOpacity(parseInt(opacityControl.slider.value, 10)),
     });
   };
 
   brightnessControl.slider.addEventListener('input', handleSliderInput);
   contrastControl.slider.addEventListener('input', handleSliderInput);
   saturationControl.slider.addEventListener('input', handleSliderInput);
+  opacityControl.slider.addEventListener('input', handleSliderInput);
 
   resetButton.addEventListener('click', () => {
     brightnessControl.slider.value = '0';
     contrastControl.slider.value = '0';
     saturationControl.slider.value = '0';
+    opacityControl.slider.value = '100';
     handleSliderInput();
   });
 
@@ -504,43 +464,22 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   };
 
   const applyStoredAdjustments = (index) => {
-    const layer = nodeState.imageNodes?.[index];
-    if (!layer) return;
+    // 首先确保状态被规范化并保存
     const state = withAdjustmentDefaults(nodeState.initialStates[index] || {});
     nodeState.initialStates[index] = state;
-    const filters = [];
 
-    // 亮度滤镜
-    if (Math.abs(state.brightness) > 0.001) {
-      filters.push(Konva.Filters.Brighten);
-      layer.brightness(state.brightness);
-    } else {
-      layer.brightness(0);
+    // 调试日志：记录调整值
+    logger.debug(`applyStoredAdjustments layer=${index}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, opacity=${state.opacity}, opacity type=${typeof state.opacity}`);
+
+    // 如果图层不存在，只保存状态，不应用调整
+    const layer = nodeState.imageNodes?.[index];
+    if (!layer) {
+      logger.debug(`applyStoredAdjustments: layer ${index} not found, only saving state`);
+      return;
     }
 
-    // 对比度滤镜
-    if (Math.abs(state.contrast) > 0.001) {
-      filters.push(Konva.Filters.Contrast);
-      layer.contrast(state.contrast);
-    } else {
-      layer.contrast(0);
-    }
-
-    // 饱和度滤镜 - 与后端一致的HSV转换
-    if (Math.abs(state.saturation) > 0.001 && Konva.Filters.XiserSaturation) {
-      filters.push(Konva.Filters.XiserSaturation);
-      layer.xiserSaturation = clamp(state.saturation, SATURATION_RANGE.min, SATURATION_RANGE.max);
-    } else {
-      layer.xiserSaturation = 0;
-    }
-
-    if (filters.length) {
-      layer.cache();
-      layer.filters(filters);
-    } else {
-      layer.filters([]);
-      layer.clearCache();
-    }
+    // 使用统一的调节算法应用调整到Konva图层
+    applyAdjustmentsToKonvaLayer(layer, state);
     stageLayer.batchDraw();
   };
 

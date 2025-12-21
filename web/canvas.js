@@ -27,7 +27,27 @@ const MIN_NODE_WIDTH = 360;
 const MIN_NODE_HEIGHT = 360;
 const POLL_INTERVAL = 2000; // Polling interval for image updates (ms)
 
-const normalizeStateArray = (states) => (Array.isArray(states) ? states.map((state) => withAdjustmentDefaults(state || {})) : []);
+const normalizeStateArray = (states) => {
+  // 处理JSON字符串
+  if (typeof states === 'string') {
+    try {
+      states = JSON.parse(states);
+      log.debug(`normalizeStateArray: parsed JSON string, length=${Array.isArray(states) ? states.length : 'not array'}`);
+    } catch (e) {
+      log.error(`Failed to parse image_states JSON: ${e.message}`);
+      return [];
+    }
+  }
+  const result = Array.isArray(states) ? states.map((state) => withAdjustmentDefaults(state || {})) : [];
+
+  // 调试日志：记录解析后的状态
+  log.debug(`normalizeStateArray: returning ${result.length} states`);
+  result.forEach((state, idx) => {
+    log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}`);
+  });
+
+  return result;
+};
 
 const createDefaultLayerState = (boardWidth, boardHeight, borderWidth) =>
   withAdjustmentDefaults({

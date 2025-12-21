@@ -54,9 +54,10 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - LLM automation workflows powered by DeepSeek with an extensible provider interface ready for future models.
 
 ### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
-- **What makes it special**: the central visual playground for multi-layer composition, blending, and mask-aware editing.
+- **What makes it special**: the central visual playground for multi-layer composition, blending, opacity control, and mask-aware editing.
 - **Highlights**:
   - Drag, scale, rotate, hide/show, reorder, and fine-tune layers with real-time feedback plus mouse-wheel scaling and Alt+wheel rotation.
+  - Precisely adjust layer transparency (0-100%) with real-time brightness, contrast, and saturation adjustments.
   - Configurable canvas size, borders, background, auto-sizing, and display scaling keep the workspace flexible while the 20-step undo/redo history protects changes.
   - BiRefNet-powered cutouts, automatic mask extraction, and PSD import with layer extraction feed downstream nodes without workarounds.
   - Custom scrollbars, scroll offset tracking, and the companion XIS_CanvasMaskProcessor keep long labels and mask outputs synced with every edit.
@@ -170,6 +171,11 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - **Auto Top**: Selected layers are automatically brought to top
 - **Deselect**: Click on canvas background to deselect and restore original order
 
+**Layer Adjustment:**
+- **Opacity Control**: Precisely adjust layer transparency (0-100%) using adjustment panel
+- **Brightness/Contrast/Saturation**: Real-time visual adjustments for layers
+- **Live Preview**: All adjustments are instantly visible and match frontend display
+
 **Canvas Controls:**
 - **Auto Size**: Enable to automatically adjust canvas to first image dimensions
 - **Display Scale**: Adjust canvas display size without affecting output
@@ -180,7 +186,8 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - **Undo/Redo**: 20-step history for all transformations
 - **Reset Canvas**: Center all images and restore default states
 - **PSD Import**: Import PSD files with layer extraction
-- **Real-time Preview**: See transformations immediately
+- **Opacity Adjustment**: Precise layer transparency control with multi-layer semi-transparent blending
+- **Real-time Preview**: See transformations immediately with perfect frontend-backend consistency
 
 ### XIS_ShapeAndText Operation Guide
 
