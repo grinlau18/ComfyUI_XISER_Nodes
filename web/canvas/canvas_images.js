@@ -168,6 +168,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
     brightness: states[i]?.brightness,
     contrast: states[i]?.contrast,
     saturation: states[i]?.saturation,
+    opacity: states[i]?.opacity,
     visible: states[i]?.visible,
     locked: states[i]?.locked,
   }));
@@ -266,6 +267,7 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
               brightness: states[i]?.brightness,
               contrast: states[i]?.contrast,
               saturation: states[i]?.saturation,
+              opacity: states[i]?.opacity,
               order: Number.isFinite(states[i]?.order) ? states[i].order : i,
               filename: states[i]?.filename || validImagePaths[i],
             }));
@@ -283,6 +285,8 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
         }
 
         const state = withAdjustmentDefaults(nodeState.initialStates[index] || {});
+        // 直接从状态获取透明度值，确保图像创建时就有正确的透明度
+        const opacity = state.opacity !== undefined ? state.opacity : 100;
         const konvaImg = new Konva.Image({
           image: img,
           x: state.x || borderWidth + boardWidth / 2,
@@ -292,12 +296,14 @@ export async function loadImages(node, nodeState, imagePaths, states, statusText
           rotation: state.rotation || 0,
           skewX: state.skewX || 0,
           skewY: state.skewY || 0,
+          opacity: opacity / 100,  // Konva使用0-1范围
           draggable: true,
           offsetX: img.width / 2,
           offsetY: img.height / 2,
           filename: images[index].filename,
           visible: state.visible !== false,
         });
+        log.debug(`loadImages: created layer ${index} with opacity ${opacity} (konva: ${opacity / 100})`);
         const ref = nodeState.imageRefs?.[index];
         if (ref) {
           konvaImg.fileRef = ref;

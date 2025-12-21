@@ -7,9 +7,11 @@
 
 import { updateHistory } from './canvas_history.js';
 import { withAdjustmentDefaults } from './canvas_state.js';
+import { persistImageStates } from './layer_store.js';
 
 const BRIGHTNESS_SLIDER_FACTOR = 100;
 const SATURATION_RANGE = { min: -100, max: 100 };
+const OPACITY_RANGE = { min: 0, max: 100 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -195,10 +197,12 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   const brightnessControl = createSliderControl('亮度', -100, 100, 0);
   const contrastControl = createSliderControl('对比度', -100, 100, 0);
   const saturationControl = createSliderControl('饱和度', -100, 100, 0);
+  const opacityControl = createSliderControl('透明度', 0, 100, 100);
 
   controlsContainer.appendChild(brightnessControl.container);
   controlsContainer.appendChild(contrastControl.container);
   controlsContainer.appendChild(saturationControl.container);
+  controlsContainer.appendChild(opacityControl.container);
 
   panel.appendChild(header);
   panel.appendChild(controlsContainer);
@@ -259,17 +263,14 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   }
 
   const syncImageStates = () => {
-    node.properties.image_states = nodeState.initialStates;
-    const widget = node.widgets?.find((w) => w.name === 'image_states');
-    if (widget) {
-      widget.value = JSON.stringify(nodeState.initialStates);
-    }
-    node.setProperty?.('image_states', nodeState.initialStates);
+    // 使用标准的持久化函数，确保与其他控件一致
+    const imageStatesWidget = node.widgets?.find((w) => w.name === 'image_states');
+    persistImageStates(node, nodeState, imageStatesWidget);
 
-    // Debug: log saturation values for troubleshooting
+    // Debug: log adjustment values for troubleshooting
     if (currentLayerIndex !== null && nodeState.initialStates[currentLayerIndex]) {
       const state = nodeState.initialStates[currentLayerIndex];
-      logger.debug(`Saturation sync: layer=${currentLayerIndex}, saturation=${state.saturation}, brightness=${state.brightness}, contrast=${state.contrast}`);
+      logger.debug(`Adjustment sync: layer=${currentLayerIndex}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, opacity=${state.opacity}`);
     }
   };
 
@@ -299,12 +300,15 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     const brightness = toSliderValue(state?.brightness ?? 0);
     const contrast = Math.round(state?.contrast ?? 0);
     const saturation = Math.round(state?.saturation ?? 0);
+    const opacity = Math.round(state?.opacity ?? 100);
     brightnessControl.slider.value = `${brightness}`;
     brightnessControl.valueLabel.textContent = `${brightness}`;
     contrastControl.slider.value = `${contrast}`;
     contrastControl.valueLabel.textContent = `${contrast}`;
     saturationControl.slider.value = `${saturation}`;
     saturationControl.valueLabel.textContent = `${saturation}`;
+    opacityControl.slider.value = `${opacity}`;
+    opacityControl.valueLabel.textContent = `${opacity}`;
   };
 
   const handleSliderInput = () => {
@@ -312,21 +316,25 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     brightnessControl.valueLabel.textContent = brightnessControl.slider.value;
     contrastControl.valueLabel.textContent = contrastControl.slider.value;
     saturationControl.valueLabel.textContent = saturationControl.slider.value;
+    opacityControl.valueLabel.textContent = opacityControl.slider.value;
     applyStateUpdate(currentLayerIndex, {
       brightness: fromSliderValue(parseInt(brightnessControl.slider.value, 10)),
       contrast: clamp(parseInt(contrastControl.slider.value, 10), -100, 100),
       saturation: clamp(parseInt(saturationControl.slider.value, 10), SATURATION_RANGE.min, SATURATION_RANGE.max),
+      opacity: clamp(parseInt(opacityControl.slider.value, 10), OPACITY_RANGE.min, OPACITY_RANGE.max),
     });
   };
 
   brightnessControl.slider.addEventListener('input', handleSliderInput);
   contrastControl.slider.addEventListener('input', handleSliderInput);
   saturationControl.slider.addEventListener('input', handleSliderInput);
+  opacityControl.slider.addEventListener('input', handleSliderInput);
 
   resetButton.addEventListener('click', () => {
     brightnessControl.slider.value = '0';
     contrastControl.slider.value = '0';
     saturationControl.slider.value = '0';
+    opacityControl.slider.value = '100';
     handleSliderInput();
   });
 
@@ -504,10 +512,20 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
   };
 
   const applyStoredAdjustments = (index) => {
-    const layer = nodeState.imageNodes?.[index];
-    if (!layer) return;
+    // 首先确保状态被规范化并保存
     const state = withAdjustmentDefaults(nodeState.initialStates[index] || {});
     nodeState.initialStates[index] = state;
+
+    // 调试日志：记录调整值
+    logger.debug(`applyStoredAdjustments layer=${index}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, opacity=${state.opacity}, opacity type=${typeof state.opacity}`);
+
+    // 如果图层不存在，只保存状态，不应用调整
+    const layer = nodeState.imageNodes?.[index];
+    if (!layer) {
+      logger.debug(`applyStoredAdjustments: layer ${index} not found, only saving state`);
+      return;
+    }
+
     const filters = [];
 
     // 亮度滤镜
@@ -533,6 +551,10 @@ export function initializeAdjustmentControls(node, nodeState, widgetContainer) {
     } else {
       layer.xiserSaturation = 0;
     }
+
+    // 透明度处理
+    const opacity = state.opacity !== undefined ? state.opacity : 100;
+    layer.opacity(opacity / 100);
 
     if (filters.length) {
       layer.cache();

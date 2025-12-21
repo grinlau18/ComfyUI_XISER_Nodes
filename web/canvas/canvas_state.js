@@ -38,6 +38,7 @@ export const log = {
 export const BRIGHTNESS_RANGE = { min: -1, max: 1 };
 export const CONTRAST_RANGE = { min: -100, max: 100 };
 export const SATURATION_RANGE = { min: -100, max: 100 };
+export const OPACITY_RANGE = { min: 0, max: 100 };
 
 const clampValue = (value, min, max, fallback = 0) => {
   const number = Number(value);
@@ -59,6 +60,7 @@ export function withAdjustmentDefaults(state = {}) {
     brightness: clampValue(state?.brightness ?? 0, BRIGHTNESS_RANGE.min, BRIGHTNESS_RANGE.max, 0),
     contrast: clampValue(state?.contrast ?? 0, CONTRAST_RANGE.min, CONTRAST_RANGE.max, 0),
     saturation: clampValue(state?.saturation ?? 0, SATURATION_RANGE.min, SATURATION_RANGE.max, 0),
+    opacity: clampValue(state?.opacity ?? 100, OPACITY_RANGE.min, OPACITY_RANGE.max, 100),
   };
 }
 
@@ -266,7 +268,10 @@ export function initializeCanvasProperties(node, nodeState) {
           break;
         case 'image_states':
           try {
-            nodeState.initialStates = JSON.parse(widget.value) || nodeState.initialStates;
+            const parsed = JSON.parse(widget.value);
+            if (Array.isArray(parsed)) {
+              nodeState.initialStates = parsed.map((state) => withAdjustmentDefaults(state || {}));
+            }
           } catch (e) {
             log.error(`Failed to parse image_states for node ${nodeState.nodeId}: ${e.message}`);
           }

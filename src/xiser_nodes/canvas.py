@@ -165,6 +165,7 @@ class XISER_Canvas:
             "brightness": 0.0,
             "contrast": 0.0,
             "saturation": 0.0,
+            "opacity": 100.0,
             "visible": True,
             "order": None,
             "filename": None,
@@ -183,9 +184,11 @@ class XISER_Canvas:
         brightness = float(state.get("brightness", normalized["brightness"]))
         contrast = float(state.get("contrast", normalized["contrast"]))
         saturation = float(state.get("saturation", normalized["saturation"]))
+        opacity = float(state.get("opacity", normalized["opacity"]))
         normalized["brightness"] = max(-1.0, min(1.0, brightness))
         normalized["contrast"] = max(-100.0, min(100.0, contrast))
         normalized["saturation"] = max(-100.0, min(100.0, saturation))
+        normalized["opacity"] = max(0.0, min(100.0, opacity))
         normalized["visible"] = bool(state.get("visible", True))
         if isinstance(state.get("filename"), str):
             normalized["filename"] = state.get("filename")
@@ -358,13 +361,21 @@ class XISER_Canvas:
             logger.error(f"Coordinate-based transformation failed: {e}")
             return pil_img
 
-    def _apply_brightness_contrast(self, pil_img, brightness=0.0, contrast=0.0, saturation=0.0):
+    def _apply_brightness_contrast(self, pil_img, brightness=0.0, contrast=0.0, saturation=0.0, opacity=100.0):
+        """
+        应用亮度、对比度、饱和度调整，但不处理透明度。
+        透明度将在合成时单独处理，以匹配前端Konva的行为。
+        """
         if abs(brightness) < 1e-3 and abs(contrast) < 1e-3 and abs(saturation) < 1e-3:
             return pil_img
 
         img_array = np.array(pil_img).astype(np.float32)
-        rgb = img_array[..., :3]
 
+        # 分离RGB和Alpha通道
+        rgb = img_array[..., :3]
+        alpha = img_array[..., 3] if img_array.shape[2] == 4 else np.full((img_array.shape[0], img_array.shape[1]), 255.0)
+
+        # 应用亮度、对比度、饱和度调整
         if abs(brightness) >= 1e-3:
             rgb = np.clip(rgb + brightness * 255.0, 0, 255)
 
@@ -390,9 +401,101 @@ class XISER_Canvas:
             saturation_img = Image.fromarray(hsv_array, mode="HSV")
             rgb = np.array(saturation_img.convert("RGB"))
 
-        img_array[..., :3] = rgb
-        return Image.fromarray(img_array.astype(np.uint8), mode="RGBA")
+        # 注意：不处理透明度，透明度将在合成时处理
+        # 重新组合图像（保持原始alpha通道不变）
+        img_array = np.dstack((rgb, alpha))
 
+        # 确保数据类型正确
+        img_array = np.clip(img_array, 0, 255).astype(np.uint8)
+        return Image.fromarray(img_array, mode="RGBA")
+
+    def _alpha_composite(self, background, foreground, x, y, opacity=1.0):
+        """
+        使用预乘alpha（pre-multiplied alpha）合成算法将前景图像合成到背景上。
+        这个算法更接近前端Konva.js的GPU合成效果。
+
+        Args:
+            background: PIL.Image (RGBA) 背景图像
+            foreground: PIL.Image (RGBA) 前景图像
+            x, y: 前景图像在背景上的位置
+            opacity: 前景图像的透明度 (0.0-1.0)
+
+        Returns:
+            PIL.Image: 合成后的图像
+        """
+        # 确保图像都是RGBA模式
+        if background.mode != "RGBA":
+            background = background.convert("RGBA")
+        if foreground.mode != "RGBA":
+            foreground = foreground.convert("RGBA")
+
+        # 获取图像尺寸
+        bg_width, bg_height = background.size
+        fg_width, fg_height = foreground.size
+
+        # 计算实际粘贴区域
+        paste_x = max(0, x)
+        paste_y = max(0, y)
+
+        # 计算前景图像在背景中的可见区域
+        fg_x1 = max(0, -x)
+        fg_y1 = max(0, -y)
+        fg_x2 = min(fg_width, bg_width - x)
+        fg_y2 = min(fg_height, bg_height - y)
+
+        # 如果没有可见区域，直接返回背景
+        if fg_x1 >= fg_x2 or fg_y1 >= fg_y2:
+            return background
+
+        # 裁剪前景图像的可见部分
+        fg_cropped = foreground.crop((fg_x1, fg_y1, fg_x2, fg_y2))
+
+        # 获取背景对应区域
+        bg_x1 = paste_x
+        bg_y1 = paste_y
+        bg_x2 = min(bg_width, paste_x + (fg_x2 - fg_x1))
+        bg_y2 = min(bg_height, paste_y + (fg_y2 - fg_y1))
+
+        bg_region = background.crop((bg_x1, bg_y1, bg_x2, bg_y2))
+
+        # 转换为numpy数组进行高效计算
+        bg_array = np.array(bg_region, dtype=np.float32) / 255.0
+        fg_array = np.array(fg_cropped, dtype=np.float32) / 255.0
+
+        # 提取alpha通道
+        bg_alpha = bg_array[..., 3:4]
+        fg_alpha = fg_array[..., 3:4]
+
+        # 应用透明度（像前端Konva一样在合成时应用）
+        # 将opacity参数与前景的alpha通道结合
+        fg_alpha_adjusted = fg_alpha * opacity
+
+        # 计算合成后的alpha
+        out_alpha = fg_alpha_adjusted + bg_alpha * (1.0 - fg_alpha_adjusted)
+
+        # 避免除以零
+        out_alpha_clamped = np.where(out_alpha > 0, out_alpha, 1.0)
+
+        # 预乘alpha合成公式
+        # 注意：前景图像本身没有预乘，我们在合成时进行预乘
+        bg_premult = bg_array[..., :3] * bg_alpha
+        fg_premult = fg_array[..., :3] * fg_alpha_adjusted
+
+        # 合成颜色
+        out_rgb = (fg_premult + bg_premult * (1.0 - fg_alpha_adjusted)) / out_alpha_clamped
+
+        # 组合结果
+        out_array = np.concatenate([out_rgb, out_alpha], axis=-1)
+        out_array = np.clip(out_array * 255.0, 0, 255).astype(np.uint8)
+
+        # 创建合成后的区域图像
+        out_region = Image.fromarray(out_array, mode="RGBA")
+
+        # 将合成后的区域粘贴回背景
+        result = background.copy()
+        result.paste(out_region, (bg_x1, bg_y1))
+
+        return result
 
     def _generate_base64_chunks(self, pil_img, format="PNG", quality=10, chunk_size=512 * 1024):
         """
@@ -899,8 +1002,9 @@ class XISER_Canvas:
                 brightness = state.get("brightness", 0.0)
                 contrast = state.get("contrast", 0.0)
                 saturation = state.get("saturation", 0.0)
-                if abs(brightness) > 1e-3 or abs(contrast) > 1e-3 or abs(saturation) > 1e-3:
-                    img = self._apply_brightness_contrast(img, brightness, contrast, saturation)
+                opacity = state.get("opacity", 100.0)
+                if abs(brightness) > 1e-3 or abs(contrast) > 1e-3 or abs(saturation) > 1e-3 or abs(opacity - 100.0) > 1e-3:
+                    img = self._apply_brightness_contrast(img, brightness, contrast, saturation, opacity)
                 alpha = img.split()[3]
                 mask = Image.new("L", (board_width, board_height), 0)
 
@@ -959,12 +1063,16 @@ class XISER_Canvas:
                     layer_images.append(torch.zeros((board_height, board_width, 4), dtype=torch.float32))
                     continue
 
-                # Paste image and alpha channel
-                canvas_pil.paste(
-                    img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped
-                )
+                # 使用预乘alpha合成算法将图像合成到画布
+                # 注意：opacity值需要从0-100转换为0-1范围，与前端Konva一致
+                opacity_value = opacity / 100.0
+                canvas_pil = self._alpha_composite(canvas_pil, img_cropped, max(0, paste_x), max(0, paste_y), opacity_value)
+
+                # 更新mask
                 mask.paste(alpha_cropped, (max(0, paste_x), max(0, paste_y)))
                 mask_list[i] = torch.from_numpy(np.array(mask, dtype=np.float32) / 255.0)
+
+                # 创建单独的图层图像
                 layer_canvas = Image.new("RGBA", (board_width, board_height), (0, 0, 0, 0))
                 layer_canvas.paste(img_cropped, (max(0, paste_x), max(0, paste_y)), img_cropped)
                 layer_rgba = torch.from_numpy(np.array(layer_canvas).astype(np.float32) / 255.0)
@@ -1042,7 +1150,7 @@ class XISER_Canvas:
                 "brightness": state.get("brightness", 0.0),
                 "contrast": state.get("contrast", 0.0),
                 "saturation": state.get("saturation", 0.0),
-                "opacity": 1.0,  # Default opacity
+                "opacity": state.get("opacity", 100.0),  # Default opacity 100%
                 "visible": state.get("visible", True),   # Visibility from state
                 "order": state.get("order", i),
                 "filename": state.get("filename"),

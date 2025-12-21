@@ -419,6 +419,12 @@ export function applyStates(nodeState) {
       // 设置图层是否可被选中（锁定状态）
       const isLocked = state.locked === true;
       node.listening(!isLocked);
+
+      // 直接应用透明度，不依赖applyLayerAdjustments
+      const opacity = state.opacity !== undefined ? state.opacity : 100;
+      log.debug(`applyStates: layer=${i}, state.opacity=${state.opacity}, computed opacity=${opacity}, konva opacity=${opacity / 100}`);
+      node.opacity(opacity / 100);
+
       nodeState.initialStates[i] = mergeStateWithAdjustments(nodeState.initialStates[i], { x, y, scaleX, scaleY, rotation, locked: isLocked });
       if (typeof nodeState.applyLayerAdjustments === 'function') {
         try {
