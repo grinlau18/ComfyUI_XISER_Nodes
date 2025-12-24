@@ -6,10 +6,12 @@ import hashlib
 
 # 输入多个提示词并通过开关控制
 class XIS_PromptsWithSwitches:
+    MAX_PROMPT_COUNT = 50  # 最大支持50个prompt组合
+
     @classmethod
     def INPUT_TYPES(cls):
         input_config = {}
-        for i in range(1, 6):
+        for i in range(1, cls.MAX_PROMPT_COUNT + 1):
             input_config[f"prompt_{i}"] = ("STRING", {"default": "", "multiline": True})
             input_config[f"enable_{i}"] = ("BOOLEAN", {"default": True})
         return {"required": {}, "optional": input_config}
@@ -21,7 +23,7 @@ class XIS_PromptsWithSwitches:
 
     def process_prompts(self, **kwargs):
         prompts = []
-        for i in range(1, 6):
+        for i in range(1, self.MAX_PROMPT_COUNT + 1):
             prompt_key = f"prompt_{i}"
             enable_key = f"enable_{i}"
             prompt = kwargs.get(prompt_key, "")
@@ -373,6 +375,96 @@ class XIS_CanvasConfig:
         logger.info(f"Canvas config created: {config}")
         return (config,)
 
+# 字符串列表合并节点
+class XIS_StringListMerger:
+    """将字符串列表合并为单个字符串，支持自定义连接符"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "string_list": ("STRING", {"forceInput": True}),
+                "separator": ("STRING", {"default": ", ", "multiline": False, "placeholder": "输入连接符，如 , 或 \\n"}),
+                "strip_items": ("BOOLEAN", {"default": True, "label_on": "去除空白", "label_off": "保留原样"}),
+                "skip_empty": ("BOOLEAN", {"default": True, "label_on": "跳过空项", "label_off": "保留空项"}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    INPUT_IS_LIST = True
+    FUNCTION = "merge_strings"
+    CATEGORY = "XISER_Nodes/UI_And_Control"
+
+    def merge_strings(self, string_list, separator, strip_items, skip_empty):
+        """
+        合并字符串列表
+
+        Args:
+            string_list: 输入的字符串列表（由于INPUT_IS_LIST=True，这是一个列表的列表）
+            separator: 连接符列表（每个元素相同）
+            strip_items: 布尔值列表（每个元素相同）
+            skip_empty: 布尔值列表（每个元素相同）
+
+        Returns:
+            合并后的单个字符串
+        """
+        # 由于INPUT_IS_LIST=True，所有输入都是列表
+        # 我们只需要第一个元素，因为所有元素都相同
+        separator = separator[0] if isinstance(separator, list) and len(separator) > 0 else ", "
+        strip_items = strip_items[0] if isinstance(strip_items, list) and len(strip_items) > 0 else True
+        skip_empty = skip_empty[0] if isinstance(skip_empty, list) and len(skip_empty) > 0 else True
+
+        # 处理转义字符（如 \n, \t 等）
+        separator = separator.encode().decode('unicode_escape')
+
+        # 收集所有字符串（扁平化处理）
+        all_strings = []
+        for str_list in string_list:
+            # 处理输入：str_list 可能是一个列表，也可能是单个字符串
+            if isinstance(str_list, str):
+                # 如果是单个字符串，直接添加到所有字符串
+                all_strings.append(str_list)
+                continue
+
+            if not isinstance(str_list, list):
+                # 如果不是列表，尝试转换为列表
+                str_list = [str(str_list)]
+
+            # 添加所有字符串
+            all_strings.extend(str_list)
+
+        # 处理每个字符串
+        processed_strings = []
+        for item in all_strings:
+            # 转换为字符串
+            item_str = str(item)
+
+            # 去除空白（如果启用）
+            if strip_items:
+                item_str = item_str.strip()
+
+            # 跳过空项（如果启用）
+            # 注意：空白字符串（如 "   "）在 strip_items=False 时不算空
+            if skip_empty:
+                if strip_items:
+                    # 如果启用了去除空白，那么去除空白后检查是否为空
+                    if not item_str.strip():
+                        continue
+                else:
+                    # 如果没有启用去除空白，只检查原始字符串是否为空
+                    if not item_str:
+                        continue
+
+            processed_strings.append(item_str)
+
+        # 合并所有字符串为一个字符串
+        if not processed_strings:
+            result = ""
+        else:
+            result = separator.join(processed_strings)
+
+        return (result,)
+
 # 节点映射
 NODE_CLASS_MAPPINGS = {
     "XIS_PromptsWithSwitches": XIS_PromptsWithSwitches,
@@ -383,4 +475,5 @@ NODE_CLASS_MAPPINGS = {
     "XIS_MultiPromptSwitch": XIS_MultiPromptSwitch,
     "XIS_IPAStyleSettings": XIS_IPAStyleSettings,
     "XIS_CanvasConfig": XIS_CanvasConfig,
+    "XIS_StringListMerger": XIS_StringListMerger,
 }

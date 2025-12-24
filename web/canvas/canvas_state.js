@@ -7,7 +7,30 @@
  * Logging utility for the XISER_Canvas node with configurable log levels.
  * @type {Object}
  */
-const LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'debug'; // Default to 'debug' if not specified
+let LOG_LEVEL = new URLSearchParams(window.location.search).get('xiser_log') || 'warn'; // Default to 'warn' to reduce console noise
+
+/**
+ * Set the log level dynamically
+ * @param {string} level - Log level: 'debug', 'info', 'warn', 'error'
+ */
+export function setLogLevel(level) {
+  const validLevels = ['debug', 'info', 'warn', 'error'];
+  if (validLevels.includes(level)) {
+    LOG_LEVEL = level;
+    console.log(`[XISER_Canvas] Log level set to: ${level}`);
+  } else {
+    console.warn(`[XISER_Canvas] Invalid log level: ${level}. Valid levels are: ${validLevels.join(', ')}`);
+  }
+}
+
+/**
+ * Get the current log level
+ * @returns {string} Current log level
+ */
+export function getLogLevel() {
+  return LOG_LEVEL;
+}
+
 export const log = {
   debug: (message, ...args) => {
     if (LOG_LEVEL === 'debug') {
@@ -28,6 +51,36 @@ export const log = {
     console.error(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, ...args);
   }
 };
+
+// Export log control functions to global scope for easy access from browser console
+if (typeof window !== 'undefined') {
+  window.XISER_Canvas = window.XISER_Canvas || {};
+  window.XISER_Canvas.log = {
+    setLevel: setLogLevel,
+    getLevel: getLogLevel,
+    debug: log.debug,
+    info: log.info,
+    warn: log.warn,
+    error: log.error
+  };
+
+  // Add a helper function to show available commands
+  window.XISER_Canvas.help = function() {
+    console.log('XISER_Canvas Log Control Commands:');
+    console.log('  XISER_Canvas.log.setLevel("debug")  - Enable all logs');
+    console.log('  XISER_Canvas.log.setLevel("info")   - Enable info, warn, error logs');
+    console.log('  XISER_Canvas.log.setLevel("warn")   - Enable warn and error logs (default)');
+    console.log('  XISER_Canvas.log.setLevel("error")  - Enable only error logs');
+    console.log('  XISER_Canvas.log.getLevel()         - Get current log level');
+    console.log('  XISER_Canvas.help()                 - Show this help');
+  };
+
+  // Show help message if debug mode is enabled via URL parameter
+  if (new URLSearchParams(window.location.search).get('xiser_log') === 'debug') {
+    console.log('[XISER_Canvas] Debug mode enabled via URL parameter xiser_log=debug');
+    window.XISER_Canvas.help();
+  }
+}
 
 /**
  * Creates and initializes the node state for an XISER_Canvas node.
