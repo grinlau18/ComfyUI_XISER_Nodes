@@ -2,10 +2,7 @@ import { app } from "/scripts/app.js";
 import { ComfyWidgets } from "/scripts/widgets.js";
 
 const DEBUG = false; // 调试模式开关
-const BASE_NODE_HEIGHT = 150; // 最小高度
 const DEFAULT_SPACER_HEIGHT = 10; // 默认不可见控件高度
-const MIN_WIDTH = 280;
-const MAX_WIDTH = 800;
 const MAX_PROMPT_COUNT = 50; // 与后端保持一致
 
 app.registerExtension({
@@ -68,7 +65,6 @@ app.registerExtension({
         nodeType.prototype.promptCount = 5; // 默认显示5个prompt组合
 
         const getSpacerHeight = (node) => Math.max(0, node.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT);
-        const getFixedWidth = (node, fallbackWidth) => Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, node.properties?.fixedWidth || fallbackWidth || MIN_WIDTH));
 
         // 确保底部有一个透明占位 widget，用高度来撑出下边距（不依赖样式）
         function ensureBottomSpacer(node) {
@@ -81,10 +77,27 @@ app.registerExtension({
             return spacer;
         }
 
+        // 确保按钮下方有一个透明占位 widget，增加间距
+        function ensureButtonSpacer(node) {
+            node.widgets = node.widgets || [];
+            // 移除旧的 spacer，避免多个
+            node.widgets = node.widgets.filter(w => w.name !== "__button_spacing");
+            const spacer = node.addWidget("info", "__button_spacing", "", () => {}, { serialize: false });
+            spacer.computeSize = () => [node.size?.[0] || 0, 10]; // 10像素间距
+            spacer.draw = () => {}; // 不绘制，只占高度
+            return spacer;
+        }
+
         // 移除透明占位 widget
         function removeBottomSpacer(node) {
             if (!node.widgets) return;
             node.widgets = node.widgets.filter(w => w.name !== "__bottom_padding");
+        }
+
+        // 移除按钮占位 widget
+        function removeButtonSpacer(node) {
+            if (!node.widgets) return;
+            node.widgets = node.widgets.filter(w => w.name !== "__button_spacing");
         }
 
         // 清理控件的DOM元素
@@ -124,21 +137,6 @@ app.registerExtension({
             }
         }
 
-        // 统一的高度计算方法：依赖实际 widget 高度（含 spacer）动态计算
-        const origComputeSize = nodeType.prototype.computeSize;
-        nodeType.prototype.computeSize = function (out) {
-            const base = origComputeSize
-                ? origComputeSize.call(this, out ? [0, 0] : undefined)
-                : [this.size?.[0] || 0, this.size?.[1] || BASE_NODE_HEIGHT];
-            const width = getFixedWidth(this, base?.[0] || this.size?.[0] || MIN_WIDTH);
-            const height = Math.max(BASE_NODE_HEIGHT, base?.[1] || BASE_NODE_HEIGHT);
-            if (out) {
-                out[0] = width;
-                out[1] = height;
-                return out;
-            }
-            return [width, height];
-        };
 
         // 更新控件可见性状态的辅助函数
         function updateWidgetVisibility(node) {
@@ -172,12 +170,13 @@ app.registerExtension({
             updateWidgetVisibility(this);
         };
 
-        // 保证按钮在最上方，spacer 在最下方，其余按名称排序
+        // 保证按钮在最上方，按钮spacer在按钮下方，底部spacer在最下方，其余按名称排序
         function reorderWidgets(node) {
             if (!node.widgets) return;
             const buttons = node.widgets.filter(w => w.name === "buttons");
-            const spacer = node.widgets.filter(w => w.name === "__bottom_padding");
-            const others = node.widgets.filter(w => w.name !== "buttons" && w.name !== "__bottom_padding");
+            const buttonSpacer = node.widgets.filter(w => w.name === "__button_spacing");
+            const bottomSpacer = node.widgets.filter(w => w.name === "__bottom_padding");
+            const others = node.widgets.filter(w => w.name !== "buttons" && w.name !== "__button_spacing" && w.name !== "__bottom_padding");
 
             // 对prompt和enable控件按数字排序
             const promptWidgets = others.filter(w => w.name?.startsWith("prompt_") || w.name?.startsWith("enable_"));
@@ -192,7 +191,7 @@ app.registerExtension({
                 return getNum(a.name) - getNum(b.name);
             });
 
-            node.widgets = [...buttons, ...otherWidgets, ...promptWidgets, ...spacer];
+            node.widgets = [...buttons, ...buttonSpacer, ...otherWidgets, ...promptWidgets, ...bottomSpacer];
         }
 
         // 状态修正机制
@@ -231,56 +230,120 @@ app.registerExtension({
             return node.id;
         }
 
+
+        // 创建自定义按钮widget的辅助函数
+        function createButtonsWidget(node) {
+            // 创建按钮容器
+            const container = document.createElement("div");
+            container.className = "xis-prompts-buttons";
+            container.style.cssText = `
+                display: flex;
+                gap: 10px;
+                width: 100%;
+                box-sizing: border-box;
+                max-height: 30px !important;
+                height: 30px !important;
+                min-height: 30px !important;
+                flex-shrink: 0 !important;
+                flex-grow: 0 !important;
+                z-index: 1000;
+                overflow: hidden;
+            `;
+
+            // 创建添加按钮
+            const addButton = document.createElement("button");
+            addButton.innerText = "Add Prompt";
+            addButton.className = "xis-prompts-button";
+            addButton.style.cssText = `
+                flex: 1;
+                padding: 5px;
+                background: rgba(220, 220, 220, 0.1);
+                color: #fff;
+                border: 1px solid #666;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                text-align: center;
+                line-height: 20px;
+                height: 30px;
+                box-sizing: border-box;
+            `;
+            addButton.onclick = () => {
+                if (node.promptCount < MAX_PROMPT_COUNT) {
+                    node.promptCount++;
+                    node.rebuildWidgets();
+                    app.graph.setDirtyCanvas(true, false);
+                    if (DEBUG) console.log(`Node ${node.id}: Added prompt, total: ${node.promptCount}`);
+                }
+            };
+            container.appendChild(addButton);
+
+            // 创建删除按钮
+            const removeButton = document.createElement("button");
+            removeButton.innerText = "Remove Prompt";
+            removeButton.className = "xis-prompts-button";
+            removeButton.style.cssText = addButton.style.cssText;
+            removeButton.onclick = () => {
+                if (node.promptCount > 1) {
+                    node.promptCount--;
+                    node.rebuildWidgets();
+                    app.graph.setDirtyCanvas(true, false);
+                    if (DEBUG) console.log(`Node ${node.id}: Removed prompt, total: ${node.promptCount}`);
+                }
+            };
+            container.appendChild(removeButton);
+
+            return container;
+        }
+
         const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = async function () {
             try {
                 if (origOnNodeCreated) origOnNodeCreated.apply(this);
                 await ensureNodeId(this);
-                this.resizable = false;
                 this.properties = this.properties || {};
 
-                const buttonContainer = document.createElement("div");
-                buttonContainer.className = "xis-prompts-buttons";
-                buttonContainer.dataset.nodeId = this.id;
+                // 创建按钮容器
+                const buttonContainer = createButtonsWidget(this);
 
-                const addButton = document.createElement("button");
-                addButton.innerText = "Add Prompt";
-                addButton.className = "xis-prompts-button";
-                addButton.onclick = () => {
-                    if (this.promptCount < MAX_PROMPT_COUNT) {
-                        this.promptCount++;
-                        this.rebuildWidgets();
-                        app.graph.setDirtyCanvas(true, false);
-                        if (DEBUG) console.log(`Node ${this.id}: Added prompt, total: ${this.promptCount}`);
+                // 添加DOM widget
+                const buttonsWidget = this.addDOMWidget("buttons", "buttons", buttonContainer, { before: "prompt_1" });
+
+                // 重写computeSize方法，固定高度
+                if (buttonsWidget) {
+                    // 保存原始computeSize的引用
+                    const widgetRef = buttonsWidget;
+                    const originalComputeSize = widgetRef.computeSize;
+
+                    if (originalComputeSize) {
+                        widgetRef.computeSize = function(width) {
+                            // 调用原始computeSize，但固定高度为30
+                            const originalSize = originalComputeSize.call(widgetRef, width);
+                            return [originalSize[0], 30]; // 固定30像素高度
+                        };
+                    } else {
+                        // 如果没有computeSize方法，直接创建一个
+                        widgetRef.computeSize = function(width) {
+                            return [width, 30]; // 固定30像素高度
+                        };
                     }
-                };
-                buttonContainer.appendChild(addButton);
+                }
 
-                const removeButton = document.createElement("button");
-                removeButton.innerText = "Remove Prompt";
-                removeButton.className = "xis-prompts-button";
-                removeButton.onclick = () => {
-                    if (this.promptCount > 1) {
-                        this.promptCount--;
-                        this.rebuildWidgets();
-                        app.graph.setDirtyCanvas(true, false);
-                        if (DEBUG) console.log(`Node ${this.id}: Removed prompt, total: ${this.promptCount}`);
-                    }
-                };
-                buttonContainer.appendChild(removeButton);
+                if (DEBUG) console.log(`Node ${this.id}: Added buttons widget`);
 
-                // 添加按钮控件到最上方
-                this.addDOMWidget("buttons", "buttons", buttonContainer, { before: "prompt_1" });
+                // 在按钮下方添加一个隐藏的spacer，增加间距
+                ensureButtonSpacer(this);
 
-                if (DEBUG) console.log(`Node ${this.id}: Added buttons DOM widget, current widgets:`, this.widgets?.map(w => w.name));
-
-                // 初始化固定宽度与 spacer 高度，但不暴露 UI 控件
-                this.properties.fixedWidth = getFixedWidth(this, this.properties.fixedWidth || this.size?.[0] || MIN_WIDTH);
+                // 初始化 spacer 高度，但不暴露 UI 控件
                 this.properties.spacerHeight = getSpacerHeight(this);
 
                 ensureBottomSpacer(this);
                 reorderWidgets(this);
-                this.setSize(this.computeSize());
+
+                // 只在节点创建时设置初始大小，如果已经有大小则保持
+                if (!this.size || this.size[0] === 0 || this.size[1] === 0) {
+                    this.setSize(this.computeSize());
+                }
 
                 this.rebuildWidgets();
 
@@ -362,6 +425,7 @@ app.registerExtension({
                 if (toAdd.length > 0) {
                     requestAnimationFrame(() => {
                         // 新增前移除 spacer，防止新控件被插到 spacer 下方
+                        removeButtonSpacer(this);
                         removeBottomSpacer(this);
 
                         // 首先，清理所有要添加的控件（确保没有残留）
@@ -402,6 +466,7 @@ app.registerExtension({
                         });
 
                         // 立即确保spacer存在并重新排列（与canvas_mask_processor保持一致）
+                        ensureButtonSpacer(this);
                         ensureBottomSpacer(this);
                         reorderWidgets(this);
                     });
@@ -409,13 +474,19 @@ app.registerExtension({
 
                 // 4. 确保底部占位 spacer 存在（如果toAdd为空）
                 if (toAdd.length === 0) {
+                    ensureButtonSpacer(this);
                     ensureBottomSpacer(this);
                     reorderWidgets(this);
                 }
 
                 // 6. 调整节点大小 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
-                    this.setSize(this.computeSize());
+                    // 保持当前宽度，只更新高度以适应控件
+                    const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
+                    const computedSize = this.computeSize();
+                    const newWidth = currentWidth || computedSize[0];
+                    const newHeight = computedSize[1];
+                    this.setSize([newWidth, newHeight]);
                     this.onResize?.();
                     app.graph.setDirtyCanvas(true, false);
 
@@ -444,6 +515,7 @@ app.registerExtension({
 
                 // 清理所有prompt和enable控件 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
+                    removeButtonSpacer(this);
                     removeBottomSpacer(this);
 
                     // 先清理所有prompt和enable控件的DOM元素
@@ -474,11 +546,16 @@ app.registerExtension({
                         const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${i}`, ["BOOLEAN", { default: true }], app).widget;
                     }
 
+                    ensureButtonSpacer(this);
                     ensureBottomSpacer(this);
                     reorderWidgets(this);
 
-                    // 调整节点大小
-                    this.setSize(this.computeSize());
+                    // 调整节点大小 - 保持当前宽度
+                    const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
+                    const computedSize = this.computeSize();
+                    const newWidth = currentWidth || computedSize[0];
+                    const newHeight = computedSize[1];
+                    this.setSize([newWidth, newHeight]);
                     app.graph.setDirtyCanvas(true, false);
 
                     if (DEBUG) console.log(`Node ${this.id}: Fallback rebuild completed successfully`);
@@ -517,11 +594,16 @@ app.registerExtension({
                         const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${i}`, ["BOOLEAN", { default: true }], app).widget;
                     }
 
+                    ensureButtonSpacer(this);
                     ensureBottomSpacer(this);
                     reorderWidgets(this);
 
-                    // 重置节点大小
-                    this.setSize(this.computeSize());
+                    // 重置节点大小 - 保持当前宽度
+                    const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
+                    const computedSize = this.computeSize();
+                    const newWidth = currentWidth || computedSize[0];
+                    const newHeight = computedSize[1];
+                    this.setSize([newWidth, newHeight]);
                     app.graph.setDirtyCanvas(true, false);
 
                     if (DEBUG) console.log(`Node ${this.id}: Ultimate recovery completed`);
@@ -540,9 +622,12 @@ app.registerExtension({
                 const data = origSerialize ? origSerialize.apply(this) : {};
                 data.properties = data.properties || {};
                 data.properties.promptCount = this.promptCount;
-                data.properties.width = this.size[0];
-                data.properties.fixedWidth = this.properties?.fixedWidth || this.size[0];
                 data.properties.spacerHeight = this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT;
+                // 保存节点大小
+                if (this.size && this.size.length >= 2) {
+                    data.properties.width = this.size[0];
+                    data.properties.height = this.size[1];
+                }
 
                 // 记录正确的控件状态用于修正 - 只记录当前显示的控件
                 const correctStates = {};
@@ -594,8 +679,6 @@ app.registerExtension({
                 return {
                     properties: {
                         promptCount: this.promptCount || 5,
-                        width: this.size[0],
-                        fixedWidth: this.properties?.fixedWidth || this.size[0],
                         spacerHeight: this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT,
                         correctWidgetStates: {}
                     },
@@ -614,19 +697,15 @@ app.registerExtension({
                 if (config.properties) {
                     // 验证和清理配置数据
                     this.promptCount = Math.min(MAX_PROMPT_COUNT, Math.max(1, parseInt(config.properties.promptCount) || 5));
-                    this.properties.fixedWidth = getFixedWidth(this, parseInt(config.properties.fixedWidth) || this.size?.[0] || MIN_WIDTH);
                     this.properties.spacerHeight = Math.max(0, parseInt(config.properties.spacerHeight) || DEFAULT_SPACER_HEIGHT);
 
-                    if (config.properties.width) {
+                    // 恢复节点大小
+                    if (config.properties.width && config.properties.height) {
                         const width = parseInt(config.properties.width);
-                        if (width > 0) {
-                            const size = this.computeSize([width, 0]);
-                            this.setSize([width, size[1]]);
-                        } else {
-                            this.setSize(this.computeSize());
+                        const height = parseInt(config.properties.height);
+                        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
+                            this.setSize([width, height]);
                         }
-                    } else {
-                        this.setSize(this.computeSize());
                     }
                 }
 
