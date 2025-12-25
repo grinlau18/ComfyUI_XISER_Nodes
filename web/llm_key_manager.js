@@ -105,7 +105,7 @@ class KeyManager {
         const saveBtn = createElement("button", "xiser-btn", { innerText: "Save" });
         saveBtn.onclick = () => this.saveKey();
         rowSave.appendChild(saveBtn);
-        const overwriteInfo = createElement("small", "", { innerText: "Stored encrypted in ComfyUI/user/xiser_keys/" });
+        const overwriteInfo = createElement("small", "", { innerText: "Stored encrypted in ComfyUI/user/API_keys/" });
         rowSave.appendChild(overwriteInfo);
         body.appendChild(rowSave);
 
@@ -124,7 +124,7 @@ class KeyManager {
         const instr = createElement("div", "xiser-instructions");
         instr.innerHTML = `
         <strong>Usage</strong><br>
-        - Keys are stored encrypted in <code>ComfyUI/user/xiser_keys/</code> (never saved into workflows/projects).<br>
+        - Keys are stored encrypted in <code>ComfyUI/user/API_keys/</code> (never saved into workflows/projects).<br>
         - Open this panel from a node, pick an API key (Select API key); it applies only to that node (profile name is saved, key is not embedded).<br>
         - Text/vision: providers like <code>deepseek</code> / <code>qwen_vl</code> / <code>moonshot_vision</code> require a non-empty instruction; images must pair with text.<br>
         - Image generation: <code>qwen-image-edit-plus</code> uses reference image(s); size is optional (leave blank for auto). <code>qwen_image_plus</code> sizes allowed 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664 (UI enforces).<br>

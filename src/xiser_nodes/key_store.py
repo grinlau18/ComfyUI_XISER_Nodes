@@ -24,7 +24,7 @@ class KeyStore:
     def _default_base_dir(self) -> Path:
         here = Path(__file__).resolve()
         comfy_root = here.parents[4]  # .../ComfyUI
-        return comfy_root / "user" / "xiser_keys"
+        return comfy_root / "user" / "API_keys"
 
     def _load_or_create_master(self) -> bytes:
         if self.key_file.exists():

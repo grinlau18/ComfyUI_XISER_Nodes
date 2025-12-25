@@ -75,6 +75,17 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - **Attachments**: Incoming tensors are encoded to PNG base64 payloads before being passed to the provider, automatically truncating to the provider's supported image count.
 - **Extensibility**: Providers register via a lightweight config + interface so new vendors or custom endpoints can be attached without touching node logic.
 - **Vision Support**: When `image`/`pack_images` inputs are used the node transparently switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), so each request contains `input_text` + `input_image` blocks that satisfy their schema.
+- **API Key Management**:
+  - **Secure Storage**: API Keys are encrypted and stored in the `ComfyUI/user/API_keys/` directory, never saved in workflow or project files
+  - **Key Manager**: Click the "API key management" button on the node to open the key management interface
+  - **Profiles**: Support for multiple API Key profiles, each node can independently select a profile
+  - **Usage Flow**:
+    1. Click "API key management" button to open the key manager
+    2. Enter a profile name in "Profile name" and your API Key in "API Key"
+    3. Click "Save" to store the encrypted API Key
+    4. Select the desired profile from the "Select API key" dropdown
+    5. The configuration will be automatically applied to the current node
+  - **Note**: API Key profiles are node-specific, different nodes can use different API Keys
   ![XIS_LLMOrchestrator节点界面](img/XIS_LLMOrchestrator_1.jpeg)
   ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_2.jpeg)
 
@@ -97,8 +108,15 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   ![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)  
   ![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
 - **changeNodeColor**: Paint node titles and bodies independently to keep large graphs readable and visually organized.
-  - Choose hex colors or presets, swap between title/body adjustments, and lock palettes for quick visual grouping.
-  ![Node Color Customization](img/changeNodeColor_1.jpeg)  
+  - **Access**: Right-click any node and select "XISER Node Color Manager" from the context menu
+  - **Color Selection**: Choose hex colors via color picker or select from curated presets
+  - **Dual Color Control**: Independently adjust title background and body background colors
+  - **Theme Support**: Switch between light and dark theme presets
+  - **Preset Management**: Save custom color combinations for reuse, delete unwanted presets
+  - **Batch Operations**: Select multiple nodes to apply colors to all selected nodes simultaneously
+  - **Real-time Preview**: Colors are applied immediately as you adjust them
+  - **Persistent Storage**: Custom presets are saved to `web/xiser_color_presets.json`
+  ![Node Color Customization](img/changeNodeColor_1.jpeg)
 - **XIS_Label**: Double-click to open HTML/Markdown editors (CodeMirror with textarea fallback), toggle editors, adjust backgrounds and text scale, and enjoy consistent spacing, list handling, markdown conversion, and smart scrollbars across languages.
   - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
   ![Text Label Feature](img/XIS_Label_1.jpeg)
@@ -155,77 +173,6 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 
 ---
 
-## Usage Guide
-
-### XIS_Canvas Operation Guide
-
-**Layer Selection & Transformation:**
-- **Select Layer**: Click on any image layer to select it
-- **Move**: Drag selected layers to reposition
-- **Scale**: Use control box handles or mouse wheel for precise scaling
-- **Rotate**: Use Alt + mouse wheel or control box rotation handle
-- **Independent Scaling**: Scale X and Y axes independently using corner handles
-
-**Layer Management:**
-- **Layer Panel**: Use the collapsible layer panel in top-left for layer selection
-- **Auto Top**: Selected layers are automatically brought to top
-- **Deselect**: Click on canvas background to deselect and restore original order
-
-**Layer Adjustment:**
-- **Opacity Control**: Precisely adjust layer transparency (0-100%) using adjustment panel
-- **Brightness/Contrast/Saturation**: Real-time visual adjustments for layers
-- **Live Preview**: All adjustments are instantly visible and match frontend display
-
-**Canvas Controls:**
-- **Auto Size**: Enable to automatically adjust canvas to first image dimensions
-- **Display Scale**: Adjust canvas display size without affecting output
-- **Border Width**: Configure border size around canvas (default: 80px)
-- **Canvas Color**: Choose canvas background color (black, white, transparent)
-
-**Advanced Features:**
-- **Undo/Redo**: 20-step history for all transformations
-- **Reset Canvas**: Center all images and restore default states
-- **PSD Import**: Import PSD files with layer extraction
-- **Opacity Adjustment**: Precise layer transparency control with multi-layer semi-transparent blending
-- **Real-time Preview**: See transformations immediately with perfect frontend-backend consistency
-
-### XIS_ShapeAndText Operation Guide
-
-**Shape Creation:**
-- **Shape Types**: Circle / sector / doughnut, polygon (supports rounded corners), star, heart, flower, spiral, sunburst, text
-- **Interactive Canvas**: Real-time preview with interactive widget
-- **Batch Processing**: Create multiple shapes with shape data input
-
-**Transformations:**
-- **Position**: Normalized positioning relative to canvas center
-- **Rotation**: Angle rotation in degrees
-- **Scaling**: Independent X and Y axis scaling
-- **Skewing**: Horizontal and vertical skew transformations
-
-**Styling:**
-- **Colors**: Configurable shape and background colors
-- **Stroke**: Customizable stroke width, color, and join style
-- **Transparency**: Transparent background options
-
----
-
-## Workflow Examples
-
-### Image Composition Workflow
-Using XIS_Canvas and related nodes for image composition:
-1. Load images using XIS_ImageManager
-2. Layout and edit through XIS_Canvas
-3. Process masks with XIS_CanvasMaskProcessor
-4. Output composite results
-
-### Visual Editing Workflow
-Using visual editing nodes:
-1. Generate coordinate paths with XIS_CoordinatePath
-2. Create distribution curves with XIS_CurveEditor
-3. Generate gradients with XIS_MultiPointGradient
-4. Create geometric shapes with XIS_ShapeAndText
-
----
 
 ## Contact & Resources
 

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XISER Canvas Log Control Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .log-level {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            background: #f0f0f0;
+        }
+        .log-level:hover {
+            background: #e0e0e0;
+        }
+        .log-level.debug { background: #d4edda; }
+        .log-level.info { background: #d1ecf1; }
+        .log-level.warn { background: #fff3cd; }
+        .log-level.error { background: #f8d7da; }
+        .console-output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XISER Canvas Log Control Test</h1>
+
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <p>This page tests the XISER Canvas log control system. The default log level is set to <strong>'warn'</strong> to reduce console noise.</p>
+            <p>You can control the log level in several ways:</p>
+            <ol>
+                <li>Click the buttons below to change log level</li>
+                <li>Use browser console commands:
+                    <ul>
+                        <li><code>XISER_Canvas.log.setLevel("debug")</code> - Enable all logs</li>
+                        <li><code>XISER_Canvas.log.setLevel("info")</code> - Enable info, warn, error logs</li>
+                        <li><code>XISER_Canvas.log.setLevel("warn")</code> - Enable warn and error logs (default)</li>
+                        <li><code>XISER_Canvas.log.setLevel("error")</code> - Enable only error logs</li>
+                        <li><code>XISER_Canvas.log.getLevel()</code> - Get current log level</li>
+                        <li><code>XISER_Canvas.help()</code> - Show help</li>
+                    </ul>
+                </li>
+                <li>Use URL parameter: <code>?xiser_log=debug</code> to enable debug mode on page load</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h3>Test Log Level Control</h3>
+            <p>Current log level: <span id="current-level">warn</span></p>
+
+            <div>
+                <span class="log-level debug" onclick="setLogLevel('debug')">Debug</span>
+                <span class="log-level info" onclick="setLogLevel('info')">Info</span>
+                <span class="log-level warn" onclick="setLogLevel('warn')">Warn</span>
+                <span class="log-level error" onclick="setLogLevel('error')">Error</span>
+            </div>
+
+            <button onclick="testLogs()">Test All Log Levels</button>
+            <button onclick="clearConsole()">Clear Console Output</button>
+        </div>
+
+        <div class="test-section">
+            <h3>Console Output</h3>
+            <div id="console-output" class="console-output"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>Browser Console Commands</h3>
+            <p>Open browser console (F12) and try these commands:</p>
+            <div class="console-output">
+// Set log level to debug (all logs)
+XISER_Canvas.log.setLevel("debug");
+
+// Test log functions
+XISER_Canvas.log.debug("Debug message");
+XISER_Canvas.log.info("Info message");
+XISER_Canvas.log.warn("Warning message");
+XISER_Canvas.log.error("Error message");
+
+// Get current level
+XISER_Canvas.log.getLevel();
+
+// Show help
+XISER_Canvas.help();
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock XISER_Canvas object for testing
+        if (!window.XISER_Canvas) {
+            window.XISER_Canvas = {
+                log: {
+                    setLevel: function(level) {
+                        const validLevels = ['debug', 'info', 'warn', 'error'];
+                        if (validLevels.includes(level)) {
+                            window.LOG_LEVEL = level;
+                            logToConsole(`[XISER_Canvas] Log level set to: ${level}`);
+                            updateCurrentLevel();
+                        } else {
+                            logToConsole(`[XISER_Canvas] Invalid log level: ${level}. Valid levels are: ${validLevels.join(', ')}`, 'error');
+                        }
+                    },
+                    getLevel: function() {
+                        return window.LOG_LEVEL || 'warn';
+                    },
+                    debug: function(message, ...args) {
+                        if (window.LOG_LEVEL === 'debug') {
+                            logToConsole(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, 'debug', ...args);
+                        }
+                    },
+                    info: function(message, ...args) {
+                        if (window.LOG_LEVEL === 'debug' || window.LOG_LEVEL === 'info') {
+                            logToConsole(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, 'info', ...args);
+                        }
+                    },
+                    warn: function(message, ...args) {
+                        if (window.LOG_LEVEL === 'debug' || window.LOG_LEVEL === 'info' || window.LOG_LEVEL === 'warn') {
+                            logToConsole(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, 'warn', ...args);
+                        }
+                    },
+                    error: function(message, ...args) {
+                        logToConsole(`[XISER_Canvas ${new Date().toISOString()}] ${message}`, 'error', ...args);
+                    }
+                },
+                help: function() {
+                    logToConsole('XISER_Canvas Log Control Commands:');
+                    logToConsole('  XISER_Canvas.log.setLevel("debug")  - Enable all logs');
+                    logToConsole('  XISER_Canvas.log.setLevel("info")   - Enable info, warn, error logs');
+                    logToConsole('  XISER_Canvas.log.setLevel("warn")   - Enable warn and error logs (default)');
+                    logToConsole('  XISER_Canvas.log.setLevel("error")  - Enable only error logs');
+                    logToConsole('  XISER_Canvas.log.getLevel()         - Get current log level');
+                    logToConsole('  XISER_Canvas.help()                 - Show this help');
+                }
+            };
+        }
+
+        // Initialize log level
+        window.LOG_LEVEL = 'warn';
+
+        function logToConsole(message, type = 'info', ...args) {
+            const output = document.getElementById('console-output');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            if (args.length > 0) {
+                logEntry.textContent += ' ' + args.map(arg =>
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+            }
+            output.appendChild(logEntry);
+            output.scrollTop = output.scrollHeight;
+
+            // Also log to browser console
+            switch(type) {
+                case 'debug': console.debug(message, ...args); break;
+                case 'info': console.info(message, ...args); break;
+                case 'warn': console.warn(message, ...args); break;
+                case 'error': console.error(message, ...args); break;
+                default: console.log(message, ...args);
+            }
+        }
+
+        function setLogLevel(level) {
+            window.XISER_Canvas.log.setLevel(level);
+        }
+
+        function updateCurrentLevel() {
+            document.getElementById('current-level').textContent = window.XISER_Canvas.log.getLevel();
+        }
+
+        function testLogs() {
+            logToConsole('=== Testing all log levels ===');
+
+            // Test debug log (should only show if level is debug)
+            window.XISER_Canvas.log.debug("This is a debug message");
+
+            // Test info log (should show if level is debug or info)
+            window.XISER_Canvas.log.info("This is an info message");
+
+            // Test warn log (should show if level is debug, info, or warn)
+            window.XISER_Canvas.log.warn("This is a warning message");
+
+            // Test error log (should always show)
+            window.XISER_Canvas.log.error("This is an error message");
+
+            logToConsole('=== Log test complete ===');
+        }
+
+        function clearConsole() {
+            document.getElementById('console-output').innerHTML = '';
+            console.clear();
+        }
+
+        // Initialize
+        updateCurrentLevel();
+        logToConsole('XISER Canvas log control system initialized. Default log level: warn');
+        logToConsole('Try clicking the log level buttons above or using browser console commands.');
+    </script>
+</body>
+</html>

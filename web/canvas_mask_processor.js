@@ -65,7 +65,7 @@ app.registerExtension({
             node.widgets = node.widgets || [];
             // 移除旧的 spacer，避免多个
             node.widgets = node.widgets.filter(w => w.name !== "__bottom_padding");
-            const spacer = node.addWidget("info", "__bottom_padding", "", null, { serialize: false });
+            const spacer = node.addWidget("info", "__bottom_padding", "", () => {}, { serialize: false });
             spacer.computeSize = () => [node.size?.[0] || 0, getSpacerHeight(node)];
             spacer.draw = () => {}; // 不绘制，只占高度
             return spacer;
