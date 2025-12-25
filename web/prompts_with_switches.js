@@ -458,8 +458,8 @@ app.registerExtension({
 
                         // 现在安全地添加新控件
                         toAdd.forEach(num => {
-                            // 添加prompt输入框
-                            const promptWidget = ComfyWidgets.STRING(this, `prompt_${num}`, ["STRING", { default: "", multiline: true }], app).widget;
+                            // 添加prompt输入框 - 设置多行文本的初始高度
+                            const promptWidget = ComfyWidgets.STRING(this, `prompt_${num}`, ["STRING", { default: "", multiline: true, height: 100 }], app).widget;
                             // 添加enable开关
                             const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${num}`, ["BOOLEAN", { default: true }], app).widget;
                             if (DEBUG) console.log(`Node ${this.id}: Added widgets prompt_${num} and enable_${num}`);
@@ -484,8 +484,13 @@ app.registerExtension({
                     // 保持当前宽度，只更新高度以适应控件
                     const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
                     const computedSize = this.computeSize();
+                    if (DEBUG) console.log(`Node ${this.id}: computeSize() returned: [${computedSize[0]}, ${computedSize[1]}]`);
                     const newWidth = currentWidth || computedSize[0];
+
+                    // 重新计算高度，不保持当前高度
                     const newHeight = computedSize[1];
+                    if (DEBUG) console.log(`Node ${this.id}: Using computed height: ${newHeight}`);
+
                     this.setSize([newWidth, newHeight]);
                     this.onResize?.();
                     app.graph.setDirtyCanvas(true, false);
@@ -542,7 +547,7 @@ app.registerExtension({
                         }
 
                         // 创建新控件
-                        const promptWidget = ComfyWidgets.STRING(this, `prompt_${i}`, ["STRING", { default: "", multiline: true }], app).widget;
+                        const promptWidget = ComfyWidgets.STRING(this, `prompt_${i}`, ["STRING", { default: "", multiline: true, height: 100 }], app).widget;
                         const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${i}`, ["BOOLEAN", { default: true }], app).widget;
                     }
 
@@ -554,7 +559,11 @@ app.registerExtension({
                     const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
                     const computedSize = this.computeSize();
                     const newWidth = currentWidth || computedSize[0];
+
+                    // 重新计算高度，不保持当前高度
                     const newHeight = computedSize[1];
+                    if (DEBUG) console.log(`Node ${this.id}: Fallback - Using computed height: ${newHeight}`);
+
                     this.setSize([newWidth, newHeight]);
                     app.graph.setDirtyCanvas(true, false);
 
@@ -602,7 +611,11 @@ app.registerExtension({
                     const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
                     const computedSize = this.computeSize();
                     const newWidth = currentWidth || computedSize[0];
+
+                    // 重新计算高度，不保持当前高度
                     const newHeight = computedSize[1];
+                    if (DEBUG) console.log(`Node ${this.id}: Ultimate recovery - Using computed height: ${newHeight}`);
+
                     this.setSize([newWidth, newHeight]);
                     app.graph.setDirtyCanvas(true, false);
 
@@ -623,10 +636,9 @@ app.registerExtension({
                 data.properties = data.properties || {};
                 data.properties.promptCount = this.promptCount;
                 data.properties.spacerHeight = this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT;
-                // 保存节点大小
-                if (this.size && this.size.length >= 2) {
+                // 只保存节点宽度，不保存高度（高度由控件动态计算）
+                if (this.size && this.size.length >= 2 && this.size[0] > 0) {
                     data.properties.width = this.size[0];
-                    data.properties.height = this.size[1];
                 }
 
                 // 记录正确的控件状态用于修正 - 只记录当前显示的控件
@@ -699,12 +711,14 @@ app.registerExtension({
                     this.promptCount = Math.min(MAX_PROMPT_COUNT, Math.max(1, parseInt(config.properties.promptCount) || 5));
                     this.properties.spacerHeight = Math.max(0, parseInt(config.properties.spacerHeight) || DEFAULT_SPACER_HEIGHT);
 
-                    // 恢复节点大小
-                    if (config.properties.width && config.properties.height) {
+                    // 只恢复节点宽度，高度由控件动态计算
+                    if (config.properties.width) {
                         const width = parseInt(config.properties.width);
-                        const height = parseInt(config.properties.height);
-                        if (!isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-                            this.setSize([width, height]);
+                        if (!isNaN(width) && width > 0) {
+                            // 保持当前高度，只设置宽度
+                            const currentHeight = this.size && this.size[1] > 0 ? this.size[1] : this.computeSize()[1];
+                            this.setSize([width, currentHeight]);
+                            if (DEBUG) console.log(`Node ${this.id}: Restored width from config: ${width}, height: ${currentHeight}`);
                         }
                     }
                 }
