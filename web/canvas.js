@@ -43,7 +43,7 @@ const normalizeStateArray = (states) => {
   // 调试日志：记录解析后的状态
   log.debug(`normalizeStateArray: returning ${result.length} states`);
   result.forEach((state, idx) => {
-    log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}`);
+    log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, has image=${!!state.image}, has image_base64=${!!state.image_base64}, image length=${state.image?.length || 0}, image_base64 length=${state.image_base64?.length || 0}`);
   });
 
   return result;

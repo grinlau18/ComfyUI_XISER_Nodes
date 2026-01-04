@@ -7,7 +7,7 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.5"
+__version__ = "1.3.6"
 
 # V3 API imports
 from comfy_api.v0_0_2 import ComfyExtension, io, ui
