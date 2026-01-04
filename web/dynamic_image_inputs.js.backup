@@ -1,16 +1,15 @@
 import { app } from "/scripts/app.js";
-import { ComfyWidgets } from "/scripts/widgets.js";
 
 const DEBUG = false; // 调试模式开关
 const DEFAULT_SPACER_HEIGHT = 10; // 默认不可见控件高度
-const MAX_PROMPT_COUNT = 50; // 与后端保持一致
+const MAX_IMAGE_COUNT = 20; // 最大支持20个图像输入
 
 app.registerExtension({
-    name: "XISER.XIS_PromptsWithSwitches",
+    name: "XISER.XIS_DynamicImageInputs",
     async setup() {
         const style = document.createElement("style");
         style.textContent = `
-            div.xis-prompts-buttons {
+            div.xis-images-buttons {
                 display: flex;
                 gap: 10px;
                 margin: 0px 0;
@@ -19,7 +18,7 @@ app.registerExtension({
                 max-height: 30px !important;
                 z-index: 1000;
             }
-            div.xis-prompts-buttons button.xis-prompts-button {
+            div.xis-images-buttons button.xis-images-button {
                 flex: 1;
                 padding: 5px;
                 background: rgba(220, 220, 220, 0.1);
@@ -33,22 +32,22 @@ app.registerExtension({
                 height: 30px;
                 box-sizing: border-box;
             }
-            div.xis-prompts-buttons button.xis-prompts-button:hover {
+            div.xis-images-buttons button.xis-images-button:hover {
                 background:rgba(255, 255, 255, 0.2);
             }
 
             /* 为节点内容区域添加底部间距 */
-            .node[data-type="XIS_PromptsWithSwitches"] .content {
+            .node[data-type="XIS_DynamicImageInputs"] .content {
                 padding-bottom: 0px;
             }
 
-            /* 为prompt控件添加底部间距 */
-            .node[data-type="XIS_PromptsWithSwitches"] .lg-widget-value[data-name^="prompt_"]:last-of-type {
+            /* 为image控件添加底部间距 */
+            .node[data-type="XIS_DynamicImageInputs"] .lg-widget-value[data-name^="image_"]:last-of-type {
                 margin-bottom: 0px;
             }
 
             /* 确保隐藏的控件不会响应点击 */
-            .node[data-type="XIS_PromptsWithSwitches"] .lg-widget-value.hidden {
+            .node[data-type="XIS_DynamicImageInputs"] .lg-widget-value.hidden {
                 pointer-events: none !important;
                 opacity: 0 !important;
                 height: 0 !important;
@@ -60,9 +59,9 @@ app.registerExtension({
         document.head.appendChild(style);
     },
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name !== "XIS_PromptsWithSwitches") return;
+        if (nodeData.name !== "XIS_DynamicImageInputs") return;
 
-        nodeType.prototype.promptCount = 5; // 默认显示5个prompt组合
+        nodeType.prototype.imageCount = 3; // 默认显示3个图像输入
         nodeType.prototype._rebuildDebounceTimer = null; // 防抖定时器
         nodeType.prototype._pendingRebuild = false; // 是否有待处理的重建
 
@@ -148,7 +147,6 @@ app.registerExtension({
             }
         }
 
-
         // 更新控件可见性状态的辅助函数 - 优化版本
         function updateWidgetVisibility(node) {
             if (!node.widgets) return;
@@ -157,12 +155,12 @@ app.registerExtension({
             const updates = [];
 
             node.widgets?.forEach(widget => {
-                if (widget.name?.startsWith("prompt_") || widget.name?.startsWith("enable_")) {
+                if (widget.name?.startsWith("image_")) {
                     // 提取数字部分
-                    const match = widget.name.match(/(prompt|enable)_(\d+)/);
+                    const match = widget.name.match(/image_(\d+)/);
                     if (match && widget.element) {
-                        const num = parseInt(match[2]);
-                        const shouldBeVisible = num <= node.promptCount;
+                        const num = parseInt(match[1]);
+                        const shouldBeVisible = num <= node.imageCount;
 
                         updates.push({
                             element: widget.element,
@@ -187,13 +185,6 @@ app.registerExtension({
             }
         }
 
-        // 确保控件可见性状态正确（在每次绘制时调用）
-        const origOnDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function (ctx) {
-            if (origOnDrawForeground) origOnDrawForeground.apply(this, [ctx]);
-            updateWidgetVisibility(this);
-        };
-
         // 保证按钮在最上方，按钮spacer在按钮下方，底部spacer在最下方，其余按名称排序
         function reorderWidgets(node) {
             if (!node.widgets) return;
@@ -202,20 +193,20 @@ app.registerExtension({
             const bottomSpacer = node.widgets.filter(w => w.name === "__bottom_padding");
             const others = node.widgets.filter(w => w.name !== "buttons" && w.name !== "__button_spacing" && w.name !== "__bottom_padding");
 
-            // 对prompt和enable控件按数字排序
-            const promptWidgets = others.filter(w => w.name?.startsWith("prompt_") || w.name?.startsWith("enable_"));
-            const otherWidgets = others.filter(w => !w.name?.startsWith("prompt_") && !w.name?.startsWith("enable_"));
+            // 对image控件按数字排序
+            const imageWidgets = others.filter(w => w.name?.startsWith("image_"));
+            const otherWidgets = others.filter(w => !w.name?.startsWith("image_"));
 
-            // 按数字排序，确保prompt和对应的enable控件在一起
-            promptWidgets.sort((a, b) => {
+            // 按数字排序
+            imageWidgets.sort((a, b) => {
                 const getNum = (name) => {
-                    const match = name.match(/(prompt|enable)_(\d+)/);
-                    return match ? parseInt(match[2]) : 0;
+                    const match = name.match(/image_(\d+)/);
+                    return match ? parseInt(match[1]) : 0;
                 };
                 return getNum(a.name) - getNum(b.name);
             });
 
-            node.widgets = [...buttons, ...buttonSpacer, ...otherWidgets, ...promptWidgets, ...bottomSpacer];
+            node.widgets = [...buttons, ...buttonSpacer, ...otherWidgets, ...imageWidgets, ...bottomSpacer];
         }
 
         // 状态修正机制
@@ -226,8 +217,7 @@ app.registerExtension({
 
             // 应用正确的状态到控件
             for (const widget of node.widgets) {
-                if ((widget.name?.startsWith("prompt_") || widget.name?.startsWith("enable_")) &&
-                    correctStates[widget.name] !== undefined) {
+                if (widget.name?.startsWith("image_") && correctStates[widget.name] !== undefined) {
                     const correctValue = correctStates[widget.name];
                     if (widget.value !== correctValue) {
                         if (DEBUG) console.log(`Node ${node.id}: Correcting ${widget.name} from ${widget.value} to ${correctValue}`);
@@ -254,12 +244,11 @@ app.registerExtension({
             return node.id;
         }
 
-
         // 创建自定义按钮widget的辅助函数
         function createButtonsWidget(node) {
             // 创建按钮容器
             const container = document.createElement("div");
-            container.className = "xis-prompts-buttons";
+            container.className = "xis-images-buttons";
             container.style.cssText = `
                 display: flex;
                 gap: 10px;
@@ -276,8 +265,8 @@ app.registerExtension({
 
             // 创建添加按钮
             const addButton = document.createElement("button");
-            addButton.innerText = "Add";
-            addButton.className = "xis-prompts-button";
+            addButton.innerText = "Add Image";
+            addButton.className = "xis-images-button";
             addButton.style.cssText = `
                 flex: 1;
                 padding: 5px;
@@ -293,26 +282,26 @@ app.registerExtension({
                 box-sizing: border-box;
             `;
             addButton.onclick = () => {
-                if (node.promptCount < MAX_PROMPT_COUNT) {
-                    node.promptCount++;
+                if (node.imageCount < MAX_IMAGE_COUNT) {
+                    node.imageCount++;
                     // 使用防抖重建
                     node.scheduleRebuild();
-                    if (DEBUG) console.log(`Node ${node.id}: Added prompt, total: ${node.promptCount}`);
+                    if (DEBUG) console.log(`Node ${node.id}: Added image, total: ${node.imageCount}`);
                 }
             };
             container.appendChild(addButton);
 
             // 创建删除按钮
             const removeButton = document.createElement("button");
-            removeButton.innerText = "Remove";
-            removeButton.className = "xis-prompts-button";
+            removeButton.innerText = "Remove Image";
+            removeButton.className = "xis-images-button";
             removeButton.style.cssText = addButton.style.cssText;
             removeButton.onclick = () => {
-                if (node.promptCount > 1) {
-                    node.promptCount--;
+                if (node.imageCount > 1) {
+                    node.imageCount--;
                     // 使用防抖重建
                     node.scheduleRebuild();
-                    if (DEBUG) console.log(`Node ${node.id}: Removed prompt, total: ${node.promptCount}`);
+                    if (DEBUG) console.log(`Node ${node.id}: Removed image, total: ${node.imageCount}`);
                 }
             };
             container.appendChild(removeButton);
@@ -331,7 +320,7 @@ app.registerExtension({
                 const buttonContainer = createButtonsWidget(this);
 
                 // 添加DOM widget
-                const buttonsWidget = this.addDOMWidget("buttons", "buttons", buttonContainer, { before: "prompt_1" });
+                const buttonsWidget = this.addDOMWidget("buttons", "buttons", buttonContainer, { before: "image_1" });
 
                 // 重写computeSize方法，固定高度
                 if (buttonsWidget) {
@@ -423,25 +412,25 @@ app.registerExtension({
         nodeType.prototype._rebuildWidgetsInternal = function () {
             try {
                 this.properties = this.properties || {};
-                this.promptCount = Math.min(Math.max(1, this.promptCount || 5), MAX_PROMPT_COUNT);
+                this.imageCount = Math.min(Math.max(1, this.imageCount || 3), MAX_IMAGE_COUNT);
 
                 // 1. 计算需要添加和删除的控件
                 const existingNumbers = this.widgets
-                    ?.filter(w => w.name?.startsWith("prompt_") || w.name?.startsWith("enable_"))
+                    ?.filter(w => w.name?.startsWith("image_"))
                     .map(w => {
-                        const match = w.name.match(/(prompt|enable)_(\d+)/);
-                        return match ? parseInt(match[2]) : 0;
+                        const match = w.name.match(/image_(\d+)/);
+                        return match ? parseInt(match[1]) : 0;
                     })
                     .filter(num => num > 0)
                     .filter((num, index, self) => self.indexOf(num) === index) || []; // 去重
 
-                const toRemove = existingNumbers.filter(num => num > this.promptCount);
-                const toAdd = Array.from({length: this.promptCount}, (_, i) => i + 1)
+                const toRemove = existingNumbers.filter(num => num > this.imageCount);
+                const toAdd = Array.from({length: this.imageCount}, (_, i) => i + 1)
                     .filter(num => !existingNumbers.includes(num))
                     .sort((a, b) => a - b); // 确保按数字顺序添加
 
                 if (DEBUG) {
-                    console.log(`Node ${this.id}: Prompt count: ${this.promptCount}, Existing: ${existingNumbers}, To remove: ${toRemove}, To add: ${toAdd}`);
+                    console.log(`Node ${this.id}: Image count: ${this.imageCount}, Existing: ${existingNumbers}, To remove: ${toRemove}, To add: ${toAdd}`);
                 }
 
                 // 2. 批量删除不需要的控件（带清理）- 使用requestAnimationFrame减少闪烁
@@ -450,15 +439,11 @@ app.registerExtension({
                     const widgetsToRemove = [];
 
                     toRemove.forEach(num => {
-                        const promptWidgetName = `prompt_${num}`;
-                        const enableWidgetName = `enable_${num}`;
-
-                        [promptWidgetName, enableWidgetName].forEach(widgetName => {
-                            const widgetIndex = this.widgets?.findIndex(w => w.name === widgetName);
-                            if (widgetIndex !== -1 && widgetIndex !== undefined) {
-                                widgetsToRemove.push(this.widgets[widgetIndex]);
-                            }
-                        });
+                        const imageWidgetName = `image_${num}`;
+                        const widgetIndex = this.widgets?.findIndex(w => w.name === imageWidgetName);
+                        if (widgetIndex !== -1 && widgetIndex !== undefined) {
+                            widgetsToRemove.push(this.widgets[widgetIndex]);
+                        }
                     });
 
                     // 批量清理DOM
@@ -469,18 +454,18 @@ app.registerExtension({
 
                         // 批量过滤widgets数组
                         this.widgets = this.widgets?.filter(w => {
-                            // 如果不是prompt或enable控件，保留
-                            if (!w.name?.startsWith("prompt_") && !w.name?.startsWith("enable_")) {
+                            // 如果不是image控件，保留
+                            if (!w.name?.startsWith("image_")) {
                                 return true;
                             }
 
                             // 提取数字部分
-                            const match = w.name.match(/(prompt|enable)_(\d+)/);
+                            const match = w.name.match(/image_(\d+)/);
                             if (!match) {
                                 return true; // 如果格式不对，保留（可能是其他控件）
                             }
 
-                            const num = parseInt(match[2]);
+                            const num = parseInt(match[1]);
                             // 如果数字在toRemove列表中，删除
                             return !toRemove.includes(num);
                         }) || [];
@@ -494,18 +479,11 @@ app.registerExtension({
                     const widgetsToCleanup = [];
 
                     toAdd.forEach(num => {
-                        const promptWidgetName = `prompt_${num}`;
-                        const enableWidgetName = `enable_${num}`;
-
+                        const imageWidgetName = `image_${num}`;
                         // 查找并收集可能存在的控件
-                        const existingPromptWidget = this.widgets?.find(w => w.name === promptWidgetName);
-                        const existingEnableWidget = this.widgets?.find(w => w.name === enableWidgetName);
-
-                        if (existingPromptWidget) {
-                            widgetsToCleanup.push(existingPromptWidget);
-                        }
-                        if (existingEnableWidget) {
-                            widgetsToCleanup.push(existingEnableWidget);
+                        const existingImageWidget = this.widgets?.find(w => w.name === imageWidgetName);
+                        if (existingImageWidget) {
+                            widgetsToCleanup.push(existingImageWidget);
                         }
                     });
 
@@ -521,23 +499,18 @@ app.registerExtension({
 
                         // 从widgets数组中移除这些控件
                         this.widgets = this.widgets?.filter(w => {
-                            if (!w.name?.startsWith("prompt_") && !w.name?.startsWith("enable_")) {
+                            if (!w.name?.startsWith("image_")) {
                                 return true;
                             }
-                            const match = w.name.match(/(prompt|enable)_(\d+)/);
+                            const match = w.name.match(/image_(\d+)/);
                             if (!match) return true;
-                            const num = parseInt(match[2]);
+                            const num = parseInt(match[1]);
                             return !toAdd.includes(num);
                         }) || [];
 
-                        // 现在安全地添加新控件
-                        toAdd.forEach(num => {
-                            // 添加prompt输入框 - 使用ComfyUI默认样式
-                            const promptWidget = ComfyWidgets.STRING(this, `prompt_${num}`, ["STRING", { default: "", multiline: true }], app).widget;
-                            // 添加enable开关
-                            const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${num}`, ["BOOLEAN", { default: true }], app).widget;
-                            if (DEBUG) console.log(`Node ${this.id}: Added widgets prompt_${num} and enable_${num}`);
-                        });
+                        // 注意：IMAGE输入端口不需要控件，它们由ComfyUI自动创建
+                        // 我们只需要更新可见性状态
+                        if (DEBUG) console.log(`Node ${this.id}: Adding ${toAdd.length} image inputs`);
 
                         // 立即确保spacer存在并重新排列（与canvas_mask_processor保持一致）
                         ensureButtonSpacer(this);
@@ -553,7 +526,7 @@ app.registerExtension({
                     reorderWidgets(this);
                 }
 
-                // 6. 调整节点大小 - 使用requestAnimationFrame减少闪烁
+                // 5. 调整节点大小 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
                     // 保持当前宽度，只更新高度以适应控件
                     const currentWidth = this.size && this.size[0] > 0 ? this.size[0] : null;
@@ -602,38 +575,23 @@ app.registerExtension({
                 if (DEBUG) console.log(`Node ${this.id}: Using fallback rebuild`);
                 this.properties = this.properties || {};
 
-                // 清理所有prompt和enable控件 - 使用requestAnimationFrame减少闪烁
+                // 清理所有image控件 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
                     removeButtonSpacer(this);
                     removeBottomSpacer(this);
 
-                    // 先清理所有prompt和enable控件的DOM元素
+                    // 先清理所有image控件的DOM元素
                     this.widgets?.forEach(widget => {
-                        if (widget.name?.startsWith("prompt_") || widget.name?.startsWith("enable_")) {
+                        if (widget.name?.startsWith("image_")) {
                             cleanupWidgetDOM(widget);
                         }
                     });
 
                     // 然后从widgets数组中移除
-                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("prompt_") && !w.name?.startsWith("enable_")) || [];
+                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("image_")) || [];
 
-                    // 重新创建所有控件 - 按数字顺序
-                    for (let i = 1; i <= this.promptCount; i++) {
-                        // 确保没有残留的控件
-                        const existingPromptWidget = this.widgets?.find(w => w.name === `prompt_${i}`);
-                        const existingEnableWidget = this.widgets?.find(w => w.name === `enable_${i}`);
-
-                        if (existingPromptWidget) {
-                            cleanupWidgetDOM(existingPromptWidget);
-                        }
-                        if (existingEnableWidget) {
-                            cleanupWidgetDOM(existingEnableWidget);
-                        }
-
-                        // 创建新控件
-                        const promptWidget = ComfyWidgets.STRING(this, `prompt_${i}`, ["STRING", { default: "", multiline: true }], app).widget;
-                        const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${i}`, ["BOOLEAN", { default: true }], app).widget;
-                    }
+                    // IMAGE输入端口不需要控件，它们由ComfyUI自动创建
+                    // 我们只需要确保正确数量的输入端口可见
 
                     ensureButtonSpacer(this);
                     ensureBottomSpacer(this);
@@ -668,24 +626,21 @@ app.registerExtension({
 
                 // 重置到默认状态 - 使用requestAnimationFrame减少闪烁
                 requestAnimationFrame(() => {
-                    this.promptCount = 5;
+                    this.imageCount = 3;
                     this.properties = this.properties || {};
 
-                    // 先清理所有prompt和enable控件的DOM元素
+                    // 先清理所有image控件的DOM元素
                     this.widgets?.forEach(widget => {
-                        if (widget.name?.startsWith("prompt_") || widget.name?.startsWith("enable_")) {
+                        if (widget.name?.startsWith("image_")) {
                             cleanupWidgetDOM(widget);
                         }
                     });
 
                     // 然后从widgets数组中移除
-                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("prompt_") && !w.name?.startsWith("enable_")) || [];
+                    this.widgets = this.widgets?.filter(w => !w.name?.startsWith("image_")) || [];
 
-                    // 创建默认控件 - 按数字顺序
-                    for (let i = 1; i <= this.promptCount; i++) {
-                        const promptWidget = ComfyWidgets.STRING(this, `prompt_${i}`, ["STRING", { default: "", multiline: true }], app).widget;
-                        const enableWidget = ComfyWidgets.BOOLEAN(this, `enable_${i}`, ["BOOLEAN", { default: true }], app).widget;
-                    }
+                    // IMAGE输入端口不需要控件，它们由ComfyUI自动创建
+                    // 我们只需要确保正确数量的输入端口可见
 
                     ensureButtonSpacer(this);
                     ensureBottomSpacer(this);
@@ -720,7 +675,7 @@ app.registerExtension({
                 data.properties = data.properties || {};
 
                 // 基础属性
-                data.properties.promptCount = this.promptCount;
+                data.properties.imageCount = this.imageCount;
                 data.properties.spacerHeight = this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT;
 
                 // 只保存节点宽度，不保存高度（高度由控件动态计算）
@@ -743,37 +698,30 @@ app.registerExtension({
                 const widgetValues = [];
 
                 // 优化：合并两个循环，减少迭代次数
-                for (let i = 1; i <= this.promptCount; i++) {
-                    const promptWidgetName = `prompt_${i}`;
-                    const enableWidgetName = `enable_${i}`;
+                for (let i = 1; i <= this.imageCount; i++) {
+                    const imageWidgetName = `image_${i}`;
+                    const imageWidget = widgetMap[imageWidgetName];
 
-                    const promptWidget = widgetMap[promptWidgetName];
-                    const enableWidget = widgetMap[enableWidgetName];
-
-                    // 记录correctStates
-                    if (promptWidget && promptWidget.value !== undefined) {
-                        correctStates[promptWidgetName] = promptWidget.value;
-                    }
-                    if (enableWidget && enableWidget.value !== undefined) {
-                        correctStates[enableWidgetName] = enableWidget.value;
+                    // 记录correctStates（图像通常不序列化值，但保留结构）
+                    if (imageWidget && imageWidget.value !== undefined) {
+                        correctStates[imageWidgetName] = imageWidget.value;
                     }
 
                     // 构建widgets_values
-                    widgetValues.push(promptWidget?.value !== undefined ? promptWidget.value : "");
-                    widgetValues.push(enableWidget?.value !== undefined ? enableWidget.value : true);
+                    widgetValues.push(imageWidget?.value !== undefined ? imageWidget.value : null);
                 }
 
                 data.properties.correctWidgetStates = correctStates;
                 data.widgets_values = widgetValues;
 
-                if (DEBUG) console.log(`Node ${this.id}: Serialized with ${this.promptCount} prompts`);
+                if (DEBUG) console.log(`Node ${this.id}: Serialized with ${this.imageCount} images`);
                 return data;
             } catch (error) {
                 console.error(`Node ${this.id}: Error in serialize: ${error.message}`);
                 // 返回最小化的有效数据
                 return {
                     properties: {
-                        promptCount: this.promptCount || 5,
+                        imageCount: this.imageCount || 3,
                         spacerHeight: this.properties?.spacerHeight ?? DEFAULT_SPACER_HEIGHT,
                         correctWidgetStates: {}
                     },
@@ -791,7 +739,7 @@ app.registerExtension({
 
                 if (config.properties) {
                     // 验证和清理配置数据
-                    this.promptCount = Math.min(MAX_PROMPT_COUNT, Math.max(1, parseInt(config.properties.promptCount) || 5));
+                    this.imageCount = Math.min(MAX_IMAGE_COUNT, Math.max(1, parseInt(config.properties.imageCount) || 3));
                     this.properties.spacerHeight = Math.max(0, parseInt(config.properties.spacerHeight) || DEFAULT_SPACER_HEIGHT);
 
                     // 只恢复节点宽度，高度由控件动态计算
@@ -818,7 +766,7 @@ app.registerExtension({
                         // 更新控件可见性
                         updateWidgetVisibility(this);
 
-                        if (DEBUG) console.log(`Node ${this.id}: Configured with ${this.promptCount} prompts`);
+                        if (DEBUG) console.log(`Node ${this.id}: Configured with ${this.imageCount} images`);
                     } catch (error) {
                         console.error(`Node ${this.id}: Error in onConfigure post-processing:`, error);
                     }
@@ -828,7 +776,7 @@ app.registerExtension({
                 console.error(`Node ${this.id}: Error in onConfigure: ${error.message}`);
                 // 尝试基本恢复
                 try {
-                    this.promptCount = 5;
+                    this.imageCount = 3;
                     this.rebuildWidgets();
                 } catch (recoveryError) {
                     console.error(`Node ${this.id}: Recovery also failed:`, recoveryError);
@@ -840,7 +788,7 @@ app.registerExtension({
         nodeType.prototype.onRemoved = function () {
             try {
                 if (origOnRemoved) origOnRemoved.apply(this);
-                const container = document.querySelector(`.xis-prompts-buttons[data-nodeId="${this.id}"]`);
+                const container = document.querySelector(`.xis-images-buttons[data-nodeId="${this.id}"]`);
                 if (container) container.remove();
             } catch (error) {
                 console.error(`Node ${this.id}: Error in onRemoved: ${error.message}`);
@@ -865,16 +813,13 @@ app.registerExtension({
 
                 // 重新启用 widgets_values 用于执行
                 const widgetValues = [];
-                for (let i = 1; i <= this.promptCount; i++) {
-                    const promptWidget = widgetMap[`prompt_${i}`];
-                    const enableWidget = widgetMap[`enable_${i}`];
-
-                    if (promptWidget) widgetValues.push(promptWidget.value);
-                    if (enableWidget) widgetValues.push(enableWidget.value);
+                for (let i = 1; i <= this.imageCount; i++) {
+                    const imageWidget = widgetMap[`image_${i}`];
+                    if (imageWidget) widgetValues.push(imageWidget.value);
                 }
 
                 this.widgets_values = widgetValues;
-                if (DEBUG) console.log(`Node ${this.id}: Executing with ${this.promptCount} prompts`);
+                if (DEBUG) console.log(`Node ${this.id}: Executing with ${this.imageCount} images`);
             } catch (error) {
                 console.error(`Node ${this.id}: Error in onExecute: ${error.message}`);
             }

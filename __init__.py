@@ -1,15 +1,18 @@
-"""Top-level package for xiser_nodes."""
+"""Top-level package for xiser_nodes - V3 Architecture."""
 
 __all__ = [
-    "NODE_CLASS_MAPPINGS",
-    "NODE_DISPLAY_NAME_MAPPINGS",
+    "comfy_entrypoint",
     "WEB_DIRECTORY",
 ]
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.4"
+__version__ = "1.3.5"
 
+# V3 API imports
+from comfy_api.v0_0_2 import ComfyExtension, io, ui
+
+# Server imports for route registration
 from server import PromptServer
 import json
 import aiohttp.web
@@ -57,14 +60,7 @@ async def delete_key(request):
 async def set_default_key(request):
     return web.json_response({"error": "default key not supported"}, status=400)
 
-# 导入节点映射
-from .src.xiser_nodes import NODE_CLASS_MAPPINGS
-try:
-    from .src.xiser_nodes import NODE_DISPLAY_NAME_MAPPINGS
-except ImportError:
-    NODE_DISPLAY_NAME_MAPPINGS = {}
-
-# 节点颜色存储
+# 节点颜色存储 (保持向后兼容)
 NODE_COLORS = {"title": {}, "content": {}}
 
 async def handle_color_change(request):
@@ -83,14 +79,17 @@ async def handle_color_change(request):
         # 存储颜色
         NODE_COLORS[color_type][node_id] = color
 
-        # 更新工作流 JSON
+        # 更新工作流 JSON (V3架构中暂时禁用，等待节点迁移)
         updated_workflow = None
         if workflow and isinstance(workflow, dict) and "nodes" in workflow:
             try:
-                if "XIS_ReorderImages" in NODE_CLASS_MAPPINGS:
-                    updated_workflow = NODE_CLASS_MAPPINGS["XIS_ReorderImages"].set_color(node_id, color, color_type, workflow)
-                else:
-                    print("[XISER] XIS_ReorderImages 未加载，跳过工作流更新")
+                # TODO: V3架构中需要重新实现颜色设置功能
+                # 暂时跳过工作流更新
+                print("[XISER V3] 工作流颜色更新功能暂时禁用 - 等待节点迁移")
+                # if "XIS_ReorderImages" in NODE_CLASS_MAPPINGS:
+                #     updated_workflow = NODE_CLASS_MAPPINGS["XIS_ReorderImages"].set_color(node_id, color, color_type, workflow)
+                # else:
+                #     print("[XISER] XIS_ReorderImages 未加载，跳过工作流更新")
             except Exception as e:
                 print("[XISER] 更新工作流失败:", str(e))
                 traceback.print_exc()
@@ -137,3 +136,88 @@ except Exception as e:
 
 # 注册 Web 扩展
 WEB_DIRECTORY = "./web"
+
+# ============================================================================
+# V3 Extension Definition
+# ============================================================================
+
+class XISERExtension(ComfyExtension):
+    """XISER Nodes V3 Extension"""
+
+    async def get_node_list(self) -> list[type[io.ComfyNode]]:
+        """
+        返回所有V3节点类的列表。
+        """
+        try:
+            # 导入已迁移的V3节点
+            from .src.xiser_nodes.list_processing_v3 import V3_NODE_CLASSES as LIST_PROCESSING_NODES
+            from .src.xiser_nodes.dynamic_image_inputs_v3 import V3_NODE_CLASSES as DYNAMIC_IMAGE_NODES
+            from .src.xiser_nodes.image_and_mask_v3 import V3_NODE_CLASSES as IMAGE_MASK_NODES
+            from .src.xiser_nodes.resize_image_or_mask_v3 import V3_NODE_CLASSES as RESIZE_NODES
+            from .src.xiser_nodes.canvas_mask_processor_v3 import V3_NODE_CLASSES as CANVAS_MASK_NODES
+            from .src.xiser_nodes.logic_v3 import V3_NODE_CLASSES as LOGIC_NODES
+            from .src.xiser_nodes.ui_control_v3 import V3_NODE_CLASSES as UI_CONTROL_NODES
+            from .src.xiser_nodes.sampling_v3 import V3_NODE_CLASSES as SAMPLING_NODES
+            # 第四批次节点
+            from .src.xiser_nodes.data_processing_v3 import V3_NODE_CLASSES as DATA_PROCESSING_NODES
+            from .src.xiser_nodes.dynamic_pack_images_v3 import V3_NODE_CLASSES as DYNAMIC_PACK_NODES
+            from .src.xiser_nodes.coordinate_path_v3 import V3_NODE_CLASSES as COORDINATE_PATH_NODES
+            # 第五批次节点 - canvas
+            from .src.xiser_nodes.canvas_v3 import V3_NODE_CLASSES as CANVAS_NODES
+            # 第五批次节点 - curve_editor 和 image_puzzle
+            from .src.xiser_nodes.curve_editor_v3 import V3_NODE_CLASSES as CURVE_EDITOR_NODES
+            from .src.xiser_nodes.image_puzzle_v3 import V3_NODE_CLASSES as IMAGE_PUZZLE_NODES
+
+            # 合并所有V3节点
+            v3_nodes = []
+            v3_nodes.extend(LIST_PROCESSING_NODES)
+            v3_nodes.extend(DYNAMIC_IMAGE_NODES)
+            v3_nodes.extend(IMAGE_MASK_NODES)
+            v3_nodes.extend(RESIZE_NODES)
+            v3_nodes.extend(CANVAS_MASK_NODES)
+            v3_nodes.extend(LOGIC_NODES)
+            v3_nodes.extend(UI_CONTROL_NODES)
+            v3_nodes.extend(SAMPLING_NODES)
+            v3_nodes.extend(DATA_PROCESSING_NODES)
+            v3_nodes.extend(DYNAMIC_PACK_NODES)
+            v3_nodes.extend(COORDINATE_PATH_NODES)
+            v3_nodes.extend(CANVAS_NODES)
+            v3_nodes.extend(CURVE_EDITOR_NODES)
+            v3_nodes.extend(IMAGE_PUZZLE_NODES)
+
+            print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")
+            # 按类别分组显示节点
+            node_categories = {}
+            for node_cls in v3_nodes:
+                schema = node_cls.define_schema()
+                category = schema.category
+                if category not in node_categories:
+                    node_categories[category] = []
+                node_categories[category].append(f"{schema.node_id} ({schema.display_name})")
+
+            # 按类别显示节点
+            for category, nodes in sorted(node_categories.items()):
+                print(f"  [{category}]")
+                for node_info in sorted(nodes):
+                    print(f"    - {node_info}")
+
+            return v3_nodes
+
+        except ImportError as e:
+            print(f"[XISER V3] 导入V3节点失败: {e}")
+            print("[XISER V3] 返回空节点列表")
+            return []
+        except Exception as e:
+            print(f"[XISER V3] 加载V3节点时发生错误: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+async def comfy_entrypoint() -> XISERExtension:
+    """
+    ComfyUI V3 入口点函数。
+
+    这个函数会被ComfyUI自动调用以获取扩展实例。
+    可以声明为async或非async，但get_node_list必须是async。
+    """
+    return XISERExtension()

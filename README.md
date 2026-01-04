@@ -43,38 +43,35 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 2. Install the inference dependencies (if not already available) with `pip install kornia==0.7.2 timm` inside your ComfyUI environment.
 3. Restart ComfyUI; the canvas cutout button will now call BiRefNet and preserve the trimmed result in both the UI and node outputs.
 
----
-
-
 ## Core Capabilities
 - Multi-layer canvas editing with PSD import, BiRefNet cutouts, layer transformations, and mask-aware history.
-- Visual toolkit comprising curve/path/gradient editors, ImageManager, shape/text generators, color controls, and label helpers.
-- Image/mask/file utilities for blending, cropping, resizing, reordering, mirroring, and PSD layer handling.
-- Data and workflow support through shape summaries, guard checks, shorthand serializers, list extractors, and divisible sizing.
-- LLM automation workflows powered by DeepSeek with an extensible provider interface ready for future models.
+- Visual node toolkit comprising curve/path/gradient editors, image management, shape/text generation, node coloring, and label helpers.
+- Image/mask/file utilities for color adjustment, cropping, resizing, reordering, mirroring, and PSD layer handling.
+- Data and workflow support including shape summaries, signal detection, shorthand serialization, list extraction, and divisible size correction.
+- LLM automation powered by DeepSeek with an extensible provider interface ready for future models.
 
 ### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
-- **What makes it special**: the central visual playground for multi-layer composition, blending, opacity control, and mask-aware editing.
+- **Essence**: The central canvas integrating BiRefNet cutouts, PSD import, layer transformations, mask generation, transparency adjustment, and 20-step history.
 - **Highlights**:
-  - Drag, scale, rotate, hide/show, reorder, and fine-tune layers with real-time feedback plus mouse-wheel scaling and Alt+wheel rotation.
-  - Precisely adjust layer transparency (0-100%) with real-time brightness, contrast, and saturation adjustments.
-  - Configurable canvas size, borders, background, auto-sizing, and display scaling keep the workspace flexible while the 20-step undo/redo history protects changes.
-  - BiRefNet-powered cutouts, automatic mask extraction, and PSD import with layer extraction feed downstream nodes without workarounds.
-  - Custom scrollbars, scroll offset tracking, and the companion XIS_CanvasMaskProcessor keep long labels and mask outputs synced with every edit.
+  - Drag, scale, rotate, hide/show, reorder layers with real-time preview, plus mouse-wheel scaling and Alt+wheel rotation.
+  - Real-time adjustment of brightness, contrast, saturation, and transparency.
+  - Customizable canvas size, borders, background, auto-sizing, display scaling, and custom scrollbars for smooth reading of long content.
+  - BiRefNet cutouts, mask generation, and PSD multi-layer extraction seamlessly integrated, with XIS_CanvasMaskProcessor keeping masks synchronized with canvas state.
+  - One-click output of trimmed results with transparent layers, eliminating manual cropping workflows.
 
 #### Node Interface
-![XIS_Canvas工作流展示](img/XIS_Canvas_1.jpeg)
+![XIS_Canvas Node Interface](img/XIS_Canvas_1.jpeg)
 #### Workflow Example: Import PSD for Regional Redrawing
-![XIS_Canvas导入PSD进行区域重绘工作流](img/XIS_Canvas_2.jpeg)
+![XIS_Canvas PSD Import Workflow](img/XIS_Canvas_2.jpeg)
 #### Workflow Example: Regional Redrawing After Image Layered Typesetting
-![XIS_Canvas图像合成加区域重绘工作流](img/XIS_Canvas_3.jpeg)
+![XIS_Canvas Layered Typesetting Workflow](img/XIS_Canvas_3.jpeg)
 
 ### 🤖 LLM Automation Bridge (XIS_LLMOrchestrator)
-- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (DeepSeek to start) and emit the reply as a STRING output for downstream nodes.
-- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and the optional vision inputs (`image`, `pack_images`).
-- **Attachments**: Incoming tensors are encoded to PNG base64 payloads before being passed to the provider, automatically truncating to the provider's supported image count.
-- **Extensibility**: Providers register via a lightweight config + interface so new vendors or custom endpoints can be attached without touching node logic.
-- **Vision Support**: When `image`/`pack_images` inputs are used the node transparently switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), so each request contains `input_text` + `input_image` blocks that satisfy their schema.
+- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (currently supports DeepSeek, Qwen series, Kimi models, with more to come) and emit the reply as a STRING output for downstream nodes.
+- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and optional vision inputs (`image`, `pack_images`).
+- **Attachment Processing**: Automatically converts all input images to PNG Base64 strings, truncating to the model's image limit for convenient multi-image requests.
+- **Extensibility**: Providers register via lightweight config + interface, allowing new models or custom inference endpoints to be added without modifying node core logic.
+- **Vision Support**: When `image`/`pack_images` inputs are connected, the node automatically switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), using `input_text` + `input_image` structure to meet official validation rules.
 - **API Key Management**:
   - **Secure Storage**: API Keys are encrypted and stored in the `ComfyUI/user/API_keys/` directory, never saved in workflow or project files
   - **Key Manager**: Click the "API key management" button on the node to open the key management interface
@@ -86,27 +83,28 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
     4. Select the desired profile from the "Select API key" dropdown
     5. The configuration will be automatically applied to the current node
   - **Note**: API Key profiles are node-specific, different nodes can use different API Keys
-  ![XIS_LLMOrchestrator节点界面](img/XIS_LLMOrchestrator_1.jpeg)
-  ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_2.jpeg)
+  ![XIS_LLMOrchestrator Node Interface](img/XIS_LLMOrchestrator_1.jpeg)
+  ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_2.jpeg)
+  ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_3.jpeg)
 
-### ✨ Visual + Node Toolkit
+### ✨ Visual Node Toolkit
 - **XIS_CurveEditor**: Sculpt distribution curves for INT/FLOAT/HEX outputs, with a widget that exposes Bézier grips and HSV/RGB/LAB color interpolation.
   - Emits scalar sequences and optional colored lists so downstream nodes can hook into numeric ramps or palette cues.
-  ![XIS_CurveEditor曲线编辑界面](img/XIS_CurveEditor_1.jpeg)  
-  ![XIS_CurveEditor分布值生成](img/XIS_CurveEditor_2.jpeg)
+  ![XIS_CurveEditor Interface](img/XIS_CurveEditor_1.jpeg)
+  ![XIS_CurveEditor Distribution Generation](img/XIS_CurveEditor_2.jpeg)
 - **XIS_CoordinatePath**: Sketch linear or curved paths with configurable segments, distribution modes, and direct exports of x/y coordinates plus progress percentages.
   - Curve mode uses Catmull-Rom splines with virtual endpoints for smooth routing, while linear mode honors uniform or eased spacing.
-  ![XIS_CoordinatePath坐标路径生成](img/XIS_CoordinatePath.jpeg)
+  ![XIS_CoordinatePath Coordinate Generation](img/XIS_CoordinatePath.jpeg)
 - **XIS_MultiPointGradient**: Generate gradient images from control points using IDW, radial, Voronoi, soft IDW, or linear interpolation.
   - Backend weights or Voronoi regions feed torch tensors that can be used as masks, backgrounds, or texture fills.
-  ![XIS_MultiPointGradient渐变图像生成](img/XIS_MultiPointGradient.jpeg)
+  ![XIS_MultiPointGradient Gradient Generation](img/XIS_MultiPointGradient.jpeg)
 - **XIS_ImageManager**: Browse, cache, and reorder uploads before emitting the preview-aware `pack_images` output.
   - Tracks enabled layers, upload order, thumbnails, deterministic IDs, and metadata so downstream nodes see consistent image packs.
-  ![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
+  ![XIS_ImageManager Interface](img/XIS_ImageManager.jpeg)
 - **XIS_ShapeAndText**: Produce shape or text masks with configurable fill/stroke, transparency, and batch `shape_data` inputs; it returns the shape image, mask, and background.
   - Supports circles, polygons, stars, hearts, flowers, spirals, sunbursts, and text (with local font loading), plus spacing, stroke, transform, and skew controls.
-  ![XIS_ShapeAndText形状生成](img/XIS_ShapeAndText_1.jpeg)  
-  ![XIS_ShapeAndText形状变换](img/XIS_ShapeAndText_2.jpeg)
+  ![XIS_ShapeAndText Shape Generation](img/XIS_ShapeAndText_1.jpeg)
+  ![XIS_ShapeAndText Shape Transformation](img/XIS_ShapeAndText_2.jpeg)
 - **changeNodeColor**: Paint node titles and bodies independently to keep large graphs readable and visually organized.
   - **Access**: Right-click any node and select "XISER Node Color Manager" from the context menu
   - **Color Selection**: Choose hex colors via color picker or select from curated presets
@@ -122,8 +120,8 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   ![Text Label Feature](img/XIS_Label_1.jpeg)
 ### 🧰 Image, Mask & File Nodes
 - **XIS_ImagePuzzle**: Advanced image stitching with four layout types (left-main, right-main, top-main, bottom-main), supporting multiple main images with proper spacing and alignment.
-  ![文本标签功能](img/XIS_ImagePuzzle_1.jpeg)
-  ![文本标签功能](img/XIS_ImagePuzzle_2.jpeg)
+  ![XIS_ImagePuzzle Interface](img/XIS_ImagePuzzle_1.jpeg)
+  ![XIS_ImagePuzzle Workflow Example](img/XIS_ImagePuzzle_2.jpeg)
   
 - **XIS_ImageAdjustAndBlend**: Adjust brightness, contrast, saturation, hue, RGB gains, and blend modes with optional mask/background mixes.
 - **XIS_CropImage**: Crop via masks, invert masks on demand, and fill backgrounds with color or padding.
@@ -147,32 +145,8 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - The interactive canvas uses [Konva](https://konvajs.org/) under the hood; thanks to the Konva contributors for the full-featured 2D drawing API.
 - The one-click cutout leverages [BiRefNet](https://github.com/tamzi/bi-ref-net) (thanks to the original authors and the community contributions such as the tin2tin/2D_Asset_Generator project) along with `kornia` and `timm` for the preprocessing/backbone support.
 - Any additional inspiration for layer handling came from community-built ComfyUI extensions—big thanks to the ComfyUI and custom node author communities for keeping the ecosystem so vibrant.
-- **Features**:
-  - Boolean switch control support
-  - Automatic value range handling
-
-#### XIS_ImageMaskMirror
-- **Function**: Image and mask mirror flipping
-- **Features**:
-  - Support for X-axis and Y-axis flipping
-  - Enable/disable flip operations
-
-### 📁 File Processing Nodes
-
-#### PSD Layer Extract
-- **Function**: PSD layer extraction
-- **Features**:
-  - Extract layers from PSD files
-  - Support for layer masks and transparency
-
-#### XIS_ReorderImages
-- **Function**: Image reordering
-- **Features**:
-  - Rearrange images based on specified order
-  - Support for batch image processing
 
 ---
-
 
 ## Contact & Resources
 
@@ -182,7 +156,7 @@ https://openart.ai/workflows/profile/grinlau?tab=workflows&sort=latest
 **Bilibili Space**
 https://space.bilibili.com/123365258
 
-**Contact**
+**Contact Information**
 QQ: 3861103314
 Email: grinlau18@gmail.com
 

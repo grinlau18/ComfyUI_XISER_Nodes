@@ -117,7 +117,7 @@
   - **批量操作**：选中多个节点可同时对所有选中节点应用颜色
   - **实时预览**：调整颜色时立即应用到节点，无需确认
   - **持久化存储**：自定义预设保存在 `web/xiser_color_presets.json` 文件中
-  ![Node Color Customization](img/changeNodeColor_1.jpeg)
+  ![节点颜色定制](img/changeNodeColor_1.jpeg)
 
 - **XIS_Label**：双击编辑 HTML/Markdown，切换编辑器、调整背景与文本缩放，并享受统一段距、列表重新换行与智能滚动条。
   - Markdown 支持标题、列表、加粗/斜体、行内代码与链接，解析后渲染出一致的段落与滚动行为。
@@ -149,6 +149,7 @@
 - 抠图功能依赖 [BiRefNet](https://github.com/tamzi/bi-ref-net)，感谢原作者与 tin2tin/2D_Asset_Generator 社区项目，并同时使用 `kornia` 与 `timm` 的推理支持。
 - 感谢 ComfyUI 与社区中所有自定义节点作者对多图层画布、历史记录等功能的持续投入。
 
+---
 
 ## 联系与资源
 

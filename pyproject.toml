@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "This extension provides advanced visual editing capabilities including interactive multi-layer canvas with real-time transformations, professional PSD file import with layer extraction, versatile geometric shape generation with anti-aliased rendering, and sophisticated image processing tools. Features batch shape creation, mask manipulation, prompt management, data flow optimization, and workflow enhancement utilities for efficient AI image generation and editing workflows."
-version = "1.3.4"
+version = "1.3.5"
 license = {file = "LICENSE"}
 
 [project.urls]
