@@ -35,19 +35,19 @@
 | [src/xiser_nodes/sampling.py](src/xiser_nodes/sampling.py) | ✅ 批次3完成 | 中 | 2 | 包含ComfyUI核心类型 | [sampling_v3.py](src/xiser_nodes/sampling_v3.py) |
 | [src/xiser_nodes/list_processing.py](src/xiser_nodes/list_processing.py) | ✅ 已迁移 | 高 | 9 | 包含 `INPUT_IS_LIST = True` | [list_processing_v3.py](src/xiser_nodes/list_processing_v3.py) |
 | [src/xiser_nodes/canvas.py](src/xiser_nodes/canvas.py) | ✅ 批次5完成 | 高 | 1 | 大文件(1103行) | [canvas_v3.py](src/xiser_nodes/canvas_v3.py) |
-| [src/xiser_nodes/reorder_images.py](src/xiser_nodes/reorder_images.py) | 批次6 | 中 | 1 |  | |
-| [src/xiser_nodes/psd_layer_extract.py](src/xiser_nodes/psd_layer_extract.py) | 批次6 | 中 | 2 |  | |
+| [src/xiser_nodes/reorder_images.py](src/xiser_nodes/reorder_images.py) | ✅ 批次6完成 | 中 | 1 |  | [reorder_images_v3.py](src/xiser_nodes/reorder_images_v3.py) |
+| [src/xiser_nodes/psd_layer_extract.py](src/xiser_nodes/psd_layer_extract.py) | ✅ 批次6完成 | 中 | 1 |  | [psd_layer_extract_v3.py](src/xiser_nodes/psd_layer_extract_v3.py) |
 | [src/xiser_nodes/image_manager_node.py](src/xiser_nodes/image_manager_node.py) | 待检查 | 低 | 待统计 | 需要检查是否为节点文件 | |
-| [src/xiser_nodes/multi_point_gradient.py](src/xiser_nodes/multi_point_gradient.py) | 批次6 | 中 | 1 |  | |
-| [src/xiser_nodes/coordinate_path.py](src/xiser_nodes/coordinate_path.py) | 批次4 | 高 | 1 | 包含 `OUTPUT_IS_LIST` 混合输出 | |
-| [src/xiser_nodes/shape_and_text.py](src/xiser_nodes/shape_and_text.py) | 批次6 | 中 | 1 |  | |
-| [src/xiser_nodes/set_color.py](src/xiser_nodes/set_color.py) | 批次6 | 中 | 1 |  | |
-| [src/xiser_nodes/adjust_image.py](src/xiser_nodes/adjust_image.py) | 批次6 | 中 | 1 |  | |
-| [src/xiser_nodes/shape_data.py](src/xiser_nodes/shape_data.py) | 批次6 | 中 | 1 |  | |
+| [src/xiser_nodes/multi_point_gradient.py](src/xiser_nodes/multi_point_gradient.py) | ✅ 批次6完成 | 中 | 1 |  | [multi_point_gradient_v3.py](src/xiser_nodes/multi_point_gradient_v3.py) |
+| [src/xiser_nodes/coordinate_path.py](src/xiser_nodes/coordinate_path.py) | ✅ 批次4完成 | 高 | 1 | 包含 `OUTPUT_IS_LIST` 混合输出 | [coordinate_path_v3.py](src/xiser_nodes/coordinate_path_v3.py) |
+| [src/xiser_nodes/shape_and_text.py](src/xiser_nodes/shape_and_text.py) | ✅ 批次6完成 | 中 | 1 | 包含3个列表输出和多个可选输入 | [shape_and_text_v3.py](src/xiser_nodes/shape_and_text_v3.py) |
+| [src/xiser_nodes/set_color.py](src/xiser_nodes/set_color.py) | ✅ 批次6完成 | 中 | 1 |  | [set_color_v3.py](src/xiser_nodes/set_color_v3.py) |
+| [src/xiser_nodes/adjust_image.py](src/xiser_nodes/adjust_image.py) | ✅ 批次6完成 | 中 | 1 |  | [adjust_image_v3.py](src/xiser_nodes/adjust_image_v3.py) |
+| [src/xiser_nodes/shape_data.py](src/xiser_nodes/shape_data.py) | ✅ 批次6完成 | 中 | 1 |  | [shape_data_v3.py](src/xiser_nodes/shape_data_v3.py) |
 | [src/xiser_nodes/curve_editor.py](src/xiser_nodes/curve_editor.py) | ✅ 批次5完成 | 中 | 1 | 包含 `OUTPUT_IS_LIST = (True, True, True, False)` | [curve_editor_v3.py](src/xiser_nodes/curve_editor_v3.py) |
-| [src/xiser_nodes/data_processing.py](src/xiser_nodes/data_processing.py) | 批次4 | 中 | 5 |  | |
+| [src/xiser_nodes/data_processing.py](src/xiser_nodes/data_processing.py) | ✅ 批次4完成 | 中 | 5 |  | [data_processing_v3.py](src/xiser_nodes/data_processing_v3.py) |
 | [src/xiser_nodes/image_puzzle.py](src/xiser_nodes/image_puzzle.py) | ✅ 批次5完成 | 中 | 1 |  | [image_puzzle_v3.py](src/xiser_nodes/image_puzzle_v3.py) |
-| [src/xiser_nodes/label.py](src/xiser_nodes/label.py) | 批次6 | 中 | 1 |  | |
+| [src/xiser_nodes/label.py](src/xiser_nodes/label.py) | ✅ 批次6完成 | 中 | 1 |  | [label_v3.py](src/xiser_nodes/label_v3.py) |
 | [src/xiser_nodes/llm/__init__.py](src/xiser_nodes/llm/__init__.py) | 待检查 | 低 | 待统计 | 需要检查是否为节点文件 | |
 | [src/xiser_nodes/dynamic_image_inputs.py](src/xiser_nodes/dynamic_image_inputs.py) | ✅ 已迁移 | 高 | 1 | 包含 `OUTPUT_IS_LIST = (True,)` | [dynamic_image_inputs_v3.py](src/xiser_nodes/dynamic_image_inputs_v3.py) |
 | [src/xiser_nodes/dynamic_pack_images.py](src/xiser_nodes/dynamic_pack_images.py) | 批次4 | 高 | 1 | 动态输入 | |
@@ -108,27 +108,28 @@
 - ✅ `curve_editor.py` (1个节点，614行) → `curve_editor_v3.py` - 中优先级，包含混合列表输出
 - ✅ `image_puzzle.py` (1个节点，512行) → `image_puzzle_v3.py` - 中优先级
 
-**批次6：剩余简单节点** (8个文件，9个节点，1977行)
-- `shape_and_text.py` (1个节点，484行)
-- `shape_data.py` (1个节点，267行)
-- `adjust_image.py` (1个节点，305行)
-- `reorder_images.py` (1个节点，303行)
-- `psd_layer_extract.py` (2个节点，239行)
-- `multi_point_gradient.py` (1个节点，247行)
-- `set_color.py` (1个节点，78行)
-- `label.py` (1个节点，54行)
+**批次6：剩余简单节点** (8个文件，8个节点，1977行) ✅ 已完成
+- ✅ `shape_and_text.py` (1个节点，484行) → `shape_and_text_v3.py`
+- ✅ `shape_data.py` (1个节点，267行) → `shape_data_v3.py`
+- ✅ `adjust_image.py` (1个节点，305行) → `adjust_image_v3.py`
+- ✅ `reorder_images.py` (1个节点，303行) → `reorder_images_v3.py`
+- ✅ `psd_layer_extract.py` (1个节点，239行) → `psd_layer_extract_v3.py`
+- ✅ `multi_point_gradient.py` (1个节点，247行) → `multi_point_gradient_v3.py`
+- ✅ `set_color.py` (1个节点，78行) → `set_color_v3.py`
+- ✅ `label.py` (1个节点，54行) → `label_v3.py`
 
-#### 当前进度：已完成5个批次，总计50个节点 ✅
+#### 当前进度：已完成6个批次，总计58个节点 ✅
 7. ✅ 迁移包含列表处理的节点文件 (批次1完成 - 2个文件，10个节点)
 8. ✅ 迁移核心图像处理节点 (批次2完成 - 3个文件，11个节点)
 9. ✅ 迁移逻辑和控制节点 (批次3完成 - 3个文件，19个节点)
 10. ✅ 迁移数据处理节点 (批次4完成 - 3个文件，7个节点)
 11. ✅ 迁移图像处理和特殊节点 (批次5完成 - 3个文件，3个节点)
+12. ✅ 迁移剩余简单节点 (批次6完成 - 8个文件，8个节点)
 
 **迁移统计**:
-- ✅ 已完成: 14个文件，50个节点
-- 🔄 剩余: 9个文件，9个节点
-- 📊 进度: 84.7% (50/59个节点)
+- ✅ 已完成: 22个文件，58个节点
+- 🔄 剩余: 1个文件，1个节点
+- 📊 进度: 98.3% (58/59个节点)
 
 ### 第三阶段：测试与验证
 10. 🔄 测试迁移后的节点功能
@@ -273,22 +274,48 @@
 | | | - 修复 `curve_editor_v3.py`: 将所有实例方法改为静态方法 | |
 | | | - 移除 `instance = cls()` 调用，直接使用类方法 | |
 | | | - 验证修复后的节点能在ComfyUI中正常运行 | |
+| 2026-01-04 | 1.9.0 | 完成第六批次迁移（8个节点） | Claude |
+| | | - 迁移 `shape_and_text.py` → `shape_and_text_v3.py` (1个节点，484行) | |
+| | | - 迁移 `shape_data.py` → `shape_data_v3.py` (1个节点，267行) | |
+| | | - 迁移 `adjust_image.py` → `adjust_image_v3.py` (1个节点，305行) | |
+| | | - 迁移 `reorder_images.py` → `reorder_images_v3.py` (1个节点，303行) | |
+| | | - 迁移 `psd_layer_extract.py` → `psd_layer_extract_v3.py` (1个节点，239行) | |
+| | | - 迁移 `multi_point_gradient.py` → `multi_point_gradient_v3.py` (1个节点，247行) | |
+| | | - 迁移 `set_color.py` → `set_color_v3.py` (1个节点，78行) | |
+| | | - 迁移 `label.py` → `label_v3.py` (1个节点，54行) | |
+| | | - 更新Extension注册，总计58个V3节点 | |
+| | | - 验证所有V3文件语法和结构 | |
+| | | - 更新迁移进度文档，进度达到98.3% | |
+| 2026-01-05 | 1.9.1 | 补充创建缺失的shape_and_text_v3.py文件 | Claude |
+| | | - 分析原始shape_and_text.py文件结构 | |
+| | | - 创建符合V3架构的shape_and_text_v3.py | |
+| | | - 处理复杂的形状生成逻辑和批量输出 | |
+| | | - 更新迁移进度文档状态 | |
 
 ---
 
 **注意事项**:
 更新Extension注册
-在 `__init__.py` 的 `XISERExtension.get_node_list()` 中添加第五批次导入：
+在 `__init__.py` 的 `XISERExtension.get_node_list()` 中添加第六批次导入：
 ```python
-# 第五批次节点 - canvas
-from .src.xiser_nodes.canvas_v3 import V3_NODE_CLASSES as CANVAS_NODES
-# 第五批次节点 - curve_editor 和 image_puzzle
-from .src.xiser_nodes.curve_editor_v3 import V3_NODE_CLASSES as CURVE_EDITOR_NODES
-from .src.xiser_nodes.image_puzzle_v3 import V3_NODE_CLASSES as IMAGE_PUZZLE_NODES
+# 第六批次节点 - 剩余简单节点
+from .src.xiser_nodes.shape_and_text_v3 import V3_NODE_CLASSES as SHAPE_AND_TEXT_NODES
+from .src.xiser_nodes.shape_data_v3 import V3_NODE_CLASSES as SHAPE_DATA_NODES
+from .src.xiser_nodes.adjust_image_v3 import V3_NODE_CLASSES as ADJUST_IMAGE_NODES
+from .src.xiser_nodes.reorder_images_v3 import V3_NODE_CLASSES as REORDER_IMAGES_NODES
+from .src.xiser_nodes.psd_layer_extract_v3 import V3_NODE_CLASSES as PSD_LAYER_EXTRACT_NODES
+from .src.xiser_nodes.multi_point_gradient_v3 import V3_NODE_CLASSES as MULTI_POINT_GRADIENT_NODES
+from .src.xiser_nodes.set_color_v3 import V3_NODE_CLASSES as SET_COLOR_NODES
+from .src.xiser_nodes.label_v3 import V3_NODE_CLASSES as LABEL_NODES
 
-v3_nodes.extend(CANVAS_NODES)
-v3_nodes.extend(CURVE_EDITOR_NODES)
-v3_nodes.extend(IMAGE_PUZZLE_NODES)
+v3_nodes.extend(SHAPE_AND_TEXT_NODES)
+v3_nodes.extend(SHAPE_DATA_NODES)
+v3_nodes.extend(ADJUST_IMAGE_NODES)
+v3_nodes.extend(REORDER_IMAGES_NODES)
+v3_nodes.extend(PSD_LAYER_EXTRACT_NODES)
+v3_nodes.extend(MULTI_POINT_GRADIENT_NODES)
+v3_nodes.extend(SET_COLOR_NODES)
+v3_nodes.extend(LABEL_NODES)
 ```
 
 **重要修复**:
@@ -304,6 +331,18 @@ canvas_v3.py 修复了以下问题：
 2. **image_puzzle_v3.py**: 标准图像处理节点，无特殊列表处理需求
 3. **Extension集成**: 成功集成2个新节点，总计50个V3节点
 4. **语法验证**: 所有V3文件通过Python语法检查
+
+**第六批次迁移总结**:
+1. **shape_and_text_v3.py**: 复杂形状生成节点，包含3个列表输出和多个可选输入
+2. **shape_data_v3.py**: 数据处理节点，聚合多个输入属性为单个列表输出
+3. **adjust_image_v3.py**: 图像调整节点，支持亮度、对比度、饱和度等参数调整
+4. **reorder_images_v3.py**: 图像重排序节点，支持前端状态管理和预览生成
+5. **psd_layer_extract_v3.py**: PSD图层提取节点，支持图层元数据输出
+6. **multi_point_gradient_v3.py**: 多点渐变生成节点，支持多种插值方法
+7. **set_color_v3.py**: 简单颜色设置节点，输出HEX颜色字符串
+8. **label_v3.py**: 标签节点，无输入输出，主要用于UI显示
+9. **Extension集成**: 成功集成8个新节点，总计58个V3节点
+10. **语法验证**: 所有V3文件通过Python语法检查
 
 **重要技术修复**:
 1. **V3实例化问题**: V3架构中 `io.ComfyNode` 实例不可变，不能像V1那样创建实例

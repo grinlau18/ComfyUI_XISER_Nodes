@@ -971,6 +971,11 @@ _ComfyType (基类)
 2. **`AnyType` 的 `Input` 继承自 `Input` 基类，不是 `WidgetInput`**
 3. **迁移时检查所有 `io.Custom` 和 `io.AnyType` 输入，移除 `default` 参数**
 
+
+## 问题6：可选输入设置错误
+
+在V3架构中，可选输入是通过在 inputs 列表中的每个输入上设置 optional=True 参数来实现的，而不是使用单独的 optional_inputs 参数。
+
 ## 快速检查清单
 
 在完成V3迁移后，检查以下项目：

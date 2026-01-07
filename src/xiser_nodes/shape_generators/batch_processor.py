@@ -43,6 +43,7 @@ class BatchProcessor:
     def merge_properties(self, frontend_props: Dict[str, Any], port_props: Dict[str, Any]) -> Dict[str, Any]:
         """
         合并前端属性和端口属性，端口数据优先
+        特殊处理position_x/position_y和scale_x/scale_y的独立传入
 
         Args:
             frontend_props: 前端控件属性
@@ -53,12 +54,118 @@ class BatchProcessor:
         """
         merged = frontend_props.copy()
 
+        logger.debug(f"merge_properties called:")
+        logger.debug(f"  frontend_props: {frontend_props}")
+        logger.debug(f"  port_props: {port_props}")
+        logger.debug(f"  initial merged: {merged}")
+
         if port_props:
-            # 端口数据优先，但只覆盖非None值
+            # 处理position相关属性
+            if "position" in port_props and port_props["position"] is not None:
+                # 如果传入position字典，需要特殊处理：只更新传入的字段，保持其他字段不变
+                port_position = port_props["position"]
+                logger.debug(f"  Processing position dict: {port_position}")
+
+                # 获取前端默认的position
+                frontend_position = merged.get("position", {"x": 0.0, "y": 0.0})
+                if not isinstance(frontend_position, dict):
+                    frontend_position = {"x": 0.0, "y": 0.0}
+
+                logger.debug(f"  Frontend position: {frontend_position}")
+
+                # 创建新的position字典，只更新传入的字段
+                new_position = frontend_position.copy()
+                if isinstance(port_position, dict):
+                    if "x" in port_position and port_position["x"] is not None:
+                        logger.debug(f"  Setting position.x from {new_position.get('x')} to {port_position['x']}")
+                        new_position["x"] = port_position["x"]
+                    if "y" in port_position and port_position["y"] is not None:
+                        logger.debug(f"  Setting position.y from {new_position.get('y')} to {port_position['y']}")
+                        new_position["y"] = port_position["y"]
+                else:
+                    # 如果不是字典，直接替换
+                    logger.debug(f"  Replacing position with non-dict: {port_position}")
+                    new_position = port_position
+
+                logger.debug(f"  New position: {new_position}")
+                merged["position"] = new_position
+            elif "position_x" in port_props or "position_y" in port_props:
+                # 获取前端默认的position
+                frontend_position = merged.get("position", {"x": 0.0, "y": 0.0})
+                if not isinstance(frontend_position, dict):
+                    frontend_position = {"x": 0.0, "y": 0.0}
+
+                logger.debug(f"  Frontend position: {frontend_position}")
+                logger.debug(f"  Port has position_x: {'position_x' in port_props}, position_y: {'position_y' in port_props}")
+
+                # 创建新的position字典，只更新传入的值
+                new_position = frontend_position.copy()
+                if "position_x" in port_props and port_props["position_x"] is not None:
+                    logger.debug(f"  Setting position_x from {new_position.get('x')} to {port_props['position_x']}")
+                    new_position["x"] = port_props["position_x"]
+                if "position_y" in port_props and port_props["position_y"] is not None:
+                    logger.debug(f"  Setting position_y from {new_position.get('y')} to {port_props['position_y']}")
+                    new_position["y"] = port_props["position_y"]
+
+                logger.debug(f"  New position: {new_position}")
+                merged["position"] = new_position
+
+            # 处理scale相关属性（相乘逻辑）
+            if "scale" in port_props and port_props["scale"] is not None:
+                # 如果传入scale字典，需要特殊处理：只更新传入的字段，与前端值相乘
+                port_scale = port_props["scale"]
+                logger.debug(f"  Processing scale dict: {port_scale}")
+
+                # 获取前端默认的scale
+                frontend_scale = merged.get("scale", {"x": 1.0, "y": 1.0})
+                if not isinstance(frontend_scale, dict):
+                    frontend_scale = {"x": 1.0, "y": 1.0}
+
+                logger.debug(f"  Frontend scale: {frontend_scale}")
+
+                if isinstance(port_scale, dict):
+                    # 创建新的scale字典，只更新传入的字段，与前端值相乘
+                    new_scale = frontend_scale.copy()
+                    if "x" in port_scale and port_scale["x"] is not None:
+                        logger.debug(f"  Multiplying scale.x: {frontend_scale.get('x', 1.0)} * {port_scale['x']}")
+                        new_scale["x"] = frontend_scale.get("x", 1.0) * port_scale["x"]
+                    if "y" in port_scale and port_scale["y"] is not None:
+                        logger.debug(f"  Multiplying scale.y: {frontend_scale.get('y', 1.0)} * {port_scale['y']}")
+                        new_scale["y"] = frontend_scale.get("y", 1.0) * port_scale["y"]
+                    logger.debug(f"  New scale: {new_scale}")
+                    merged["scale"] = new_scale
+                else:
+                    # 如果不是字典，直接替换
+                    logger.debug(f"  Replacing scale with non-dict: {port_scale}")
+                    merged["scale"] = port_scale
+            elif "scale_x" in port_props or "scale_y" in port_props:
+                # 获取前端默认的scale
+                frontend_scale = merged.get("scale", {"x": 1.0, "y": 1.0})
+                if not isinstance(frontend_scale, dict):
+                    frontend_scale = {"x": 1.0, "y": 1.0}
+
+                logger.debug(f"  Frontend scale: {frontend_scale}")
+                logger.debug(f"  Port has scale_x: {'scale_x' in port_props}, scale_y: {'scale_y' in port_props}")
+
+                # 创建新的scale字典，与前端值相乘
+                new_scale = frontend_scale.copy()
+                if "scale_x" in port_props and port_props["scale_x"] is not None:
+                    logger.debug(f"  Multiplying scale.x: {frontend_scale.get('x', 1.0)} * {port_props['scale_x']}")
+                    new_scale["x"] = frontend_scale.get("x", 1.0) * port_props["scale_x"]
+                if "scale_y" in port_props and port_props["scale_y"] is not None:
+                    logger.debug(f"  Multiplying scale.y: {frontend_scale.get('y', 1.0)} * {port_props['scale_y']}")
+                    new_scale["y"] = frontend_scale.get("y", 1.0) * port_props["scale_y"]
+
+                logger.debug(f"  New scale: {new_scale}")
+                merged["scale"] = new_scale
+
+            # 处理其他属性（端口数据优先，但只覆盖非None值）
             for key, value in port_props.items():
-                if value is not None:
+                if value is not None and key not in ["position", "position_x", "position_y", "scale", "scale_x", "scale_y"]:
+                    logger.debug(f"  Setting other property: {key} = {value}")
                     merged[key] = value
 
+        logger.debug(f"  Final merged result: {merged}")
         return merged
 
     def _extract_transform(self, shape_canvas: Dict[str, Any]):
@@ -115,6 +222,7 @@ class BatchProcessor:
         # 解析前端画布数据作为默认属性
         frontend_props = {}
         if shape_canvas and isinstance(shape_canvas, dict):
+            logger.debug(f"Shape canvas data: {shape_canvas}")
             frontend_props = {
                 "position": shape_canvas.get("position", {"x": 0.0, "y": 0.0}),
                 "rotation": shape_canvas.get("rotation", 0.0),
@@ -122,6 +230,7 @@ class BatchProcessor:
                 "skew": shape_canvas.get("skew", {"x": 0.0, "y": 0.0}),
                 "canvas_scale_factor": shape_canvas.get("canvas_scale_factor", FRONTEND_CANVAS_SCALE)
             }
+            logger.debug(f"Extracted frontend_props: {frontend_props}")
 
         params = {}
         try:

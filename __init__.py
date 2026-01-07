@@ -168,6 +168,16 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.curve_editor_v3 import V3_NODE_CLASSES as CURVE_EDITOR_NODES
             from .src.xiser_nodes.image_puzzle_v3 import V3_NODE_CLASSES as IMAGE_PUZZLE_NODES
 
+            # 第六批次节点 - 剩余简单节点
+            from .src.xiser_nodes.shape_and_text_v3 import V3_NODE_CLASSES as SHAPE_AND_TEXT_NODES
+            from .src.xiser_nodes.shape_data_v3 import V3_NODE_CLASSES as SHAPE_DATA_NODES
+            from .src.xiser_nodes.adjust_image_v3 import V3_NODE_CLASSES as ADJUST_IMAGE_NODES
+            from .src.xiser_nodes.reorder_images_v3 import V3_NODE_CLASSES as REORDER_IMAGES_NODES
+            from .src.xiser_nodes.psd_layer_extract_v3 import V3_NODE_CLASSES as PSD_LAYER_EXTRACT_NODES
+            from .src.xiser_nodes.multi_point_gradient_v3 import V3_NODE_CLASSES as MULTI_POINT_GRADIENT_NODES
+            from .src.xiser_nodes.set_color_v3 import V3_NODE_CLASSES as SET_COLOR_NODES
+            from .src.xiser_nodes.label_v3 import V3_NODE_CLASSES as LABEL_NODES
+
             # 合并所有V3节点
             v3_nodes = []
             v3_nodes.extend(LIST_PROCESSING_NODES)
@@ -184,6 +194,14 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(CANVAS_NODES)
             v3_nodes.extend(CURVE_EDITOR_NODES)
             v3_nodes.extend(IMAGE_PUZZLE_NODES)
+            v3_nodes.extend(SHAPE_AND_TEXT_NODES)
+            v3_nodes.extend(SHAPE_DATA_NODES)
+            v3_nodes.extend(ADJUST_IMAGE_NODES)
+            v3_nodes.extend(REORDER_IMAGES_NODES)
+            v3_nodes.extend(PSD_LAYER_EXTRACT_NODES)
+            v3_nodes.extend(MULTI_POINT_GRADIENT_NODES)
+            v3_nodes.extend(SET_COLOR_NODES)
+            v3_nodes.extend(LABEL_NODES)
 
             print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")
             # 按类别分组显示节点
