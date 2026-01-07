@@ -27,12 +27,14 @@ try:
     from shape_generators.render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
     from shape_generators.text_renderer import TextRenderer
     from shape_generators.batch_processor import BatchProcessor
+    from shape_generators.transform_utils import TransformUtils
 except ImportError:
     # 如果直接导入失败，尝试相对导入
     from .shape_generators.shape_coordinator import ShapeCoordinator
     from .shape_generators.render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
     from .shape_generators.text_renderer import TextRenderer
     from .shape_generators.batch_processor import BatchProcessor
+    from .shape_generators.transform_utils import TransformUtils
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
@@ -147,19 +149,8 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
 
     @classmethod
     def _extract_transform(cls, shape_canvas: Dict[str, Any]):
-        """提取变换参数"""
-        position = {"x": 0.0, "y": 0.0}
-        rotation_angle = 0.0
-        scale = {"x": 1.0, "y": 1.0}
-        skew = {"x": 0.0, "y": 0.0}
-
-        if shape_canvas and isinstance(shape_canvas, dict):
-            position = shape_canvas.get("position", position) or position
-            rotation_angle = shape_canvas.get("rotation", rotation_angle)
-            scale = shape_canvas.get("scale", scale) or scale
-            skew = shape_canvas.get("skew", skew) or skew
-
-        return position, rotation_angle, scale, skew
+        """提取变换参数（使用TransformUtils）"""
+        return TransformUtils.extract_transform(shape_canvas)
 
     @classmethod
     def _normalize_mode_selection(cls, mode_selection: str) -> str:
@@ -252,8 +243,8 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
         skew = canvas_data.get("skew", {"x": 0.0, "y": 0.0}) or {"x": 0.0, "y": 0.0}
         raw_position = canvas_data.get("position", {"x": 0.0, "y": 0.0}) or {"x": 0.0, "y": 0.0}
         scaled_position = {
-            "x": raw_position.get("x", 0.0) * canvas_scale_factor,
-            "y": raw_position.get("y", 0.0) * canvas_scale_factor
+            "x": raw_position.get("x", 0.0),  # 直接使用归一化的position，不乘以canvas_scale_factor
+            "y": raw_position.get("y", 0.0)   # 直接使用归一化的position，不乘以canvas_scale_factor
         }
         try:
             shape_params = json.loads(canvas_data.get("shape_params", "{}")) if canvas_data else {}
@@ -304,8 +295,24 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             transform.canvas_scale
         )
 
-        # 使用超采样抗锯齿 - 提高质量
-        scale_factor = 4  # 增加超采样倍数以获得更平滑的曲线
+        # 详细日志：前端参数解析
+        logger.info("=== 前端参数解析 ===")
+        logger.info(f"输出尺寸: {width}x{height}")
+        logger.info(f"归一化position: x={transform.position.get('x', 0.0):.6f}, y={transform.position.get('y', 0.0):.6f}")
+
+        # 简化：前端画布与输出图像尺寸相同（100%）
+        # 计算期望的位置（在输出图像坐标系中）
+        output_center_x = width / 2
+        output_center_y = height / 2
+        backend_expected_x = output_center_x + transform.position.get('x', 0.0) * width
+        backend_expected_y = output_center_y + transform.position.get('y', 0.0) * height
+
+        logger.info(f"输出图像坐标系:")
+        logger.info(f"  图像中心: ({output_center_x:.1f}, {output_center_y:.1f})")
+        logger.info(f"  期望位置: ({backend_expected_x:.1f}, {backend_expected_y:.1f})")
+
+        # 使用超采样抗锯齿 - 提高图像质量（与批量处理保持一致）
+        scale_factor = 4
         render_width = request.width * scale_factor
         render_height = request.height * scale_factor
 
@@ -317,21 +324,20 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
         else:
             image = Image.new("RGBA", (render_width, render_height), bg_rgb)
 
-        # 其中stageWidth = width * CANVAS_SCALE_FACTOR, stageHeight = height * CANVAS_SCALE_FACTOR (CANVAS_SCALE_FACTOR=0.75)
-        # 根据前端画布的基础形状尺寸计算真实渲染尺寸
+        # 使用RenderUtils计算形状尺寸（传递scale_factor参数）
         base_shape_size = render_utils.compute_base_shape_size(width, height, scale_factor, shape_canvas)
         shape_type = request.shape_type
-        shape_size = base_shape_size
+        from .shape_generators.size_utils import SizeUtils
 
-        # 螺旋和太阳光芒形状需要特殊处理：整体大小调整（与前端保持相同倍数关系）
-        if shape_type == "sunburst":
-            shape_size = base_shape_size * 0.5
-            logger.info(f"Sunburst special size calculation: base={base_shape_size}, adjusted={shape_size}")
-        elif shape_type == "spiral":
-            shape_size = base_shape_size * 0.5
-            logger.info(f"Spiral special size calculation: base={base_shape_size}, adjusted={shape_size}")
+        # base_shape_size是输出图像坐标系中的尺寸
+        # 对于渲染，需要转换为渲染坐标系中的尺寸
+        render_shape_size = base_shape_size * scale_factor
 
-        logger.info(f"Size calculation: width={width}, height={height}, base_shape_size={base_shape_size}, final_shape_size={shape_size}, scale_factor={scale_factor}")
+        # 所有形状都使用渲染尺寸进行坐标生成
+        shape_size_for_generation = render_shape_size
+        shape_size = SizeUtils.adjust_for_shape_type(render_shape_size, shape_type)
+
+        SizeUtils.log_size_details(width, height, base_shape_size, shape_size / scale_factor, shape_type)
         rotation_angle = 0.0
         position = {"x": 0.0, "y": 0.0}
         scale = {"x": 1.0, "y": 1.0}
@@ -347,6 +353,25 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
 
         if shape_type == "text":
             text_params = params if isinstance(params, dict) else {}
+
+            # 文字渲染前的日志
+            logger.info("=== 文字渲染参数 ===")
+            logger.info(f"文字参数: {text_params}")
+            logger.info(f"位置: {position}")
+            logger.info(f"旋转: {rotation_angle}°")
+            logger.info(f"缩放: {scale}")
+            logger.info(f"倾斜: {skew}")
+            logger.info(f"画布缩放因子: {canvas_scale_factor}")
+
+            # 计算期望位置
+            canvas_width = width * canvas_scale_factor
+            canvas_height = height * canvas_scale_factor
+            output_center_x = width / 2
+            output_center_y = height / 2
+            text_expected_x = output_center_x + position.get('x', 0.0) * canvas_width
+            text_expected_y = output_center_y + position.get('y', 0.0) * canvas_height
+            logger.info(f"期望的文字位置（输出图像坐标）: ({text_expected_x:.1f}, {text_expected_y:.1f})")
+
             try:
                 image_tensor, mask_tensor, bg_tensor = text_renderer.render_text_to_tensors(
                     request.width, request.height, request.shape_color, request.bg_color, request.transparent_bg,
@@ -354,6 +379,10 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
                     text_params, position, rotation_angle, scale, skew,
                     canvas_scale_factor=canvas_scale_factor
                 )
+
+                # 文字渲染后的日志
+                logger.info("文字渲染完成")
+
             except Exception as e:
                 logger.error(f"Failed to render text shape: {e}")
                 default_image = torch.zeros((1, request.height, request.width, 3), dtype=torch.float32)
@@ -375,15 +404,33 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             logger.info(f"Scaled corner radius: frontend={frontend_radius} -> backend={scaled_radius:.2f}, max_backend_radius={max_backend_radius:.2f}")
 
         # 生成初始形状坐标（以形状中心为原点）
-        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size, params)
+        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size_for_generation, params)
+
+        # 详细日志：形状尺寸信息
+        logger.info("=== 形状尺寸信息 ===")
+        logger.info(f"基础形状尺寸: {base_shape_size:.1f}")
+        logger.info(f"最终形状尺寸: {shape_size:.1f}")
+        logger.info(f"渲染尺寸: {render_width}x{render_height}")
+
         if isinstance(shape_coords, dict) and shape_coords.get("type") == "donut":
             logger.info(f"Generated donut coordinates: {len(shape_coords['outer'])} outer points, {len(shape_coords['inner'])} inner points")
+            # 计算形状边界
+            if shape_coords['outer']:
+                outer_x = [p[0] for p in shape_coords['outer']]
+                outer_y = [p[1] for p in shape_coords['outer']]
+                logger.info(f"外圆边界: x=[{min(outer_x):.1f}, {max(outer_x):.1f}], y=[{min(outer_y):.1f}, {max(outer_y):.1f}]")
         elif isinstance(shape_coords, dict) and shape_coords.get("type") == "sunburst":
             total_trapezoids = len(shape_coords['trapezoids'])
             total_points = sum(len(trapezoid) for trapezoid in shape_coords['trapezoids'])
             logger.info(f"Generated sunburst coordinates: {total_trapezoids} trapezoids, {total_points} total points")
         else:
             logger.info(f"Generated shape coordinates: {len(shape_coords)} points, first few: {shape_coords[:3] if shape_coords else 'N/A'}")
+            # 计算形状边界
+            if shape_coords:
+                shape_x = [p[0] for p in shape_coords]
+                shape_y = [p[1] for p in shape_coords]
+                logger.info(f"形状边界: x=[{min(shape_x):.1f}, {max(shape_x):.1f}], y=[{min(shape_y):.1f}, {max(shape_y):.1f}]")
+                logger.info(f"形状宽度: {max(shape_x) - min(shape_x):.1f}, 高度: {max(shape_y) - min(shape_y):.1f}")
 
         shape_rgb = render_utils.hex_to_rgb(request.shape_color) + (255,)
         stroke_rgb = render_utils.hex_to_rgb(request.stroke_color) + (255,) if request.stroke_width > 0 else (0, 0, 0, 255)
@@ -410,7 +457,7 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             transformed_coords = render_utils.apply_simple_transform(shape_coords, scale, rotation_angle, skew, position, render_width, render_height, scale_factor)
 
         # 使用Shapely渲染形状和描边
-        # 计算综合缩放因子：超采样因子 × 形状缩放因子（取平均值）
+        # 描边宽度补偿计算（与批量处理保持一致）
         avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
         frontend_scale_comp = 1.0 / 0.75 if 0.75 not in (0, None) else 1.0  # FRONTEND_CANVAS_SCALE
         compensated_stroke_width = request.stroke_width * scale_factor * avg_scale * frontend_scale_comp * 0.9 if request.stroke_width > 0 else 0  # FRONTEND_STROKE_COMPENSATION
@@ -442,10 +489,23 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
                 render_utils.render_shape_with_shapely(image, transformed_coords, shape_rgb, stroke_rgb,
                                                            compensated_stroke_width, join_style, stroke_only_shape)
 
-        # 记录坐标范围（对于甜甜圈，记录外圆的范围）
+        # 详细日志：变换后坐标分析
+        logger.info("=== 变换后坐标分析 ===")
+
+        # 记录坐标范围
         if isinstance(transformed_coords, dict) and transformed_coords.get("type") == "donut":
             outer_coords = transformed_coords["outer"]
-            logger.info(f"Final donut coordinate range - Outer: x=[{min(x for x, _ in outer_coords) if outer_coords else 'N/A'}, {max(x for x, _ in outer_coords) if outer_coords else 'N/A'}], y=[{min(y for _, y in outer_coords) if outer_coords else 'N/A'}, {max(y for _, y in outer_coords) if outer_coords else 'N/A'}]")
+            if outer_coords:
+                x_coords = [x for x, _ in outer_coords]
+                y_coords = [y for _, y in outer_coords]
+                min_x, max_x = min(x_coords), max(x_coords)
+                min_y, max_y = min(y_coords), max(y_coords)
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                logger.info(f"Final donut coordinate range - Outer:")
+                logger.info(f"  x=[{min_x:.2f}, {max_x:.2f}], y=[{min_y:.2f}, {max_y:.2f}]")
+                logger.info(f"  中心: ({center_x:.2f}, {center_y:.2f})")
+                logger.info(f"  宽度: {max_x - min_x:.2f}, 高度: {max_y - min_y:.2f}")
         elif isinstance(transformed_coords, dict) and transformed_coords.get("type") == "sunburst":
             # 对于射线形状，计算所有梯形的坐标范围
             all_coords = []
@@ -454,15 +514,44 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             if all_coords:
                 x_coords = [x for x, _ in all_coords]
                 y_coords = [y for _, y in all_coords]
-                logger.info(f"Final sunburst coordinate range: x=[{min(x_coords):.2f}, {max(x_coords):.2f}], y=[{min(y_coords):.2f}, {max(y_coords):.2f}]")
-            else:
-                logger.info("Final sunburst coordinate range: No coordinates")
+                min_x, max_x = min(x_coords), max(x_coords)
+                min_y, max_y = min(y_coords), max(y_coords)
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                logger.info(f"Final sunburst coordinate range:")
+                logger.info(f"  x=[{min_x:.2f}, {max_x:.2f}], y=[{min_y:.2f}, {max_y:.2f}]")
+                logger.info(f"  中心: ({center_x:.2f}, {center_y:.2f})")
         else:
-            logger.info(f"Final coordinate range: x=[{min(x for x, _ in transformed_coords) if transformed_coords else 'N/A'}, {max(x for x, _ in transformed_coords) if transformed_coords else 'N/A'}], y=[{min(y for _, y in transformed_coords) if transformed_coords else 'N/A'}, {max(y for _, y in transformed_coords) if transformed_coords else 'N/A'}]")
+            if transformed_coords:
+                x_coords = [x for x, _ in transformed_coords]
+                y_coords = [y for _, y in transformed_coords]
+                min_x, max_x = min(x_coords), max(x_coords)
+                min_y, max_y = min(y_coords), max(y_coords)
+                center_x = (min_x + max_x) / 2
+                center_y = (min_y + max_y) / 2
+                logger.info(f"Final coordinate range:")
+                logger.info(f"  x=[{min_x:.2f}, {max_x:.2f}], y=[{min_y:.2f}, {max_y:.2f}]")
+                logger.info(f"  中心: ({center_x:.2f}, {center_y:.2f})")
+                logger.info(f"  宽度: {max_x - min_x:.2f}, 高度: {max_y - min_y:.2f}")
 
-        # 缩小图像以抗锯齿 - 使用高质量滤波器
+        # 计算输出图像中的位置
+        if transformed_coords and not isinstance(transformed_coords, dict):
+            # 形状中心是渲染坐标系中的坐标，需要除以scale_factor得到输出图像坐标
+            output_center_x = center_x / scale_factor
+            output_center_y = center_y / scale_factor
+
+            logger.info("=== 位置对比 ===")
+            logger.info(f"后端计算的位置（输出图像坐标）:")
+            logger.info(f"  形状中心: ({output_center_x:.1f}, {output_center_y:.1f})")
+            logger.info(f"前端期望的位置（输出图像坐标）:")
+            logger.info(f"  期望位置: ({backend_expected_x:.1f}, {backend_expected_y:.1f})")
+            logger.info(f"位置差异:")
+            logger.info(f"  Δx = {output_center_x - backend_expected_x:.1f}px")
+            logger.info(f"  Δy = {output_center_y - backend_expected_y:.1f}px")
+            logger.info(f"  相对误差: x={abs(output_center_x - backend_expected_x)/width*100:.1f}%, y={abs(output_center_y - backend_expected_y)/height*100:.1f}%")
+
+        # 使用高质量下采样（与批量处理保持一致）
         image = image.resize((width, height), Image.Resampling.LANCZOS)
-
         image_array = np.array(image).astype(np.float32) / 255.0
         image_tensor = torch.from_numpy(image_array).unsqueeze(0)
 
@@ -495,8 +584,8 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
                 render_utils.render_shape_with_shapely(mask_image, transformed_coords, shape_rgb, stroke_rgb,
                                                            compensated_stroke_width, join_style, stroke_only_shape)
 
-        # 缩小掩码图像
-        mask_image = mask_image.resize((request.width, request.height), Image.Resampling.LANCZOS)
+        # 使用高质量下采样（与批量处理保持一致）
+        mask_image = mask_image.resize((width, height), Image.Resampling.LANCZOS)
         mask_array = np.array(mask_image).astype(np.float32)[:, :, 3] / 255.0
 
         mask_tensor = torch.from_numpy(mask_array).unsqueeze(0)

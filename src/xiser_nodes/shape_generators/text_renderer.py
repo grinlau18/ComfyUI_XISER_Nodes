@@ -53,12 +53,16 @@ class TextRenderer:
         if xs != 0.0 or ys != 0.0:
             transformed = affinity.skew(transformed, xs=xs, ys=ys, origin=(0, 0))
 
-        center_x = render_width / 2.0
-        center_y = render_height / 2.0
+        # 简化：前端画布与输出图像尺寸相同（100%）
+        # 图像中心
+        image_center_x = render_width / 2.0
+        image_center_y = render_height / 2.0
+
+        # position是归一化的值，相对于图像中心
         pos_x = position.get("x", 0.0) * render_width
         pos_y = position.get("y", 0.0) * render_height
 
-        transformed = affinity.translate(transformed, xoff=center_x + pos_x, yoff=center_y + pos_y)
+        transformed = affinity.translate(transformed, xoff=image_center_x + pos_x, yoff=image_center_y + pos_y)
         return transformed
 
     def render_text_to_tensors(self, width: int, height: int, shape_color: str, bg_color: str,
@@ -66,7 +70,7 @@ class TextRenderer:
                               text_params: Dict[str, Any],
                               position: Dict[str, float], rotation_angle: float,
                               scale: Dict[str, float], skew: Dict[str, float],
-                              canvas_scale_factor: float = FRONTEND_CANVAS_SCALE) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                              canvas_scale_factor: float = 1.0) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         将文字渲染为张量
 
@@ -83,6 +87,7 @@ class TextRenderer:
             rotation_angle: 旋转角度
             scale: 缩放
             skew: 倾斜
+            canvas_scale_factor: 画布缩放因子（用于超采样）
 
         Returns:
             (image_tensor, mask_tensor, bg_tensor)
@@ -90,25 +95,18 @@ class TextRenderer:
         import logging
         logger = logging.getLogger(__name__)
 
-        scale_factor = 4
-        render_width = width * scale_factor
-        render_height = height * scale_factor
+        # 使用超采样抗锯齿 - 提高文字渲染质量（与图形渲染保持一致）
+        # 注意：canvas_scale_factor是前端画布缩放因子，不是超采样因子
+        # 我们使用固定的超采样因子4，与图形渲染保持一致
+        supersample_factor = 4
+        render_width = width * supersample_factor
+        render_height = height * supersample_factor
 
-        geometry = self.text_processor.build_text_geometry(text_params, scale_factor)
+        geometry = self.text_processor.build_text_geometry(text_params, supersample_factor)
         if geometry is None or geometry.is_empty:
             raise ValueError("Text geometry is empty, please check text parameters or font file.")
 
-        try:
-            canvas_scale_factor = float(canvas_scale_factor)
-        except (TypeError, ValueError):
-            canvas_scale_factor = 0.75
-        if canvas_scale_factor <= 0:
-            canvas_scale_factor = 0.75
-
-        scale_comp = 1.0 / canvas_scale_factor
-        if scale_comp != 1.0:
-            geometry = affinity.scale(geometry, xfact=scale_comp, yfact=scale_comp, origin=(0, 0))
-
+        # 简化：移除canvas_scale_factor相关的缩放
         transformed_geometry = self._apply_text_transformations(
             geometry, render_width, render_height, position, rotation_angle, scale, skew
         )
@@ -117,11 +115,10 @@ class TextRenderer:
         shape_rgb = self.render_utils.hex_to_rgb(shape_color) + (255,)
         stroke_rgb = self.render_utils.hex_to_rgb(stroke_color) + (255,) if stroke_width > 0 else None
 
+        # 描边宽度补偿计算（与图形渲染保持一致）
         avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
         frontend_scale_comp = 1.0 / 0.75 if 0.75 not in (0, None) else 1.0  # FRONTEND_CANVAS_SCALE
-        compensated_stroke_width = 0
-        if stroke_width > 0:
-            compensated_stroke_width = stroke_width * scale_factor * avg_scale * frontend_scale_comp * 0.9  # FRONTEND_STROKE_COMPENSATION
+        compensated_stroke_width = stroke_width * supersample_factor * avg_scale * frontend_scale_comp * 0.9 if stroke_width > 0 else 0  # FRONTEND_STROKE_COMPENSATION
 
         fill_mask_img = self.render_utils._geometry_to_mask(transformed_geometry, render_width, render_height)
         fill_mask = np.array(fill_mask_img, dtype=np.uint8)
@@ -133,8 +130,7 @@ class TextRenderer:
                 font_size_value = float(font_size_param)
             except (TypeError, ValueError):
                 font_size_value = 128.0
-            bold_kernel = max(1, int(font_size_value * scale_factor * 0.02))
-            bold_kernel = max(1, min(bold_kernel + (bold_kernel + 1) % 2, int(scale_factor * 32)))
+            bold_kernel = max(1, int(font_size_value * 0.02))  # 简化：移除scale_factor
             try:
                 import cv2
                 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (bold_kernel, bold_kernel))
@@ -177,6 +173,7 @@ class TextRenderer:
             fill_image.putalpha(fill_alpha)
             composite = Image.alpha_composite(composite, fill_image)
 
+        # 使用高质量下采样（与图形渲染保持一致）
         composite = composite.resize((width, height), Image.Resampling.LANCZOS)
         image_array = np.array(composite).astype(np.float32) / 255.0
         image_tensor = torch.from_numpy(image_array).unsqueeze(0)
@@ -185,7 +182,9 @@ class TextRenderer:
         mask_combined = fill_mask.copy()
         if stroke_mask is not None:
             mask_combined = np.maximum(mask_combined, stroke_mask)
-        mask_img = Image.fromarray(mask_combined, mode="L").resize((width, height), Image.Resampling.LANCZOS)
+        mask_img = Image.fromarray(mask_combined, mode="L")
+        # 掩码也需要下采样
+        mask_img = mask_img.resize((width, height), Image.Resampling.LANCZOS)
         mask_array = np.array(mask_img).astype(np.float32) / 255.0
         mask_tensor = torch.from_numpy(mask_array).unsqueeze(0)
 

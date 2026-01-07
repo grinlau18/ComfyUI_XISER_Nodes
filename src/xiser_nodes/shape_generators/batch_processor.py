@@ -169,19 +169,9 @@ class BatchProcessor:
         return merged
 
     def _extract_transform(self, shape_canvas: Dict[str, Any]):
-        """提取变换参数"""
-        position = {"x": 0.0, "y": 0.0}
-        rotation_angle = 0.0
-        scale = {"x": 1.0, "y": 1.0}
-        skew = {"x": 0.0, "y": 0.0}
-
-        if shape_canvas and isinstance(shape_canvas, dict):
-            position = shape_canvas.get("position", position) or position
-            rotation_angle = shape_canvas.get("rotation", rotation_angle)
-            scale = shape_canvas.get("scale", scale) or scale
-            skew = shape_canvas.get("skew", skew) or skew
-
-        return position, rotation_angle, scale, skew
+        """提取变换参数（使用TransformUtils）"""
+        from .transform_utils import TransformUtils
+        return TransformUtils.extract_transform(shape_canvas)
 
     def execute_batch(self, width: int, height: int, shape_type: str, shape_color: str,
                      bg_color: str, transparent_bg: bool, stroke_color: str, stroke_width: int,
@@ -252,8 +242,8 @@ class BatchProcessor:
                 skew = merged_props.get("skew", {"x": 0.0, "y": 0.0})
                 canvas_scale_factor = merged_props.get("canvas_scale_factor", FRONTEND_CANVAS_SCALE) or FRONTEND_CANVAS_SCALE
                 position = {
-                    "x": position_raw.get("x", 0.0) * canvas_scale_factor,
-                    "y": position_raw.get("y", 0.0) * canvas_scale_factor
+                    "x": position_raw.get("x", 0.0),  # 直接使用归一化的position，不乘以canvas_scale_factor
+                    "y": position_raw.get("y", 0.0)   # 直接使用归一化的position，不乘以canvas_scale_factor
                 }
 
                 current_shape_color = shape_props.get("shape_color", shape_color)

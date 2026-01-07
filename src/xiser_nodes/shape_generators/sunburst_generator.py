@@ -35,9 +35,9 @@ class SunburstGenerator:
         trapezoids = []
         ray_count = max(4, min(32, ray_count))
         ray_length = max(0.3, min(5.0, ray_length))
-        # 宽度参数已经考虑了超采样因子和额外补偿，所以放宽限制
-        start_width = max(-1000, min(1000, start_width))  # -100 * 4 * 2.5 = -1000, 100 * 4 * 2.5 = 1000
-        end_width = max(50, min(2000, end_width))        # 5 * 4 * 2.5 = 50, 200 * 4 * 2.5 = 2000
+        # 宽度参数范围与前端UI保持一致
+        start_width = max(-100, min(100, start_width))  # 前端UI范围：-100到100
+        end_width = max(1, min(200, end_width))        # 前端UI范围：1到200
 
         # 计算射线长度（与前端一致）
         # 前端：outerRadius = lengthFactor * maxRadius，其中maxRadius = baseSize

@@ -28,8 +28,8 @@ const NODE_HEIGHT_PADDING = 0;  // xiser-shape-node 高度补偿
 const DOM_WIDGET_WIDTH_PADDING = 20;  // dom-widget 宽度补偿
 const DOM_WIDGET_HEIGHT_PADDING = 280; // dom-widget 高度补偿
 
-// 画布缩放因子 - 画布大小为输出尺寸的75%
-const CANVAS_SCALE_FACTOR = 0.75;
+// 画布缩放因子 - 画布大小与输出尺寸相同（100%）
+const CANVAS_SCALE_FACTOR = 1.0;
 
 // 描边宽度补偿因子 - 用于调整前端描边宽度显示比例
 const STROKE_WIDTH_COMPENSATION = 0.9; // 值越小，前端描边越细
@@ -403,11 +403,11 @@ export function setupKonvaCanvas(node) {
       return;
     }
 
-    // 初始画布尺寸 - 使用缩放后的尺寸
+    // 初始画布尺寸 - 使用100%尺寸
     const outputWidth = parseInt(node.properties.width) || 512;
     const outputHeight = parseInt(node.properties.height) || 512;
-    const stageWidth = Math.round(outputWidth * CANVAS_SCALE_FACTOR);
-    const stageHeight = Math.round(outputHeight * CANVAS_SCALE_FACTOR);
+    const stageWidth = outputWidth;
+    const stageHeight = outputHeight;
 
     // 创建 Konva 舞台
     const stage = new Konva.Stage({
@@ -602,7 +602,6 @@ export function setupKonvaCanvas(node) {
     serialize: true,
     hideOnZoom: false,
     getValue: () => {
-      const canvasScaleFactor = node.konvaState?.canvasScaleFactor ?? CANVAS_SCALE_FACTOR;
       const baseShapeSize = node.konvaState?.baseSize ?? getBaseShapeSize(node.properties);
       try {
         const shape = node.konvaState?.shape;
@@ -648,8 +647,8 @@ export function setupKonvaCanvas(node) {
           shape_state: node.properties.shapeState || node.properties.shape_state || JSON.stringify(shapeState || {}),
           // 标记是否有shape_data输入
           has_shape_data_input: hasShapeData,
-          base_shape_size: baseShapeSize,
-          canvas_scale_factor: canvasScaleFactor
+          base_shape_size: baseShapeSize
+          // 移除canvas_scale_factor，使用100%尺寸
         };
 
         log.info(`Node ${node.id} serialized data for backend: position=${JSON.stringify(serializedData.position)}, rotation=${serializedData.rotation}, scale=${JSON.stringify(serializedData.scale)}, skew=${JSON.stringify(serializedData.skew)}, has_shape_data_input=${hasShapeData}`);
@@ -674,8 +673,8 @@ export function setupKonvaCanvas(node) {
           scale: { x: 1, y: 1 },
           skew: { x: 0, y: 0 },
           has_shape_data_input: false,
-          base_shape_size: baseShapeSize,
-          canvas_scale_factor: canvasScaleFactor
+          base_shape_size: baseShapeSize
+          // 移除canvas_scale_factor，使用100%尺寸
         };
       }
     },
@@ -811,11 +810,11 @@ export function updateCanvasSize(node) {
   const transparentBg = Boolean(properties.transparent_bg);
   const backgroundColor = transparentBg ? 'rgba(0, 0, 0, 0.3)' : bgColor;
 
-  // 固定画布尺寸为输出尺寸的75%
+  // 固定画布尺寸为输出尺寸的100%
   const outputWidth = parseInt(node.properties.width) || 512;
   const outputHeight = parseInt(node.properties.height) || 512;
-  const stageWidth = Math.round(outputWidth * CANVAS_SCALE_FACTOR);
-  const stageHeight = Math.round(outputHeight * CANVAS_SCALE_FACTOR);
+  const stageWidth = outputWidth;
+  const stageHeight = outputHeight;
 
   // 设置画布容器和舞台大小
   canvasContainerEl.style.width = `${stageWidth}px`;
