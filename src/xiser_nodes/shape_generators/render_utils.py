@@ -14,6 +14,7 @@ from shapely import affinity
 from shapely.geometry import Polygon, LineString, MultiPolygon, MultiLineString
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
 FRONTEND_CANVAS_SCALE = 1.0  # 与前端 Konva 画布缩放保持一致，现在使用100%尺寸
 FRONTEND_STROKE_COMPENSATION = 0.9  # 前端描边补偿因子（Konva 端口中的0.9系数）

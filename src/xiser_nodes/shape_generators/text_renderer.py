@@ -94,6 +94,7 @@ class TextRenderer:
         """
         import logging
         logger = logging.getLogger(__name__)
+        logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
         # 使用超采样抗锯齿 - 提高文字渲染质量（与图形渲染保持一致）
         # 注意：canvas_scale_factor是前端画布缩放因子，不是超采样因子

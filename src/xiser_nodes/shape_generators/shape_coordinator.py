@@ -12,6 +12,7 @@ from .spiral_generator import SpiralGenerator
 from .sunburst_generator import SunburstGenerator
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
 
 class ShapeCoordinator:

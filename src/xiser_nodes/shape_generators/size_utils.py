@@ -7,6 +7,7 @@ import logging
 from typing import Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
 
 class SizeUtils:

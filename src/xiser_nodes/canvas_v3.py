@@ -24,7 +24,7 @@ from .adjustment_utils import AdjustmentUtils
 from .adjustment_algorithms import AdjustmentAlgorithms
 
 logger = logging.getLogger("XISER_Canvas")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.ERROR)
 
 
 def _unwrap_v3_data(data):
@@ -35,6 +35,10 @@ def _unwrap_v3_data(data):
             return outs[0]
         return list(outs)
     return data
+
+
+# Canvas缓存清理机制（简化版）
+# 移除了复杂的全局清理线程，依赖实例级清理和系统清理
 
 
 class XISER_Canvas:
@@ -50,11 +54,8 @@ class XISER_Canvas:
             self.instance_id = uuid.uuid4().hex
         self.output_dir = os.path.join(folder_paths.get_output_directory(), "xiser_canvas")
         os.makedirs(self.output_dir, exist_ok=True)
-        self.max_cache_files = 50
-        self.max_cache_size = 1024 * 1024 * 1024
-        self.max_file_age = 24 * 60 * 60
-        self.created_files = set()
-        logger.info(f"Instance {self.instance_id} - Output directory initialized: {self.output_dir}")
+        self.created_files = set()  # 跟踪当前实例创建的文件
+        logger.info(f"Instance {self.instance_id} - Canvas initialized with output directory: {self.output_dir}")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -166,7 +167,7 @@ class XISER_Canvas:
         # skew currently unused in UI; ignore for now
         return pil_img
 
-    def _decode_inline_image(self, holder, fname_fallback=None):
+    def _decode_inline_image(self, holder, fname_fallback=None, layer_index=None):
         """Decode inline image if present; return (filename, saved_path)"""
         if not isinstance(holder, dict):
             return None
@@ -180,34 +181,35 @@ class XISER_Canvas:
                 encoded = data_str
             img = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
 
-            # Calculate hash from image data before saving
+            # Calculate hash from image data
             img_bytes = BytesIO()
             img.save(img_bytes, format="PNG")
             img_data = img_bytes.getvalue()
-            file_hash = hashlib.md5(img_data).hexdigest()[:8]
 
-            # 使用更持久的文件名，不依赖instance_id
-            # 这样即使刷新浏览器，文件仍然可访问
+            # Use layer_index if provided to ensure unique filenames for same content in different layers
+            if layer_index is not None:
+                combined_data = img_data + str(layer_index).encode()
+                file_hash = hashlib.md5(combined_data).hexdigest()[:8]
+            else:
+                file_hash = hashlib.md5(img_data).hexdigest()[:8]
+
+            # Generate filename
             fname = f"xiser_cutout_{file_hash}.png"
             path = os.path.join(self.output_dir, fname)
 
-            # 如果文件已存在，检查内容是否相同
+            # Check if file exists
             if os.path.exists(path):
-                with open(path, 'rb') as f:
-                    existing_hash = hashlib.md5(f.read()).hexdigest()[:8]
-                if existing_hash != file_hash:
-                    # 哈希冲突，添加UUID
-                    fname = f"xiser_cutout_{file_hash}_{uuid.uuid4().hex[:8]}.png"
-                    path = os.path.join(self.output_dir, fname)
+                # File exists, reuse it
+                logger.info(f"Instance {self.instance_id} - Reusing inline image cache: {fname}")
             else:
-                # 保存新文件
+                # Save new file
                 with open(path, 'wb') as f:
                     f.write(img_data)
+                logger.info(f"Instance {self.instance_id} - Saved new inline image: {fname}")
 
-            # 更新holder中的filename
+            # Update holder with filename
             holder["filename"] = fname
             self.created_files.add(fname)
-            logger.info(f"Instance {self.instance_id} - Saved inline image as {fname} with hash {file_hash}")
             return fname
         except Exception as exc:
             logger.warning(f"Instance {self.instance_id} - Failed to decode inline image: {exc}")
@@ -297,9 +299,9 @@ class XISER_Canvas:
 
         if layer_data and isinstance(layer_data, dict) and layer_data.get("layers"):
             states_raw = []
-            for layer in layer_data["layers"]:
-                # decode inline cutout to file, update filename
-                self._decode_inline_image(layer, layer.get("filename"))
+            for idx, layer in enumerate(layer_data["layers"]):
+                # decode inline cutout to file, update filename with layer index
+                self._decode_inline_image(layer, layer.get("filename"), layer_index=idx)
                 states_raw.append(layer)
             image_states = [
                 self._normalize_state(st, border_width, board_width, board_height) for st in states_raw
@@ -344,7 +346,7 @@ class XISER_Canvas:
             # decode inline in image_states if present
             for idx, st in enumerate(image_states):
                 if isinstance(st, dict):
-                    self._decode_inline_image(st, st.get("filename"))
+                    self._decode_inline_image(st, st.get("filename"), layer_index=idx)
                     fname = st.get("filename")
                     # 如果有inline image数据（抠图后的图像），总是使用inline image
                     has_inline_image = st.get("image") or st.get("image_base64") or st.get("data")
@@ -378,7 +380,7 @@ class XISER_Canvas:
                 for state in image_states
             ]
 
-        # Save images_list to files with content-based filenames
+        # Save images_list to files with content+index based filenames
         image_paths = []
         logger.info(f"Instance {self.instance_id} - Processing {len(images_list)} images")
 
@@ -386,85 +388,26 @@ class XISER_Canvas:
             img = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
             pil_img = Image.fromarray(img, mode="RGBA")
 
-            # Calculate image hash from tensor data (not PIL bytes) to avoid PNG compression differences
-            # Use the numpy array directly for consistent hashing
-            img_hash = hashlib.md5(img.tobytes()).hexdigest()[:8]  # Use first 8 chars for brevity
+            # Calculate combined hash: image content + layer index
+            # This ensures same content in different layers get different filenames
+            combined_data = img.tobytes() + str(i).encode()
+            file_hash = hashlib.md5(combined_data).hexdigest()[:8]
 
             # Log image info
-            logger.info(f"Instance {self.instance_id} - Image {i}: shape={img.shape}, hash={img_hash}")
+            logger.info(f"Instance {self.instance_id} - Image {i}: shape={img.shape}, hash={file_hash}")
 
-            # Check if we should reuse existing filename
-            fname = None
-            reuse_existing = False
-            existing_fname = None
+            # Generate filename with content+index hash
+            final_fname = f"xiser_image_{file_hash}.png"
+            final_path = os.path.join(self.output_dir, final_fname)
 
-            if i < len(image_states) and isinstance(image_states[i], dict):
-                existing_fname = image_states[i].get("filename")
-                if existing_fname:
-                    # Check if file exists
-                    existing_path = os.path.join(self.output_dir, existing_fname)
-                    if os.path.exists(existing_path):
-                        # We'll check hash after saving to ensure consistency
-                        fname = existing_fname
-                        reuse_existing = True
-                        logger.info(f"Will attempt to reuse existing file {existing_fname}")
-                    else:
-                        logger.info(f"Existing file not found: {existing_path}")
-
-            # Save image first to get actual file hash
-            # Generate temporary filename for saving
-            temp_fname = f"xiser_temp_{uuid.uuid4().hex[:8]}.png"
-            temp_path = os.path.join(self.output_dir, temp_fname)
-            pil_img.save(temp_path, format="PNG")
-
-            # Calculate actual file hash after saving
-            with open(temp_path, 'rb') as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()[:8]
-
-            # Determine final filename
-            final_fname = None
-            if reuse_existing and fname:
-                # Check if existing file has same content
-                existing_hash = None
-                try:
-                    with open(os.path.join(self.output_dir, fname), 'rb') as f:
-                        existing_hash = hashlib.md5(f.read()).hexdigest()[:8]
-                except Exception as e:
-                    logger.warning(f"Failed to read existing file hash: {e}")
-
-                if existing_hash and existing_hash == file_hash:
-                    # Same content, reuse existing file
-                    final_fname = fname
-                    # Remove temporary file
-                    os.remove(temp_path)
-                    logger.info(f"Instance {self.instance_id} - Reused file {fname} with same content")
-                else:
-                    # Content changed, need new filename
-                    logger.info(f"Instance {self.instance_id} - Image {i} content changed, creating new file")
-                    reuse_existing = False
-                    # Generate new filename based on file hash
-                    final_fname = f"xiser_image_{file_hash}.png"
-                    final_path = os.path.join(self.output_dir, final_fname)
-
-                    if not os.path.exists(final_path):
-                        # Rename temp file to final name
-                        os.rename(temp_path, final_path)
-                    else:
-                        # File with this hash already exists, use it
-                        os.remove(temp_path)
-                        final_fname = f"xiser_image_{file_hash}.png"
+            # Check if file already exists
+            if os.path.exists(final_path):
+                # File exists, reuse it
+                logger.info(f"Instance {self.instance_id} - Reusing cached file: {final_fname}")
             else:
-                # Not reusing, generate new filename
-                final_fname = f"xiser_image_{file_hash}.png"
-                final_path = os.path.join(self.output_dir, final_fname)
-
-                if not os.path.exists(final_path):
-                    # Rename temp file to final name
-                    os.rename(temp_path, final_path)
-                else:
-                    # File with this hash already exists, use it
-                    os.remove(temp_path)
-                    final_fname = f"xiser_image_{file_hash}.png"
+                # Save new file
+                pil_img.save(final_path, format="PNG")
+                logger.info(f"Instance {self.instance_id} - Saved new file: {final_fname}")
 
             # Update image_states with final filename
             if i < len(image_states) and isinstance(image_states[i], dict):
@@ -472,13 +415,6 @@ class XISER_Canvas:
 
             self.created_files.add(final_fname)
             image_paths.append(final_fname)
-
-            if reuse_existing:
-                logger.info(f"Instance {self.instance_id} - Reused file: {final_fname}")
-            else:
-                logger.info(f"Instance {self.instance_id} - Saved new file: {final_fname} with hash {file_hash}")
-            # base64 chunks for UI
-            chunk = base64.b64encode(pil_img.tobytes()).decode("utf-8") if False else None  # kept minimal
 
         # Normalize lengths
         if len(image_states) < len(image_paths):
@@ -679,39 +615,30 @@ class XISER_Canvas:
         }
 
     def cleanup(self):
-        """清理临时文件，但保留可能被重用的文件"""
-        files_to_keep = set()
+        """简化版清理：删除当前实例创建的所有文件"""
+        if not hasattr(self, 'created_files') or not self.created_files:
+            return
 
-        # 收集当前image_states中引用的文件
-        if hasattr(self, 'properties') and 'image_states' in self.properties:
-            for state in self.properties.get('image_states', []):
-                if isinstance(state, dict) and state.get('filename'):
-                    files_to_keep.add(state['filename'])
+        logger.info(f"Instance {self.instance_id} - Cleaning up {len(self.created_files)} files")
 
-        # 收集当前image_paths中的文件
-        if hasattr(self, 'properties') and 'ui_config' in self.properties:
-            image_paths = self.properties.get('ui_config', {}).get('image_paths', [])
-            for path in image_paths:
-                if path:
-                    files_to_keep.add(path)
-
-        # 只删除不在保留列表中的文件
+        removed_count = 0
         for filename in list(self.created_files):
-            if filename not in files_to_keep:
-                file_path = os.path.join(self.output_dir, filename)
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        logger.debug(f"Instance {self.instance_id} - Cleaned up unused file: {filename}")
-                    self.created_files.remove(filename)
-                except Exception as e:
-                    logger.error(f"Instance {self.instance_id} - Failed to delete file during cleanup {file_path}: {e}")
-            else:
-                # 文件需要保留，不移出created_files集合
-                logger.debug(f"Instance {self.instance_id} - Keeping file for reuse: {filename}")
+            file_path = os.path.join(self.output_dir, filename)
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    removed_count += 1
+                    logger.debug(f"Instance {self.instance_id} - Removed file: {filename}")
+            except Exception as e:
+                logger.warning(f"Instance {self.instance_id} - Failed to remove {filename}: {e}")
+
+        self.created_files.clear()
+        logger.info(f"Instance {self.instance_id} - Cleanup completed: {removed_count} files removed")
 
     def __del__(self):
-        # keep generated files for UI reload; no auto-cleanup here
+        """析构函数：可选地自动清理"""
+        # 注意：自动清理可能导致刷新后文件丢失
+        # 保持文件以便UI重新加载，依赖外部系统清理
         pass
 
 

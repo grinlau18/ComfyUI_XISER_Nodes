@@ -16,6 +16,7 @@ from .render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
 from .text_renderer import TextRenderer
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
 
 class BatchProcessor:

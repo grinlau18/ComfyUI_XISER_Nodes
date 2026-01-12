@@ -128,12 +128,16 @@ def clean_old_files(node_id, created_files):
             logger.error(f"Failed to get stats for file {file}: {e}")
             continue
 
+    # 按修改时间排序（旧文件在前）
     file_info.sort(key=lambda x: x['mtime'])
+
     files_to_remove = []
     max_file_age = 24 * 60 * 60  # 24 hours
     max_cache_size = 1024 * 1024 * 1024  # 1GB
     max_cache_files = 50
 
+    # 先按年龄清理
+    remaining_files = []
     for info in file_info:
         age = current_time - info['mtime']
         if age > max_file_age:
@@ -142,24 +146,38 @@ def clean_old_files(node_id, created_files):
             if created_files is not None:
                 created_files.discard(info['filename'])
             logger.info(f"File {info['path']} is too old ({age:.2f} seconds), marked for deletion")
+        else:
+            remaining_files.append(info)
 
-    while total_size > max_cache_size and file_info:
-        info = file_info.pop(0)
-        if info not in files_to_remove:
-            files_to_remove.append(info)
-            total_size -= info['size']
-            if created_files is not None:
-                created_files.discard(info['filename'])
-            logger.info(f"Total cache size exceeded, removing {info['path']}")
-
-    while len(file_info) > max_cache_files and file_info:
-        info = file_info.pop(0)
-        if info not in files_to_remove:
+    # 再按文件数量清理
+    if len(remaining_files) > max_cache_files:
+        # 需要删除的文件数量
+        to_remove_count = len(remaining_files) - max_cache_files
+        for i in range(to_remove_count):
+            info = remaining_files[i]
             files_to_remove.append(info)
             total_size -= info['size']
             if created_files is not None:
                 created_files.discard(info['filename'])
             logger.info(f"File count exceeded, removing {info['path']}")
+        remaining_files = remaining_files[to_remove_count:]
+
+    # 最后按总大小清理
+    current_total_size = sum(info['size'] for info in remaining_files)
+    if current_total_size > max_cache_size:
+        # 计算需要删除的大小
+        size_to_remove = current_total_size - max_cache_size
+        removed_size = 0
+
+        for info in remaining_files:
+            if removed_size >= size_to_remove:
+                break
+            files_to_remove.append(info)
+            removed_size += info['size']
+            total_size -= info['size']
+            if created_files is not None:
+                created_files.discard(info['filename'])
+            logger.info(f"Total cache size exceeded, removing {info['path']} to free {removed_size} bytes")
 
     for info in files_to_remove:
         try:
@@ -176,3 +194,77 @@ def resolve_node_dir(node_id):
         base_dir = os.path.join(base_dir, f"node_{node_id}")
     os.makedirs(base_dir, exist_ok=True)
     return base_dir
+
+
+def cleanup_all_xiser_cache():
+    """清理所有XISER相关的缓存目录"""
+    import time
+    import glob
+    import shutil
+
+    base_output_dir = get_base_output_dir()
+    xiser_patterns = [
+        "xiser_canvas",
+        "xiser_image_manager",
+        "xiser_images",
+        "xiser_gradient",
+        "xiser_painter",
+        "xiser_paint",
+        "xiser_reorder_images*",
+        "xiser_cutouts"
+    ]
+
+    current_time = time.time()
+    max_file_age = 24 * 60 * 60  # 24小时
+    total_removed = 0
+    total_freed = 0
+
+    logger.info(f"Starting global XISER cache cleanup in {base_output_dir}")
+
+    for pattern in xiser_patterns:
+        # 查找匹配的目录
+        dir_pattern = os.path.join(base_output_dir, pattern)
+        matching_dirs = glob.glob(dir_pattern)
+
+        for dir_path in matching_dirs:
+            if not os.path.isdir(dir_path):
+                continue
+
+            try:
+                # 获取目录中的所有文件
+                all_files = []
+                for root, dirs, files in os.walk(dir_path):
+                    for file in files:
+                        if file.endswith('.png'):
+                            file_path = os.path.join(root, file)
+                            try:
+                                stats = os.stat(file_path)
+                                age = current_time - stats.st_mtime
+
+                                if age > max_file_age:
+                                    file_size = stats.st_size
+                                    os.remove(file_path)
+                                    total_removed += 1
+                                    total_freed += file_size
+                                    logger.debug(f"Removed old file: {file_path} (age: {age:.0f}s)")
+                            except Exception as e:
+                                logger.warning(f"Failed to process file {file_path}: {e}")
+
+                # 检查目录是否为空，如果是则删除空目录
+                try:
+                    if not os.listdir(dir_path):
+                        shutil.rmtree(dir_path, ignore_errors=True)
+                        logger.info(f"Removed empty directory: {dir_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove directory {dir_path}: {e}")
+
+            except Exception as e:
+                logger.error(f"Failed to cleanup directory {dir_path}: {e}")
+
+    logger.info(f"Global XISER cache cleanup completed: {total_removed} files removed, {total_freed / (1024*1024):.2f} MB freed")
+    return total_removed, total_freed
+
+
+def cleanup_old_cache_files():
+    """清理旧的缓存文件（向后兼容的包装函数）"""
+    return cleanup_all_xiser_cache()

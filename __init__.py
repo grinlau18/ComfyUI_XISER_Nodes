@@ -13,10 +13,17 @@ __version__ = "1.3.6"
 from comfy_api.v0_0_2 import ComfyExtension, io, ui
 
 # Server imports for route registration
-from server import PromptServer
 import json
 import aiohttp.web
 import traceback
+
+# Try to import PromptServer, but don't fail if not in ComfyUI environment
+try:
+    from server import PromptServer
+    HAS_PROMPT_SERVER = True
+except ImportError:
+    HAS_PROMPT_SERVER = False
+    print("[XISER] 注意: 不在ComfyUI环境中，跳过路由注册")
 from .server_extension import (
     list_psd_files,
     get_available_fonts,
@@ -114,25 +121,28 @@ async def handle_color_change(request):
         return aiohttp.web.json_response({"error": f"Server error: {str(e)}"}, status=500)
 
 # 注册路由
-try:
-    PromptServer.instance.app.router.add_post("/xiser_color", handle_color_change)
-    PromptServer.instance.app.router.add_post("/xiser/cutout", cutout_image)
-    PromptServer.instance.app.router.add_get("/custom/list_psd_files", list_psd_files)
-    PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
-    PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
-    PromptServer.instance.app.router.add_get("/xiser/keys", list_keys)
-    PromptServer.instance.app.router.add_post("/xiser/keys", save_key)
-    PromptServer.instance.app.router.add_delete("/xiser/keys/{profile}", delete_key)
-    # default key route retained for compatibility but returns 400
-    PromptServer.instance.app.router.add_post("/xiser/keys/default", set_default_key)
+if HAS_PROMPT_SERVER:
+    try:
+        PromptServer.instance.app.router.add_post("/xiser_color", handle_color_change)
+        PromptServer.instance.app.router.add_post("/xiser/cutout", cutout_image)
+        PromptServer.instance.app.router.add_get("/custom/list_psd_files", list_psd_files)
+        PromptServer.instance.app.router.add_get("/xiser/fonts", get_available_fonts)
+        PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
+        PromptServer.instance.app.router.add_get("/xiser/keys", list_keys)
+        PromptServer.instance.app.router.add_post("/xiser/keys", save_key)
+        PromptServer.instance.app.router.add_delete("/xiser/keys/{profile}", delete_key)
+        # default key route retained for compatibility but returns 400
+        PromptServer.instance.app.router.add_post("/xiser/keys/default", set_default_key)
 
-    # Register XIS_ImageManager routes
-    from .src.xiser_nodes.image_manager.api import register_routes
-    register_routes()
+        # Register XIS_ImageManager V3 API routes
+        from .src.xiser_nodes.image_manager.api import register_routes
+        register_routes()
 
-    print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, XIS_ImageManager endpoints")
-except Exception as e:
-    print("[XISER] Failed to register routes:", str(e))
+        print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, /upload/xis_image_manager, /delete/xis_image_manager")
+    except Exception as e:
+        print("[XISER] Failed to register routes:", str(e))
+else:
+    print("[XISER] 跳过路由注册（不在ComfyUI环境中）")
 
 # 注册 Web 扩展
 WEB_DIRECTORY = "./web"
@@ -172,11 +182,13 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.shape_and_text_v3 import V3_NODE_CLASSES as SHAPE_AND_TEXT_NODES
             from .src.xiser_nodes.shape_data_v3 import V3_NODE_CLASSES as SHAPE_DATA_NODES
             from .src.xiser_nodes.adjust_image_v3 import V3_NODE_CLASSES as ADJUST_IMAGE_NODES
-            from .src.xiser_nodes.reorder_images_v3 import V3_NODE_CLASSES as REORDER_IMAGES_NODES
             from .src.xiser_nodes.psd_layer_extract_v3 import V3_NODE_CLASSES as PSD_LAYER_EXTRACT_NODES
             from .src.xiser_nodes.multi_point_gradient_v3 import V3_NODE_CLASSES as MULTI_POINT_GRADIENT_NODES
             from .src.xiser_nodes.set_color_v3 import V3_NODE_CLASSES as SET_COLOR_NODES
             from .src.xiser_nodes.label_v3 import V3_NODE_CLASSES as LABEL_NODES
+            from .src.xiser_nodes.image_manager_v3 import V3_NODE_CLASSES as IMAGE_MANAGER_NODES
+            # 新增节点 - image preview
+            from .src.xiser_nodes.image_preview_v3 import V3_NODE_CLASSES as IMAGE_PREVIEW_NODES
 
             # 合并所有V3节点
             v3_nodes = []
@@ -197,27 +209,16 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(SHAPE_AND_TEXT_NODES)
             v3_nodes.extend(SHAPE_DATA_NODES)
             v3_nodes.extend(ADJUST_IMAGE_NODES)
-            v3_nodes.extend(REORDER_IMAGES_NODES)
             v3_nodes.extend(PSD_LAYER_EXTRACT_NODES)
             v3_nodes.extend(MULTI_POINT_GRADIENT_NODES)
             v3_nodes.extend(SET_COLOR_NODES)
             v3_nodes.extend(LABEL_NODES)
+            v3_nodes.extend(IMAGE_MANAGER_NODES)
+            v3_nodes.extend(IMAGE_PREVIEW_NODES)
 
             print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")
-            # 按类别分组显示节点
-            node_categories = {}
-            for node_cls in v3_nodes:
-                schema = node_cls.define_schema()
-                category = schema.category
-                if category not in node_categories:
-                    node_categories[category] = []
-                node_categories[category].append(f"{schema.node_id} ({schema.display_name})")
-
-            # 按类别显示节点
-            for category, nodes in sorted(node_categories.items()):
-                print(f"  [{category}]")
-                for node_info in sorted(nodes):
-                    print(f"    - {node_info}")
+            # 简化显示，只显示成功加载信息
+            print("[XISER V3] 成功全部节点")
 
             return v3_nodes
 

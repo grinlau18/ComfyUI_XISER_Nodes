@@ -36,9 +36,10 @@ except ImportError:
     from .shape_generators.batch_processor import BatchProcessor
     from .shape_generators.transform_utils import TransformUtils
 
-# 设置日志
-logging.basicConfig(level=logging.INFO)
+# 设置日志 - 关闭INFO级别日志，只保留WARNING和ERROR
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 
 @dataclass
