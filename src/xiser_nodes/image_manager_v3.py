@@ -235,130 +235,93 @@ class XIS_ImageManagerV3(io.ComfyNode):
     @classmethod
     def fingerprint_inputs(cls, pack_images=None, image_state="[]", image_order="{}", enabled_layers="{}", image_ids="[]", is_reversed="{}", is_single_mode="{}", **kwargs):
         """Compute a fingerprint for caching that ignores node_size changes."""
+        return cls._fingerprint_inputs_optimized(
+            pack_images, image_state, image_order, enabled_layers,
+            image_ids, is_reversed, is_single_mode, **kwargs
+        )
+
+    @classmethod
+    def _fingerprint_inputs_optimized(cls, pack_images=None, image_state="[]", image_order="{}", enabled_layers="{}", image_ids="[]", is_reversed="{}", is_single_mode="{}", **kwargs):
+        """优化的指纹计算，减少计算开销"""
         import hashlib
+        import json
 
-        def _normalize_pack_images(value):
-            if value is None:
-                return []
-            actual = value
-            if isinstance(actual, tuple):
-                if len(actual) == 1:
-                    actual = actual[0]
-                else:
-                    actual = list(actual)
-            if actual is None:
-                return []
-            if isinstance(actual, (list, tuple)):
-                return list(actual)
-            return [actual]
-
-        def _parse_json(raw_value, default):
-            if raw_value is None:
-                return default
-            if isinstance(raw_value, str):
-                raw_value = raw_value.strip()
-                if not raw_value:
-                    return default
+        # 简化的图像计数和状态摘要
+        pack_count = 0
+        if pack_images is not None:
+            if isinstance(pack_images, (list, tuple)):
+                pack_count = len(pack_images)
+            elif isinstance(pack_images, torch.Tensor):
+                pack_count = 1
+            else:
                 try:
-                    return json.loads(raw_value)
-                except Exception:
-                    return default
-            return raw_value
+                    # 尝试获取长度
+                    pack_count = len(pack_images)
+                except:
+                    pack_count = 1 if pack_images is not None else 0
 
-        def _parse_bool(raw_value):
-            data = _parse_json(raw_value, None)
-            if isinstance(data, dict):
-                data = next(iter(data.values()), None)
-            if isinstance(data, bool):
-                return data
-            if isinstance(data, (int, float)):
-                return bool(data)
-            if isinstance(data, str):
-                lowered = data.strip().lower()
-                if lowered in {"true", "1", "yes", "on"}:
-                    return True
-                if lowered in {"false", "0", "no", "off"}:
-                    return False
-            return False
+        # 简化状态处理 - 只取关键信息
+        state_summary = ""
+        try:
+            if image_state and image_state.strip() and image_state != "[]":
+                # 只取前200个字符作为状态摘要
+                state_summary = image_state.strip()[:200]
+            elif image_order and image_order.strip() and image_order != "{}":
+                state_summary = f"order:{image_order.strip()[:100]}"
+        except:
+            pass
 
-        pack_images_list = _normalize_pack_images(pack_images)
-        pack_hashes = []
-        for idx, img in enumerate(pack_images_list):
-            try:
-                # Convert tensor to numpy array for hashing
-                if isinstance(img, torch.Tensor):
-                    # Include tensor shape and dtype in hash
-                    hasher = hashlib.sha256()
-                    hasher.update(f"shape:{tuple(img.shape)}".encode("utf-8"))
-                    hasher.update(f"dtype:{str(img.dtype)}".encode("utf-8"))
-                    # Include a sample of tensor data
-                    if img.numel() > 0:
-                        sample_size = min(100, img.numel())
-                        step = max(1, img.numel() // sample_size)
-                        sample_indices = torch.arange(0, img.numel(), step)[:sample_size]
-                        sample_values = img.view(-1)[sample_indices]
-                        hasher.update(sample_values.cpu().numpy().tobytes())
-                    pack_hash = hasher.hexdigest()
+        # 简化布尔值解析
+        is_reversed_flag = False
+        is_single_mode_flag = False
+
+        try:
+            if is_reversed and is_reversed.strip() and is_reversed != "{}":
+                rev_data = json.loads(is_reversed)
+                if isinstance(rev_data, dict):
+                    is_reversed_flag = bool(rev_data.get("reversed", False))
                 else:
-                    pack_hash = f"unknown_type_{idx}"
-            except Exception:
-                pack_hash = f"error_{idx}"
-            pack_hashes.append(pack_hash)
+                    is_reversed_flag = bool(rev_data)
+        except:
+            pass
 
-        state_entries = parse_image_state_payload(image_state)
-        state_signature = []
-        if state_entries:
-            for entry in state_entries:
-                identifier = (
-                    entry.get("id")
-                    or entry.get("identifier")
-                    or entry.get("filename")
-                    or entry.get("originalFilename")
-                )
-                if not identifier:
-                    continue
-                state_signature.append((str(identifier), bool(entry.get("enabled", True))))
-        else:
-            order_data = _parse_json(image_order, {})
-            enabled_data = _parse_json(enabled_layers, {})
-            ids_data = _parse_json(image_ids, {})
+        try:
+            if is_single_mode and is_single_mode.strip() and is_single_mode != "{}":
+                single_data = json.loads(is_single_mode)
+                if isinstance(single_data, dict):
+                    is_single_mode_flag = bool(single_data.get("single_mode", False))
+                else:
+                    is_single_mode_flag = bool(single_data)
+        except:
+            pass
 
-            order = order_data.get("order", []) if isinstance(order_data, dict) else order_data or []
-            enabled = enabled_data.get("enabled", []) if isinstance(enabled_data, dict) else enabled_data or []
-            identifiers = ids_data.get("image_ids", []) if isinstance(ids_data, dict) else ids_data or []
-
-            if not identifiers:
-                identifiers = [f"pack_image_{idx}" for idx in range(len(pack_hashes))]
-            if not order:
-                order = list(range(len(identifiers)))
-
-            for pos, idx in enumerate(order):
-                if not isinstance(idx, int):
-                    continue
-                if idx < 0 or idx >= len(identifiers):
-                    continue
-                enabled_flag = enabled[idx] if idx < len(enabled) else True
-                state_signature.append((str(identifiers[idx]), bool(enabled_flag)))
-
-        state_signature.sort(key=lambda x: x[0])
-
-        is_reversed_flag = _parse_bool(is_reversed)
-        is_single_mode_flag = _parse_bool(is_single_mode)
-
+        # 简化的哈希计算
         hasher = hashlib.sha256()
-        hasher.update(f"pack_count:{len(pack_hashes)}".encode("utf-8"))
-        for pack_hash in pack_hashes:
-            hasher.update(pack_hash.encode("utf-8"))
-        hasher.update(f"state_signature:{json.dumps(state_signature)}".encode("utf-8"))
-        hasher.update(f"is_reversed:{int(is_reversed_flag)}".encode("utf-8"))
-        hasher.update(f"is_single_mode:{int(is_single_mode_flag)}".encode("utf-8"))
+        hasher.update(f"pack_count:{pack_count}".encode("utf-8"))
+        hasher.update(f"state:{state_summary}".encode("utf-8"))
+        hasher.update(f"reversed:{int(is_reversed_flag)}".encode("utf-8"))
+        hasher.update(f"single:{int(is_single_mode_flag)}".encode("utf-8"))
+
+        # 如果有图像数据，添加简化的图像信息
+        if pack_count > 0 and pack_images is not None:
+            try:
+                if isinstance(pack_images, (list, tuple)):
+                    for i, img in enumerate(pack_images[:10]):  # 只处理前10张
+                        if isinstance(img, torch.Tensor):
+                            hasher.update(f"shape_{i}:{tuple(img.shape)}".encode("utf-8"))
+                            hasher.update(f"dtype_{i}:{str(img.dtype)}".encode("utf-8"))
+                elif isinstance(pack_images, torch.Tensor):
+                    hasher.update(f"shape:{tuple(pack_images.shape)}".encode("utf-8"))
+                    hasher.update(f"dtype:{str(pack_images.dtype)}".encode("utf-8"))
+            except Exception as e:
+                logger.debug(f"Error adding image info to hash: {e}")
 
         fingerprint = hasher.hexdigest()
         logger.debug(
-            "fingerprint_inputs fingerprint=%s pack_hashes=%s state=%s reversed=%s single=%s",
-            fingerprint,
-            pack_hashes,
-            state_signature,
+            "Optimized fingerprint: %s (pack_count=%s, state_len=%s, reversed=%s, single=%s)",
+            fingerprint[:16],
+            pack_count,
+            len(state_summary),
             is_reversed_flag,
             is_single_mode_flag,
         )
@@ -367,6 +330,9 @@ class XIS_ImageManagerV3(io.ComfyNode):
     @classmethod
     def execute(cls, pack_images=None, image_order="{}", enabled_layers="{}", node_id="", node_size="[360, 360]", is_reversed="{}", is_single_mode="{}", image_ids="[]", image_state="[]", **kwargs):
         """Process images based on frontend-provided order and enabled state."""
+        import time
+        total_start = time.perf_counter()
+
         # Get or create node state
         state = cls._get_node_state(node_id)
 
@@ -629,7 +595,9 @@ class XIS_ImageManagerV3(io.ComfyNode):
             "image_state": [image_state_entries]
         }
 
+        total_time = time.perf_counter() - total_start
         logger.info(f"Instance {state['instance_id']} - Node {node_id}: Returning {len(reordered_images)} images, order: {order}, enabled: {enabled_by_index}, single_mode: {is_single_mode_flag}, node_size: {node_size_list}")
+        logger.info(f"Instance {state['instance_id']} - Node {node_id}: Total execution time: {total_time:.3f} seconds")
 
         # Return with UI data
         return io.NodeOutput(reordered_images, ui=ui_data)

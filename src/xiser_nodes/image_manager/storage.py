@@ -8,8 +8,19 @@ from PIL import Image
 from io import BytesIO
 import glob
 import re
+import threading
 from collections import defaultdict
 from .constants import logger, get_base_output_dir
+
+# 文件列表缓存机制
+_FILE_LIST_CACHE = {}
+_CACHE_TIMEOUT = 5  # 5秒缓存
+_CACHE_LOCK = threading.RLock()
+
+# 缓存清理频率限制
+_LAST_CLEANUP_TIME = {}
+_CLEANUP_COOLDOWN = 30  # 30秒冷却时间
+_CLEANUP_LOCK = threading.RLock()
 
 
 def tensor_to_uint8_array(img):
@@ -64,25 +75,107 @@ def get_node_output_dir(node_id, fallback_id):
 
 def list_node_image_files(node_dir):
     """Return all managed image files (legacy and new naming)."""
-    patterns = [
-        os.path.join(node_dir, "xis_image_manager_*.png"),
-        os.path.join(node_dir, "upload_image_*.png"),
-    ]
-    files = []
-    for pattern in patterns:
-        files.extend(glob.glob(pattern))
-    return files
+    return _list_node_image_files_cached(node_dir)
 
 
-def save_image_with_tracking(pil_img, node_dir, filename, node_id, original_filename=None, edited=False, source_hash=None, created_files=None):
-    """Persist an image and record metadata."""
+def _list_node_image_files_cached(node_dir):
+    """带缓存的文件列表获取"""
+    current_time = time.time()
+
+    with _CACHE_LOCK:
+        if node_dir in _FILE_LIST_CACHE:
+            cached_time, files = _FILE_LIST_CACHE[node_dir]
+            if current_time - cached_time < _CACHE_TIMEOUT:
+                logger.debug(f"Using cached file list for {node_dir}")
+                return files.copy()  # 返回副本避免修改缓存
+
+        # 实际扫描文件
+        patterns = [
+            os.path.join(node_dir, "xis_image_manager_*.png"),
+            os.path.join(node_dir, "upload_image_*.png"),
+        ]
+        files = []
+        for pattern in patterns:
+            files.extend(glob.glob(pattern))
+
+        # 更新缓存
+        _FILE_LIST_CACHE[node_dir] = (current_time, files.copy())
+        logger.debug(f"Updated file list cache for {node_dir}, found {len(files)} files")
+        return files
+
+
+def invalidate_file_list_cache(node_dir=None, defer=False):
+    """使文件列表缓存失效
+
+    Args:
+        node_dir: 节点目录路径
+        defer: 是否延迟失效（批量处理时使用）
+    """
+    if defer:
+        # 延迟失效，记录需要失效的目录
+        with _CACHE_LOCK:
+            if node_dir:
+                _FILE_LIST_CACHE.pop(node_dir, None)
+                logger.debug(f"Deferred cache invalidation for {node_dir}")
+        return
+
+    with _CACHE_LOCK:
+        if node_dir:
+            _FILE_LIST_CACHE.pop(node_dir, None)
+            logger.debug(f"Invalidated cache for {node_dir}")
+        else:
+            _FILE_LIST_CACHE.clear()
+            logger.debug("Cleared all file list caches")
+
+
+def flush_deferred_cache_invalidations():
+    """刷新所有延迟的缓存失效操作"""
+    # 当前实现中，延迟失效就是立即失效
+    # 这个方法是为了API一致性而保留
+    logger.debug("Flushed deferred cache invalidations")
+
+
+def save_image_with_tracking(pil_img, node_dir, filename, node_id, original_filename=None, edited=False, source_hash=None, created_files=None, skip_if_exists=False, batch_mode=False):
+    """Persist an image and record metadata.
+
+    Args:
+        pil_img: PIL图像对象
+        node_dir: 节点目录
+        filename: 文件名
+        node_id: 节点ID
+        original_filename: 原始文件名
+        edited: 是否已编辑
+        source_hash: 源哈希
+        created_files: 已创建文件集合
+        skip_if_exists: 如果文件已存在且哈希匹配则跳过
+        batch_mode: 批量模式，延迟缓存失效
+    """
     try:
         os.makedirs(node_dir, exist_ok=True)
         img_path = os.path.join(node_dir, filename)
+        tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+
+        # 检查是否需要跳过保存
+        if skip_if_exists and os.path.exists(img_path) and os.path.exists(tracking_file):
+            try:
+                with open(tracking_file, 'r') as f:
+                    tracking_data = json.loads(f.read() or "{}")
+                # 检查源哈希是否匹配
+                if source_hash and tracking_data.get("source_hash") == source_hash:
+                    logger.debug(f"Image {filename} already exists with matching hash, skipping save")
+                    if created_files is not None:
+                        created_files.add(filename)
+                    return img_path
+            except Exception as e:
+                logger.debug(f"Failed to check existing file {filename}: {e}")
+                # 继续保存
+
+        # 保存图像
         pil_img.save(img_path, format="PNG")
         if created_files is not None:
             created_files.add(filename)
-        tracking_file = os.path.join(node_dir, f".{filename}.node_{node_id}")
+
+        # 保存跟踪信息
         with open(tracking_file, 'w') as f:
             f.write(json.dumps({
                 "node_id": node_id,
@@ -91,6 +184,13 @@ def save_image_with_tracking(pil_img, node_dir, filename, node_id, original_file
                 "edited": edited,
                 "source_hash": source_hash
             }))
+
+        # 保存文件后使缓存失效
+        if batch_mode:
+            invalidate_file_list_cache(node_dir, defer=True)
+        else:
+            invalidate_file_list_cache(node_dir)
+
         logger.debug(f"Saved image {filename} with tracking for node {node_id}")
         return img_path
     except Exception as exc:
@@ -100,6 +200,15 @@ def save_image_with_tracking(pil_img, node_dir, filename, node_id, original_file
 
 def clean_old_files(node_id, created_files):
     """Remove old cache files for the node based on age, count, and size."""
+    # 检查清理频率限制
+    current_time = time.time()
+    with _CLEANUP_LOCK:
+        last_time = _LAST_CLEANUP_TIME.get(node_id, 0)
+        if current_time - last_time < _CLEANUP_COOLDOWN:
+            logger.debug(f"Skipping cleanup for node {node_id}, cooldown active")
+            return
+        _LAST_CLEANUP_TIME[node_id] = current_time
+
     node_dir = get_node_output_dir(node_id, node_id)
     try:
         files = list_node_image_files(node_dir)
