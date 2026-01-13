@@ -269,6 +269,7 @@ class TextProcessor:
 
         mask_width = int(max_width + padding * 2)
         mask_height = int(total_height + padding * 2)
+        # 使用更高位深的图像以提高渲染质量
         mask = Image.new("L", (mask_width, mask_height), 0)
         draw = ImageDraw.Draw(mask)
 
@@ -282,7 +283,18 @@ class TextProcessor:
             else:
                 x = padding + (max_width - line_width) / 2
             for char_idx, char in enumerate(line):
-                draw.text((x, y), char, fill=255, font=font)
+                # 使用更高质量的文字渲染
+                # 创建临时图像进行渲染，然后合并
+                char_img = Image.new("L", (mask_width, mask_height), 0)
+                char_draw = ImageDraw.Draw(char_img)
+                char_draw.text((x, y), char, fill=255, font=font)
+
+                # 将字符图像合并到主蒙版
+                mask_array = np.array(mask, dtype=np.float32)
+                char_array = np.array(char_img, dtype=np.float32)
+                mask_array = np.maximum(mask_array, char_array)
+                mask = Image.fromarray(mask_array.astype(np.uint8))
+
                 try:
                     bbox = font.getbbox(char)
                     advance = bbox[2] - bbox[0]

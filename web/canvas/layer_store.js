@@ -175,7 +175,7 @@ export const persistImageStates = (node, nodeState, imageStatesWidget, syncWidge
   if (nodeState.log) {
     nodeState.log.debug(`persistImageStates: saving ${node.properties.image_states.length} states`);
     node.properties.image_states.forEach((state, idx) => {
-      nodeState.log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}`);
+      nodeState.log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, has image=${!!state.image}, has image_base64=${!!state.image_base64}, image length=${state.image?.length || 0}, image_base64 length=${state.image_base64?.length || 0}`);
     });
   }
   node.properties.ui_config = {

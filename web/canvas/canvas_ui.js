@@ -393,12 +393,18 @@ export function initializeUI(node, nodeState, widgetContainer) {
             filename: updatedRef.filename,
             subfolder: updatedRef.subfolder,
             order: existing.order ?? layerIndex,
+            // 保存抠图后的图像数据，确保后端能正确加载
+            image: dataUrl,
+            image_base64: dataUrl.split(',')[1], // 只保存base64部分
           };
           nodeState.initialStates[layerIndex] = updatedState;
           node.properties.image_states = nodeState.initialStates;
+          // 调试日志：记录保存的抠图数据
+          log.info(`Cutout applied to layer ${layerIndex}: has image=${!!updatedState.image}, has image_base64=${!!updatedState.image_base64}, filename=${updatedState.filename}, image length=${updatedState.image?.length || 0}, image_base64 length=${updatedState.image_base64?.length || 0}`);
           const imageStatesWidget = node.widgets?.find(w => w.name === 'image_states');
           if (imageStatesWidget) {
             imageStatesWidget.value = JSON.stringify(nodeState.initialStates);
+            log.info(`Updated image_states widget for layer ${layerIndex}`);
           }
         }
         if (!node.properties.ui_config) {

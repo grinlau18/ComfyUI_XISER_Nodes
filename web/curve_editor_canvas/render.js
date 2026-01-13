@@ -30,7 +30,6 @@ function renderBackgroundLayer(node, width, height, padding, plotWidth, plotHeig
 
   node._backgroundCanvas._lastVerticalLines = verticalLines;
   node._backgroundDirty = false;
-  const safeVerticalLines = Math.max(1, verticalLines);
 
   const bgCtx = node._backgroundCtx;
   bgCtx.clearRect(0, 0, width, height);
@@ -64,10 +63,16 @@ function renderBackgroundLayer(node, width, height, padding, plotWidth, plotHeig
   bgCtx.stroke();
 
   bgCtx.beginPath();
-  for (let i = 0; i <= safeVerticalLines; i++) {
-    const x = padding + i * plotWidth / safeVerticalLines;
+  if (verticalLines === 1) {
+    const x = padding;
     bgCtx.moveTo(x, padding);
     bgCtx.lineTo(x, height - padding);
+  } else {
+    for (let i = 0; i < verticalLines; i++) {
+      const x = padding + i * plotWidth / (verticalLines - 1);
+      bgCtx.moveTo(x, padding);
+      bgCtx.lineTo(x, height - padding);
+    }
   }
   bgCtx.stroke();
 }
@@ -98,8 +103,7 @@ function drawCurve(node) {
     }
 
     const pointCount = getEffectivePointCount(node);
-    const verticalLines = Math.min(pointCount, 50);
-    const safeVerticalLines = Math.max(1, verticalLines);
+    const verticalLines = Math.max(1, Math.min(pointCount, 50));
 
     renderBackgroundLayer(node, width, height, padding, plotWidth, plotHeight, verticalLines);
     ctx.clearRect(0, 0, width, height);
@@ -112,10 +116,32 @@ function drawCurve(node) {
     ctx.textAlign = 'center';
 
     const maxLabels = 10;
-    const labelInterval = Math.max(1, Math.floor(safeVerticalLines / maxLabels));
-    for (let i = 0; i <= safeVerticalLines; i += labelInterval) {
-      const x = padding + i * plotWidth / safeVerticalLines;
-      const value = Math.max(1, Math.min(pointCount, Math.round(i * pointCount / safeVerticalLines)));
+    const labelInterval = Math.max(1, Math.ceil(verticalLines / maxLabels));
+
+    // 确保显示第一个和最后一个标签
+    const labelIndices = [];
+    for (let i = 0; i < verticalLines; i += labelInterval) {
+      labelIndices.push(i);
+    }
+
+    // 确保包含最后一个点
+    if (verticalLines > 1 && !labelIndices.includes(verticalLines - 1)) {
+      labelIndices.push(verticalLines - 1);
+    }
+
+    // 对索引排序并去重
+    labelIndices.sort((a, b) => a - b);
+    const uniqueIndices = [...new Set(labelIndices)];
+
+    for (const i of uniqueIndices) {
+      let x, value;
+      if (verticalLines === 1) {
+        x = padding;
+        value = 0;
+      } else {
+        x = padding + i * plotWidth / (verticalLines - 1);
+        value = Math.min(pointCount - 1, Math.round(i * (pointCount - 1) / (verticalLines - 1)));
+      }
       ctx.fillText(value.toString(), x, height - padding + 15);
     }
 
@@ -206,7 +232,7 @@ function drawCurve(node) {
       ctx.fillStyle = '#fff';
       ctx.font = '10px Arial';
       ctx.textAlign = 'center';
-      const actualX = Math.round(point.x * pointCount);
+      const actualX = Math.round(point.x * (pointCount - 1));
 
       let displayText;
       if (dataType === "HEX") {

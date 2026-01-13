@@ -14,8 +14,9 @@ from shapely import affinity
 from shapely.geometry import Polygon, LineString, MultiPolygon, MultiLineString
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
-FRONTEND_CANVAS_SCALE = 0.75  # 与前端 Konva 画布缩放保持一致，用于描边厚度补偿
+FRONTEND_CANVAS_SCALE = 1.0  # 与前端 Konva 画布缩放保持一致，现在使用100%尺寸
 FRONTEND_STROKE_COMPENSATION = 0.9  # 前端描边补偿因子（Konva 端口中的0.9系数）
 
 
@@ -25,39 +26,11 @@ class RenderUtils:
     @staticmethod
     def compute_base_shape_size(width: int, height: int, scale_factor: float, shape_canvas: Dict[str, Any] = None) -> float:
         """
-        计算用于渲染的基础形状尺寸，使其与前端画布视觉效果保持一致。
-        如果前端提供了 base_shape_size 和 canvas_scale_factor 元数据，则以其为准；
-        否则降级为旧的基于图像尺寸的计算方式。
+        计算用于渲染的基础形状尺寸。
+        优先使用前端提供的基础尺寸，如果没有则使用简化计算。
         """
-        default_size = min(width, height) * scale_factor * 0.5
-        if not shape_canvas or not isinstance(shape_canvas, dict):
-            return default_size
-
-        base_shape_size = shape_canvas.get("base_shape_size")
-        if base_shape_size is None:
-            return default_size
-
-        try:
-            base_radius = float(base_shape_size)
-        except (TypeError, ValueError):
-            return default_size
-
-        if base_radius <= 0:
-            return default_size
-
-        canvas_scale = shape_canvas.get("canvas_scale_factor", FRONTEND_CANVAS_SCALE)
-        try:
-            canvas_scale = float(canvas_scale)
-        except (TypeError, ValueError):
-            canvas_scale = FRONTEND_CANVAS_SCALE
-
-        if canvas_scale <= 0:
-            canvas_scale = FRONTEND_CANVAS_SCALE
-
-        base_output_diameter = (base_radius * 2.0) / canvas_scale
-        resolved_size = max(base_output_diameter * scale_factor, 1.0)
-        logger.info(f"Resolved shape size from frontend metadata: radius={base_radius}, canvas_scale={canvas_scale}, render_size={resolved_size}")
-        return resolved_size
+        from .size_utils import SizeUtils
+        return SizeUtils.compute_base_shape_size(width, height, shape_canvas)
 
     @staticmethod
     def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
@@ -70,19 +43,8 @@ class RenderUtils:
         Returns:
             (r, g, b) 值元组
         """
-        import re
-        # 处理None值或空字符串
-        if hex_color is None or hex_color == "":
-            logger.warning("Received None or empty hex color, using default #FF0000")
-            return (255, 0, 0)
-
-        hex_color = hex_color.lstrip('#')
-        if not re.match(r'^[0-9a-fA-F]{3,6}$', hex_color):
-            logger.warning(f"Invalid hex color: {hex_color}, using default #FF0000")
-            return (255, 0, 0)
-        if len(hex_color) == 3:
-            hex_color = ''.join([c*2 for c in hex_color])
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        from .color_utils import ColorUtils
+        return ColorUtils.hex_to_rgb(hex_color)
 
     @staticmethod
     def apply_simple_transform(coords: List[Tuple[float, float]],
@@ -90,17 +52,18 @@ class RenderUtils:
                              skew: Dict[str, float], position: Dict[str, float],
                              width: int, height: int, scale_factor: float = 1.0) -> List[Tuple[float, float]]:
         """
-        简单的坐标变换方法，直接使用前端计算好的变换参数
+        简化的坐标变换方法，直接使用前端计算好的变换参数
+        支持超采样渲染
 
         Args:
             coords: 形状坐标（以中心为原点）
             scale: 缩放比例
             rotation: 旋转角度
             skew: 倾斜参数
-            position: 位置偏移（前端已经计算好的绝对像素位置）
-            width: 画布宽度
-            height: 画布高度
-            scale_factor: 缩放因子
+            position: 位置偏移（归一化位置，相对于图像中心）
+            width: 渲染图像宽度（可能包含超采样）
+            height: 渲染图像高度（可能包含超采样）
+            scale_factor: 缩放因子（1=无超采样，4=4倍超采样）
 
         Returns:
             变换后的坐标
@@ -114,17 +77,27 @@ class RenderUtils:
         sin_r = math.sin(rotation_rad)
         kx, ky = skew.get('x', 0.0), skew.get('y', 0.0)
 
-        # 计算画布中心
-        center_x = width / 2
-        center_y = height / 2
+        # 简化：使用100%尺寸，前端画布与输出图像尺寸相同
+        # position是归一化值，相对于图像中心
+        # 注意：前端position范围是-0.5到0.5（相对于图像中心）
+        image_center_x = width / 2
+        image_center_y = height / 2
 
-        # 前端position是归一化的值（相对于画布中心，范围-0.5到0.5）
-        # 前端已经处理了0.75的缩放，发送的是基于原始尺寸的归一化位置
-        # 直接使用归一化位置 × 画布宽度/高度
-        pos_x = position.get('x', 0.0) * width
-        pos_y = position.get('y', 0.0) * height
+        # position偏移计算：归一化位置 × 原始图像尺寸 × 缩放因子
+        # 需要将归一化位置转换到渲染坐标系
+        original_width = width / scale_factor if scale_factor > 0 else width
+        original_height = height / scale_factor if scale_factor > 0 else height
+        pos_x = position.get('x', 0.0) * original_width * scale_factor
+        pos_y = position.get('y', 0.0) * original_height * scale_factor
 
         logger.info(f"Simple transform: position=({pos_x}, {pos_y}), rotation={rotation}°, scale=({sx}, {sy}), skew=({kx}, {ky})")
+
+        # 详细日志：坐标变换参数
+        logger.info("=== 坐标变换详细参数 ===")
+        logger.info(f"输入坐标数量: {len(coords)}")
+        logger.info(f"图像尺寸: {width}x{height}")
+        logger.info(f"图像中心: ({image_center_x:.1f}, {image_center_y:.1f})")
+        logger.info(f"position偏移: ({pos_x:.1f}, {pos_y:.1f})")
 
         for x, y in coords:
             # 1. 缩放
@@ -139,9 +112,9 @@ class RenderUtils:
             x_k = x_r + kx * y_r
             y_k = y_r + ky * x_r
 
-            # 4. 平移（直接使用前端计算的位置）
-            x_t = x_k + center_x + pos_x
-            y_t = y_k + center_y + pos_y
+            # 4. 平移（使用图像中心加上位置偏移）
+            x_t = x_k + image_center_x + pos_x
+            y_t = y_k + image_center_y + pos_y
 
             transformed_coords.append((x_t, y_t))
 
@@ -154,7 +127,7 @@ class RenderUtils:
         if stroke_width <= 0 or fill_mask.max() == 0:
             return None
 
-        stroke_radius = max(0.5, stroke_width / 2.0)
+        stroke_radius = stroke_width / 2.0
         fill_binary = (fill_mask > 0).astype(np.uint8)
         background = (1 - fill_binary).astype(np.uint8)
 
@@ -186,13 +159,14 @@ class RenderUtils:
             return
 
         if geometry.geom_type == "Polygon":
-            exterior = [(round(x), round(y)) for x, y in geometry.exterior.coords]
+            # 使用浮点坐标以提高精度，PIL会自动进行抗锯齿处理
+            exterior = [(x, y) for x, y in geometry.exterior.coords]
             if exterior and exterior[0] != exterior[-1]:
                 exterior.append(exterior[0])
             draw.polygon(exterior, fill=255, outline=255)
 
             for interior in geometry.interiors:
-                hole = [(round(x), round(y)) for x, y in interior.coords]
+                hole = [(x, y) for x, y in interior.coords]
                 if hole and hole[0] != hole[-1]:
                     hole.append(hole[0])
                 draw.polygon(hole, fill=0, outline=0)
@@ -200,12 +174,13 @@ class RenderUtils:
             for poly in geometry.geoms:
                 RenderUtils._draw_geometry_mask(draw, poly)
         elif geometry.geom_type == "LineString":
-            coords = [(round(x), round(y)) for x, y in geometry.coords]
+            # 使用浮点坐标以提高精度
+            coords = [(x, y) for x, y in geometry.coords]
             if len(coords) >= 2:
                 draw.line(coords, fill=255, width=1)
         elif geometry.geom_type == "MultiLineString":
             for line in geometry.geoms:
-                coords = [(round(x), round(y)) for x, y in line.coords]
+                coords = [(x, y) for x, y in line.coords]
                 if len(coords) >= 2:
                     draw.line(coords, fill=255, width=1)
         elif geometry.geom_type == "GeometryCollection":
@@ -264,7 +239,7 @@ class RenderUtils:
             if treat_as_line:
                 if stroke_color is None or stroke_width <= 0:
                     return
-                buffer_width = max(0.5, stroke_width / 2.0)
+                buffer_width = stroke_width / 2.0
                 try:
                     buffered = geometry.buffer(buffer_width, join_style=join_style, cap_style=1)
                 except Exception as buffer_err:
@@ -316,14 +291,14 @@ class RenderUtils:
             draw = ImageDraw.Draw(image, 'RGBA')
             for trapezoid in trapezoids:
                 if len(trapezoid) >= 3:
-                    int_coords = [(round(x), round(y)) for x, y in trapezoid]
+                    int_coords = [(x, y) for x, y in trapezoid]  # 使用浮点坐标
                     if int_coords and int_coords[0] != int_coords[-1]:
                         int_coords.append(int_coords[0])
                     # 确保每个梯形都单独填充，避免细线问题
                     draw.polygon(int_coords, fill=shape_color, outline=None)
                     # 如果需要描边，单独添加描边
                     if stroke_width > 0 and stroke_color is not None:
-                        stroke_width_int = max(1, round(stroke_width))
+                        stroke_width_int = round(stroke_width)
                         for i in range(len(int_coords) - 1):
                             draw.line([int_coords[i], int_coords[i + 1]],
                                      fill=stroke_color, width=stroke_width_int)
@@ -369,14 +344,14 @@ class RenderUtils:
             logger.error(f"Shapely rendering error: {e}")
             draw = ImageDraw.Draw(image, 'RGBA')
             if stroke_only:
-                stroke_width_int = max(1, round(stroke_width))
+                stroke_width_int = round(stroke_width)
                 for idx in range(0, len(coords) - 1, 2):
                     start_pt = coords[idx]
                     end_pt = coords[idx + 1] if idx + 1 < len(coords) else None
                     if end_pt is not None:
                         draw.line([start_pt, end_pt], fill=stroke_color, width=stroke_width_int)
             else:
-                int_coords = [(round(x), round(y)) for x, y in coords]
+                int_coords = [(x, y) for x, y in coords]  # 使用浮点坐标
                 if int_coords and int_coords[0] != int_coords[-1]:
                     int_coords.append(int_coords[0])
                 draw.polygon(int_coords, fill=shape_color, outline=None)
@@ -409,8 +384,8 @@ class RenderUtils:
             logger.error(f"Shapely donut rendering error: {e}")
             try:
                 draw = ImageDraw.Draw(image, 'RGBA')
-                int_outer_coords = [(round(x), round(y)) for x, y in outer_coords]
-                int_inner_coords = [(round(x), round(y)) for x, y in inner_coords]
+                int_outer_coords = [(x, y) for x, y in outer_coords]  # 使用浮点坐标
+                int_inner_coords = [(x, y) for x, y in inner_coords]  # 使用浮点坐标
                 if int_outer_coords and int_outer_coords[0] != int_outer_coords[-1]:
                     int_outer_coords.append(int_outer_coords[0])
                 if int_inner_coords and int_inner_coords[0] != int_inner_coords[-1]:
@@ -418,7 +393,7 @@ class RenderUtils:
                 draw.polygon(int_outer_coords, fill=shape_color, outline=None)
                 draw.polygon(int_inner_coords, fill=(0, 0, 0, 0) if transparent_bg else bg_color, outline=None)
                 if stroke_width > 0:
-                    stroke_width_int = max(1, round(stroke_width))
+                    stroke_width_int = round(stroke_width)
                     for i in range(len(int_outer_coords) - 1):
                         draw.line([int_outer_coords[i], int_outer_coords[i + 1]],
                                   fill=stroke_color, width=stroke_width_int)
@@ -449,14 +424,14 @@ class RenderUtils:
             logger.error(f"Shapely spiral rendering error: {e}")
             # 出错时回退到简单多边形绘制
             draw = ImageDraw.Draw(image, 'RGBA')
-            int_coords = [(round(x), round(y)) for x, y in coords]
+            int_coords = [(x, y) for x, y in coords]  # 使用浮点坐标
             if int_coords and int_coords[0] != int_coords[-1]:
                 int_coords.append(int_coords[0])
             # 填充形状
             draw.polygon(int_coords, fill=shape_color, outline=None)
             # 添加描边
             if stroke_width > 0 and stroke_color is not None:
-                stroke_width_int = max(1, round(stroke_width))
+                stroke_width_int = round(stroke_width)
                 for i in range(len(int_coords) - 1):
                     draw.line([int_coords[i], int_coords[i + 1]],
                              fill=stroke_color, width=stroke_width_int)

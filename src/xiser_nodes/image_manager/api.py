@@ -11,16 +11,79 @@ from PIL import Image
 from aiohttp import web
 from .constants import logger
 from .storage import resolve_node_dir, compute_content_hash
-from .node import XIS_ImageManager
+# V1 node import - handle gracefully if not available
+XIS_ImageManagerV1 = None
+try:
+    from .node import XIS_ImageManager as XIS_ImageManagerV1
+except ImportError:
+    # V1 node not available, use V3 only
+    pass
 from .editor.core import ImageEditor
+
+# Try to import V3 node class
+try:
+    from ..image_manager_v3 import XIS_ImageManagerV3
+    HAS_V3_NODE = True
+except ImportError:
+    HAS_V3_NODE = False
+    XIS_ImageManagerV3 = None
+
+# Helper functions for compatibility
+def _get_list_node_image_files():
+    """Get the list_node_image_files function."""
+    # Always import from storage module directly
+    from .storage import list_node_image_files
+    return list_node_image_files
+
+def _get_generate_base64_thumbnail():
+    """Get the thumbnail generator."""
+    # Use V3 node's method if available, otherwise fallback
+    if HAS_V3_NODE:
+        return XIS_ImageManagerV3._generate_base64_thumbnail
+    else:
+        # Fallback to V1 or create a simple implementation
+        if XIS_ImageManagerV1 is not None:
+            try:
+                return XIS_ImageManagerV1._generate_base64_thumbnail
+            except AttributeError:
+                pass
+        # Create a simple fallback implementation
+        def simple_thumbnail(pil_img, max_size=64, format="PNG"):
+            import base64
+            from io import BytesIO
+            try:
+                img_width, img_height = pil_img.size
+                scale = min(max_size / img_width, max_size / img_height, 1.0)
+                new_size = (int(img_width * scale), int(img_height * scale))
+                thumbnail = pil_img.resize(new_size, Image.Resampling.LANCZOS)
+                buffered = BytesIO()
+                thumbnail.save(buffered, format="PNG")
+                return base64.b64encode(buffered.getvalue()).decode("utf-8")
+            except Exception as e:
+                logger.error(f"Failed to generate thumbnail: {e}")
+                return ""
+        return simple_thumbnail
 
 
 def _find_node_instance(node_id: str):
     try:
         from server import PromptServer
-        for node in PromptServer.instance.node_instances.values():
-            if getattr(node, "id", None) == node_id:
-                return node
+        # Try different attribute names for node instances
+        instance = PromptServer.instance
+        nodes = None
+
+        # Try common attribute names
+        if hasattr(instance, 'nodes'):
+            nodes = instance.nodes
+        elif hasattr(instance, 'node_instances'):
+            nodes = instance.node_instances
+        elif hasattr(instance, '_nodes'):
+            nodes = instance._nodes
+
+        if nodes:
+            for node in nodes.values():
+                if getattr(node, "id", None) == node_id:
+                    return node
     except Exception as exc:
         logger.error(f"Instance - Failed to find node {node_id}: {exc}")
     return None
@@ -49,7 +112,8 @@ async def handle_upload(request):
         else:
             logger.warning(f"Instance - No node instance found for {node_id}, uploaded files won't be tracked in created_files")
 
-        existing_files = XIS_ImageManager._list_node_image_files(node_dir)
+        list_node_image_files_func = _get_list_node_image_files()
+        existing_files = list_node_image_files_func(node_dir)
         upload_pattern = re.compile(r"upload_image_(\\d+)\\.png$")
         used_numbers = {
             int(match.group(1))
@@ -97,7 +161,8 @@ async def handle_upload(request):
                 except Exception as e:
                     logger.warning(f"Instance - Could not create tracking file for {img_filename}: {e}")
 
-                preview_b64 = XIS_ImageManager()._generate_base64_thumbnail(pil_img)
+                generate_thumbnail = _get_generate_base64_thumbnail()
+                preview_b64 = generate_thumbnail(pil_img)
                 images.append({
                     "filename": img_filename,
                     "storageFilename": img_filename,
@@ -206,7 +271,10 @@ async def handle_crop_image(request):
                 logger.warning(f"Instance - Failed to write tracking for cropped image {filename}: {exc}")
 
         content_hash = compute_content_hash(np.array(pil_img, dtype=np.uint8), f"crop:{filename}")
-        thumbnail_generator = node_instance._generate_base64_thumbnail if node_instance else XIS_ImageManager()._generate_base64_thumbnail
+        if node_instance:
+            thumbnail_generator = node_instance._generate_base64_thumbnail
+        else:
+            thumbnail_generator = _get_generate_base64_thumbnail()
         preview_b64 = thumbnail_generator(pil_img)
         if node_instance:
             node_instance.created_files.add(filename)
@@ -263,12 +331,7 @@ async def handle_set_ui_data(request):
             logger.error(f"Instance - Invalid set_ui_data request: node_id={node_id}, data={ui_data}")
             return web.json_response({"error": "Invalid node_id or data"}, status=400)
 
-        node_instance = None
-        from server import PromptServer
-        for node in PromptServer.instance.node_instances.values():
-            if node.id == node_id:
-                node_instance = node
-                break
+        node_instance = _find_node_instance(node_id)
         if not node_instance:
             logger.error(f"Instance - Node {node_id} not found")
             return web.json_response({"error": f"Node {node_id} not found"}, status=404)

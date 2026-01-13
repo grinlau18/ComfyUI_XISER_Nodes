@@ -15,6 +15,9 @@ from PIL import Image
 from torchvision import transforms
 from server import PromptServer
 
+# 清理函数将在需要时延迟导入
+HAS_CLEANUP_FUNCTIONS = None  # 初始化为None，在需要时检测
+
 try:
     import torch
 except ImportError:
@@ -133,7 +136,7 @@ if BIRENET_REPO_DIR not in sys.path:
 BIRENET_IMPORT_ERROR = None
 try:
     from birefnet_repo.models.birefnet import BiRefNet
-    from src.xiser_nodes.birefnet_repo.utils import check_state_dict
+    from birefnet_repo.utils import check_state_dict
 except ImportError as exc:  # pragma: no cover
     BiRefNet = None
     check_state_dict = None
@@ -380,5 +383,48 @@ try:
     PromptServer.instance.app.router.add_get("/xiser/font-files/{filename}", serve_font_file)
     PromptServer.instance.app.router.add_get("/xiser/color-presets", handle_color_presets)
     PromptServer.instance.app.router.add_post("/xiser/color-presets", handle_color_presets)
+
+    # 添加清理相关路由
+    async def handle_cleanup_cache(request):
+        """手动触发缓存清理"""
+        try:
+            # 延迟导入清理函数
+            from src.xiser_nodes.image_manager.storage import cleanup_all_xiser_cache
+            removed, freed = cleanup_all_xiser_cache()
+            return web.json_response({
+                "success": True,
+                "removed_files": removed,
+                "freed_bytes": freed,
+                "freed_mb": freed / (1024 * 1024)
+            })
+        except ImportError as e:
+            logger.error(f"Failed to import cleanup functions: {e}")
+            return web.json_response({"error": "Cleanup functions not available"}, status=500)
+        except Exception as e:
+            logger.error(f"Cache cleanup failed: {e}")
+            return web.json_response({"error": str(e)}, status=500)
+
+    PromptServer.instance.app.router.add_post("/xiser/cleanup-cache", handle_cleanup_cache)
+
+    # 服务器启动时执行一次清理
+    def startup_cache_cleanup():
+        """服务器启动时执行缓存清理"""
+        try:
+            # 延迟导入清理函数
+            from src.xiser_nodes.image_manager.storage import cleanup_all_xiser_cache
+            logger.info("Starting XISER cache cleanup on server startup...")
+            removed, freed = cleanup_all_xiser_cache()
+            if removed > 0:
+                logger.info(f"Startup cache cleanup completed: removed {removed} files, freed {freed / (1024 * 1024):.2f} MB")
+            else:
+                logger.info("Startup cache cleanup: no files to remove")
+        except ImportError as e:
+            logger.warning(f"Skipping startup cache cleanup: failed to import cleanup functions: {e}")
+        except Exception as e:
+            logger.error(f"Startup cache cleanup failed: {e}")
+
+    # 注册启动处理函数
+    PromptServer.instance.add_startup_handler(startup_cache_cleanup)
+
 except Exception as exc:
     logger.warning("Failed to register routes: %s", exc)

@@ -175,17 +175,21 @@ function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
 
 function snapToVerticalGrid(node, x) {
   const pointCount = getEffectivePointCount(node);
-  const verticalLines = Math.min(pointCount, 50);
+  const verticalLines = Math.max(1, Math.min(pointCount, 50));
 
   if (!node._cachedGrid || node._cachedGrid.verticalLines !== verticalLines) {
-    const gridSpacing = 1 / verticalLines;
+    const gridSpacing = 1 / (verticalLines - 1);
     const baseSnapDistance = 0.02;
     const densityFactor = Math.max(0.3, Math.min(1.0, 50 / verticalLines));
     const snapDistance = baseSnapDistance * densityFactor;
     const gridPositions = [];
 
-    for (let i = 0; i <= verticalLines; i++) {
-      gridPositions.push(i * gridSpacing);
+    if (verticalLines === 1) {
+      gridPositions.push(0);
+    } else {
+      for (let i = 0; i < verticalLines; i++) {
+        gridPositions.push(i * gridSpacing);
+      }
     }
 
     node._cachedGrid = {

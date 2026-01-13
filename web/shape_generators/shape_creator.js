@@ -10,7 +10,7 @@ import { getFontManager } from './text.js';
 
 // 描边宽度补偿因子 - 从主文件导入
 const STROKE_WIDTH_COMPENSATION = window.STROKE_WIDTH_COMPENSATION || 0.9;
-const CANVAS_SCALE_FACTOR = window.XISER_CANVAS_SCALE_FACTOR || 0.75;
+const CANVAS_SCALE_FACTOR = window.XISER_CANVAS_SCALE_FACTOR || 1.0;
 const BASE_REFERENCE_SIZE = 512; // 与前端 Konva 画布默认参考尺寸保持一致
 const BASE_SIZE_RATIO = 0.25; // 参考尺寸占比（半径）
 const FontManager = getFontManager();
@@ -27,7 +27,12 @@ export function getBaseShapeSize(properties = {}) {
     : BASE_REFERENCE_SIZE;
 
   // 维持现有体验：默认使用常见的512输出尺寸参考值
-  return baseReference * BASE_SIZE_RATIO;
+  // 由于画布从75%改为100%，需要调整形状尺寸以保持视觉效果
+  const sizeAdjustmentFactor = 1.0 / 0.75; // 从75%到100%的调整因子
+  const baseSize = baseReference * BASE_SIZE_RATIO * sizeAdjustmentFactor;
+
+  log.info(`getBaseShapeSize: reference=${baseReference}, ratio=${BASE_SIZE_RATIO}, adjustment=${sizeAdjustmentFactor}, result=${baseSize}`);
+  return baseSize;
 }
 
 function getStrokeRenderOptions(node, strokeColor, strokeWidth) {

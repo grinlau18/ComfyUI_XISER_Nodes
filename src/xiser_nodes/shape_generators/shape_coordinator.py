@@ -12,6 +12,7 @@ from .spiral_generator import SpiralGenerator
 from .sunburst_generator import SunburstGenerator
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
 
 
 class ShapeCoordinator:
@@ -29,20 +30,20 @@ class ShapeCoordinator:
 
         Args:
             shape_type: 要生成的形状类型
-            size: 形状大小（像素）
+            size: 形状半径（像素）- 前端传递的是基础半径
             params: 形状参数字典（例如角度、内半径）
 
         Returns:
             坐标点列表（相对于形状中心在0,0）
         """
-        # 使用绝对像素大小，不需要额外缩放（size已经是前端计算的绝对像素大小）
-        radius = size / 2
+        # size是前端传递的基础半径，直接使用
+        radius = size
         params = params or {}
 
         cx, cy = 0, 0  # 形状中心为 (0, 0)
         coords = []
 
-        logger.info(f"Generating {shape_type} coordinates with size: {size}, radius: {radius}, "
+        logger.info(f"Generating {shape_type} coordinates with radius: {radius}, "
                    f"sides/points: {params.get('sides') or params.get('points') or 'N/A'}, "
                    f"inner_radius: {params.get('inner_radius', 0)}, angle: {params.get('angle', 360)}")
 
@@ -117,17 +118,15 @@ class ShapeCoordinator:
             line_length = params.get("lineLength", 1.0)
             smoothness = 1.0  # 固定平滑度
 
-            # 由于螺旋图形使用0.25尺寸因子（其他图形使用0.5），宽度参数需要缩放
-            # 缩放因子 = 0.25 / 0.5 = 0.5
-            width_scale_factor = 0.5
-            # 同时考虑超采样因子（4倍）和额外的2.5倍补偿，确保宽度与前端一致
-            super_sampling_factor = 4
-            extra_compensation = 2.5
-            scaled_start_width = start_width * width_scale_factor * super_sampling_factor * extra_compensation
-            scaled_end_width = end_width * width_scale_factor * super_sampling_factor * extra_compensation
+            # 修复宽度参数：前端传递的是原始值，但后端期望的是乘以超采样因子和补偿因子的值
+            # 超采样因子 = 4，额外补偿 = 2.5，总共 = 10倍
+            width_scale_factor = 4 * 2.5  # 10倍
+            scaled_start_width = start_width * width_scale_factor
+            scaled_end_width = end_width * width_scale_factor
+            logger.info(f"Spiral width scaling: frontend start={start_width}, end={end_width} -> backend start={scaled_start_width:.1f}, end={scaled_end_width:.1f} (scale={width_scale_factor})")
 
             coords = self.spiral_generator.generate_spiral_with_width(
-                cx, cy, size,  # 使用size而不是radius，与前端的size保持一致
+                cx, cy, size,  # 使用与其他形状一致的size
                 scaled_start_width, scaled_end_width, turns, points_per_turn, smoothness, line_length
             )
 
@@ -137,14 +136,12 @@ class ShapeCoordinator:
             start_width = params.get("start_width", -1)
             end_width = params.get("end_width", 30)
 
-            # 由于太阳光芒图形使用0.25尺寸因子（其他图形使用0.5），宽度参数需要缩放
-            # 缩放因子 = 0.25 / 0.5 = 0.5
-            width_scale_factor = 0.5
-            # 同时考虑超采样因子（4倍）和额外的2.5倍补偿，确保宽度与前端一致
-            super_sampling_factor = 4
-            extra_compensation = 2.5
-            scaled_start_width = start_width * width_scale_factor * super_sampling_factor * extra_compensation
-            scaled_end_width = end_width * width_scale_factor * super_sampling_factor * extra_compensation
+            # 修复宽度参数：前端传递的是原始值，但后端期望的是乘以超采样因子和补偿因子的值
+            # 超采样因子 = 4，额外补偿 = 2.5，总共 = 10倍
+            width_scale_factor = 4 * 2.5  # 10倍
+            scaled_start_width = start_width * width_scale_factor
+            scaled_end_width = end_width * width_scale_factor
+            logger.info(f"Sunburst width scaling: frontend start={start_width}, end={end_width} -> backend start={scaled_start_width:.1f}, end={scaled_end_width:.1f} (scale={width_scale_factor})")
 
             trapezoids = self.sunburst_generator.generate_sunburst(cx, cy, size, ray_count, ray_length,
                                                                   scaled_start_width, scaled_end_width)
