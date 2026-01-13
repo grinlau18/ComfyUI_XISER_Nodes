@@ -186,6 +186,46 @@ def clean_old_files(node_id, created_files):
         except Exception as e:
             logger.error(f"Failed to delete cache file {info['path']}: {e}")
 
+    # 新增：检查并清理其他节点的旧目录
+    try:
+        cleanup_old_node_dirs()
+    except Exception as e:
+        logger.error(f"Failed to cleanup old node directories: {e}")
+
+
+def cleanup_old_node_dirs(max_dir_age=7 * 24 * 60 * 60):
+    """清理旧的节点目录（超过指定时间的目录）"""
+    import shutil
+    import time
+
+    base_dir = get_base_output_dir()
+    current_time = time.time()
+
+    if not os.path.exists(base_dir):
+        return
+
+    for item in os.listdir(base_dir):
+        if item.startswith("node_") and os.path.isdir(os.path.join(base_dir, item)):
+            dir_path = os.path.join(base_dir, item)
+            try:
+                dir_mtime = os.path.getmtime(dir_path)
+                if current_time - dir_mtime > max_dir_age:
+                    # 检查目录是否为空
+                    is_empty = True
+                    for root, dirs, files in os.walk(dir_path):
+                        if files:
+                            is_empty = False
+                            break
+
+                    if is_empty:
+                        shutil.rmtree(dir_path, ignore_errors=True)
+                        logger.info(f"Removed empty old node directory: {dir_path}")
+                    else:
+                        # 非空目录，记录但不删除
+                        logger.debug(f"Old node directory not empty, skipping: {dir_path}")
+            except Exception as e:
+                logger.error(f"Failed to process node directory {dir_path}: {e}")
+
 
 def resolve_node_dir(node_id):
     """Resolve node dir ensuring existence."""
@@ -197,7 +237,7 @@ def resolve_node_dir(node_id):
 
 
 def cleanup_all_xiser_cache():
-    """清理所有XISER相关的缓存目录"""
+    """清理所有XISER相关的缓存目录和文件"""
     import time
     import glob
     import shutil
@@ -221,6 +261,28 @@ def cleanup_all_xiser_cache():
 
     logger.info(f"Starting global XISER cache cleanup in {base_output_dir}")
 
+    # 第一步：清理根目录下的XISER相关文件
+    try:
+        for filename in os.listdir(base_output_dir):
+            if filename.startswith("xiser_") and filename.endswith(".png"):
+                file_path = os.path.join(base_output_dir, filename)
+                if os.path.isfile(file_path):
+                    try:
+                        stats = os.stat(file_path)
+                        age = current_time - stats.st_mtime
+
+                        if age > max_file_age:
+                            file_size = stats.st_size
+                            os.remove(file_path)
+                            total_removed += 1
+                            total_freed += file_size
+                            logger.info(f"Removed old root file: {file_path} (age: {age:.0f}s)")
+                    except Exception as e:
+                        logger.warning(f"Failed to process root file {file_path}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to cleanup root files: {e}")
+
+    # 第二步：清理XISER相关目录
     for pattern in xiser_patterns:
         # 查找匹配的目录
         dir_pattern = os.path.join(base_output_dir, pattern)

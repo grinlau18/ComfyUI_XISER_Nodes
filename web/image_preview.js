@@ -569,18 +569,6 @@ function attachToNode(node) {
             item.style.height = `${itemHeight}px`;
         });
 
-        // 调试信息（开发时可用，取消注释以下代码启用）
-        console.log('网格布局优化:', {
-            width: Math.round(containerWidth),
-            height: Math.round(containerHeight),
-            aspectRatio: (containerWidth / containerHeight).toFixed(2),
-            columns: layout.columns,
-            rows: layout.rows,
-            itemWidth: Math.round(itemWidth),
-            itemHeight: Math.round(itemHeight),
-            fillRate: (layout.fillRate * 100).toFixed(1) + '%',
-            imageCount: state.images.length
-        });
     }
 
     function initAdaptiveGrid() {

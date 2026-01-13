@@ -1,6 +1,5 @@
 import { app } from "/scripts/app.js";
 
-const DEBUG = false; // 调试模式开关
 const MAX_PAIRS = 20; // 最大支持20对image/mask输入
 
 app.registerExtension({
