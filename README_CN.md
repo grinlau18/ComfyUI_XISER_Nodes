@@ -8,6 +8,18 @@
 
 </div>
 
+## 📢 最新更新 (2026年1月)
+
+- **[项目更新说明](UPDATE_SUMMARY_2026.md)** - 完整的更新内容和迁移指南
+
+### 2026年1月更新
+✅ **V3架构迁移** - 后端全面采用ComfyUI最新API标准
+✅ **新增3个核心节点** - `image preview`、`dynamic pack images`、`dynamic image inputs`
+✅ **删除冗余节点** - 移除与`image manager`功能重叠的`reorder images`节点
+✅ **性能优化** - 改进节点交互和系统性能
+
+---
+
 欢迎使用 **ComfyUI_XISER_Nodes**，这是一个为 [ComfyUI](https://github.com/comfyanonymous/ComfyUI) 开发的综合性自定义节点包。该扩展提供先进的视觉编辑功能，包括交互式多层画布实时变换、专业的PSD文件导入与图层提取、多样化的几何形状生成与抗锯齿渲染，以及复杂的图像处理工具。支持批量形状创建、蒙版操作、提示词管理、数据流优化和工作流增强工具，为高效的AI图像生成和编辑工作流提供强大支持。
 
 ## 安装

@@ -8,6 +8,18 @@
 
 </div>
 
+## 📢 Latest Updates (January 2026)
+
+- **[Update Summary](UPDATE_SUMMARY_2026.md)** - Complete update content and migration guide
+
+### January 2026 Updates
+✅ **V3 Architecture Migration** - Backend fully adopts ComfyUI's latest API standard
+✅ **3 New Core Nodes** - `image preview`, `dynamic pack images`, `dynamic image inputs`
+✅ **Redundant Node Removal** - Removed `reorder images` node overlapping with `image manager` functionality
+✅ **Performance Optimization** - Improved node interaction and system performance
+
+---
+
 Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This extension provides advanced visual editing capabilities including interactive multi-layer canvas with real-time transformations, professional PSD file import with layer extraction, versatile geometric shape generation with anti-aliased rendering, and sophisticated image processing tools. Features batch shape creation, mask manipulation, prompt management, data flow optimization, and workflow enhancement utilities for efficient AI image generation and editing workflows.
 
 ---
