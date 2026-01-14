@@ -13,81 +13,110 @@ from .providers_qwen import (
     QwenChatProvider,
     QwenFlashProvider,
     QwenImageCreateProvider,
-    QwenImagePlusProvider,
-    QwenMTImageProvider,
+    QwenImageMaxProvider,
     QwenVLFlashProvider,
     QwenVLPlusProvider,
     QwenVLProvider,
+)
+from .providers_wan import (
+    WanImageProvider,
 )
 
 # Schema describing provider-specific capabilities and UI hints.
 PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
     "deepseek": {
-        "capabilities": {"text": True, "vision": True, "image_out": False},
-        "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "capabilities": {"text": True, "vision": False, "image_out": False},
+        "requirements": {"instruction": True},
+        "enums": {
+            "image_size": [""],  # 纯文本模型，只允许空值
+        },
     },
     "qwen": {
         "capabilities": {"text": True, "vision": True, "image_out": False},
         "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 视觉模型但不生成图像，只允许空值
+        },
     },
     "qwen-flash": {
         "capabilities": {"text": True, "vision": False, "image_out": False},
         "requirements": {"instruction": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 纯文本模型，只允许空值
+        },
     },
     "qwen_vl": {
         "capabilities": {"text": True, "vision": True, "image_out": False},
         "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 视觉语言模型，只允许空值
+        },
     },
     "qwen-vl-plus": {
         "capabilities": {"text": True, "vision": True, "image_out": False},
         "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 视觉语言模型，只允许空值
+        },
     },
     "qwen3-vl-flash": {
         "capabilities": {"text": True, "vision": True, "image_out": False},
         "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
-    },
-    "qwen-mt-image": {
-        "capabilities": {"text": True, "vision": True, "image_out": True},
-        "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 视觉语言模型，只允许空值
+        },
     },
     "moonshot": {
         "capabilities": {"text": True, "vision": False, "image_out": False},
         "requirements": {"instruction": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 纯文本模型，只允许空值
+        },
     },
     "moonshot_vision": {
         "capabilities": {"text": True, "vision": True, "image_out": False},
         "requirements": {"instruction": True, "image_requires_text": True},
-        "enums": {},
+        "enums": {
+            "image_size": [""],  # 视觉模型但不生成图像，只允许空值
+        },
     },
     "qwen-image-edit-plus": {
         "capabilities": {"text": True, "vision": False, "image_out": True},
         "requirements": {"instruction": True, "image_required": True},
         "enums": {
-            "image_size": ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024x1024", "512x512", "2048x2048"],
+            "image_size": ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
         },  # "" means auto
     },
-    "qwen_image_plus": {
+    "qwen-image-max": {
         "capabilities": {"text": True, "vision": False, "image_out": True},
         "requirements": {"instruction": True},
         "enums": {
-            "image_size": ["1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"],
+            "image_size": ["", "1664*928", "1472*1104", "1328*1328", "1104*1472", "928*1664"],
         },
+    },
+    "wan2.6-image": {
+        "capabilities": {"text": True, "vision": True, "image_out": True},
+        "requirements": {"instruction": True, "image_requires_text": True},
+        "enums": {
+            "image_size": ["", "1280*1280", "1024*1024", "512*512", "2048*2048"],
+            "mode": ["image_edit", "interleave"],
+        },
+        # Note: image_edit mode requires at least one image (validated in provider)
+        # interleave mode can generate images without input images
     },
 }
 
 
 def _validate_inputs(provider: str, instruction: str, images: List[torch.Tensor], overrides: Dict[str, Any]) -> str | None:
     schema = PROVIDER_SCHEMA.get(provider, {})
+    caps = schema.get("capabilities", {})
     req = schema.get("requirements", {})
     enums = schema.get("enums", {})
+
+    # 检查provider是否支持图像输入
+    # DeepSeek提供者会优雅降级处理图片输入，所以跳过验证
+    if images and not caps.get("vision", False) and provider != "deepseek":
+        return f"Provider '{provider}' does not support image inputs."
 
     if req.get("instruction") and not instruction.strip():
         return "Instruction is required."
@@ -133,11 +162,11 @@ def build_default_registry() -> LLMProviderRegistry:
     registry.register(QwenVLProvider())
     registry.register(QwenVLPlusProvider())
     registry.register(QwenVLFlashProvider())
-    registry.register(QwenMTImageProvider())
     registry.register(MoonshotChatProvider())
     registry.register(MoonshotVisionProvider())
     registry.register(QwenImageCreateProvider())
-    registry.register(QwenImagePlusProvider())
+    registry.register(QwenImageMaxProvider())
+    registry.register(WanImageProvider())
     return registry
 
 

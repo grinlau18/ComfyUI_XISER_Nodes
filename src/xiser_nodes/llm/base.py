@@ -138,13 +138,18 @@ class BaseLLMProvider(ABC):
         headers.update(self.config.extra_headers)
         return headers
 
-    def invoke(self, user_prompt: str, image_payloads: List[str], api_key: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def invoke(self, user_prompt: str, image_payloads: List[str], api_key: str, overrides: Optional[Dict[str, Any]] = None, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         if not api_key:
             raise ValueError("API Key is required")
         overrides = overrides or {}
         endpoint, payload, extra_headers = self.build_payload(user_prompt, image_payloads, overrides)
         headers = self._build_headers(api_key)
         headers.update(extra_headers)
+
+        # 进度：连接阶段
+        if progress_callback:
+            progress_callback("连接", 0.3)
+
         response = requests.post(
             endpoint,
             headers=headers,
@@ -152,6 +157,11 @@ class BaseLLMProvider(ABC):
             timeout=self.config.timeout,
         )
         response.raise_for_status()
+
+        # 进度：连接完成
+        if progress_callback:
+            progress_callback("连接", 1.0)
+
         return response.json()
 
     @abstractmethod

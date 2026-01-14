@@ -423,8 +423,8 @@ try:
         except Exception as e:
             logger.error(f"Startup cache cleanup failed: {e}")
 
-    # 注册启动处理函数
-    PromptServer.instance.add_startup_handler(startup_cache_cleanup)
+    # 注册启动处理函数（某些ComfyUI版本可能不支持）
+    # PromptServer.instance.add_startup_handler(startup_cache_cleanup)
 
 except Exception as exc:
     logger.warning("Failed to register routes: %s", exc)

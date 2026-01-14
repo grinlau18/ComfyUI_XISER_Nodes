@@ -354,6 +354,6 @@ def register_routes():
             web.post('/delete/xis_image_manager', handle_delete),
             web.post('/set_ui_data/xis_image_manager', handle_set_ui_data),
         ])
-        logger.info("Registered XIS_ImageManager endpoints")
+        # logger.info("Registered XIS_ImageManager endpoints")  # 简化日志，不显示此信息
     except Exception as e:
         logger.error(f"Failed to register endpoints: {e}")

@@ -16,11 +16,12 @@
 ✅ **V3 Architecture Migration** - Backend fully adopts ComfyUI's latest API standard
 ✅ **3 New Core Nodes** - `image preview`, `dynamic pack images`, `dynamic image inputs`
 ✅ **Redundant Node Removal** - Removed `reorder images` node overlapping with `image manager` functionality
+✅ **LLM Orchestrator Enhancement** - Added Wan 2.6 model support with image editing and interleave mode
 ✅ **Performance Optimization** - Improved node interaction and system performance
 
 ---
 
-Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package for [ComfyUI](https://github.com/comfyanonymous/ComfyUI). This extension provides advanced visual editing capabilities including interactive multi-layer canvas with real-time transformations, professional PSD file import with layer extraction, versatile geometric shape generation with anti-aliased rendering, and sophisticated image processing tools. Features batch shape creation, mask manipulation, prompt management, data flow optimization, and workflow enhancement utilities for efficient AI image generation and editing workflows.
+Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality.
 
 ---
 
@@ -79,18 +80,31 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 ![XIS_Canvas Layered Typesetting Workflow](img/XIS_Canvas_3.jpeg)
 
 ### 🤖 LLM Automation Bridge (XIS_LLMOrchestrator)
-- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (currently supports DeepSeek, Qwen series, Kimi models, with more to come) and emit the reply as a STRING output for downstream nodes.
-- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and optional vision inputs (`image`, `pack_images`).
+- **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (currently supports DeepSeek, Qwen series, Kimi models, Wan 2.6, with more to come) and emit the reply as a STRING output for downstream nodes.
+- **Inputs**:
+  - **Core Parameters** (always visible): Provider selection, instruction text, seed, image size, mode (for wan2.6)
+  - **Advanced Parameters** (collapsible): Temperature, top-p, max tokens, negative prompt, watermark, prompt extend, etc.
+  - **Vision Inputs**: Optional `image` (single) and `pack_images` (multiple) inputs
+- **UI Optimization**:
+  - **Collapsible Advanced Settings**: Infrequently used parameters are hidden by default, click "Show Advanced Settings" to expand
+  - **Clean Interface**: Removed unused style and quality parameters for a cleaner user experience
+  - **wan2.6 Mode Optimization**: Mode control always visible, watermark and prompt_extend moved to advanced settings
 - **Attachment Processing**: Automatically converts all input images to PNG Base64 strings, truncating to the model's image limit for convenient multi-image requests.
 - **Extensibility**: Providers register via lightweight config + interface, allowing new models or custom inference endpoints to be added without modifying node core logic.
-- **Vision Support**: When `image`/`pack_images` inputs are connected, the node automatically switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), using `input_text` + `input_image` structure to meet official validation rules.
+- **Vision Input Support**:
+  - **Qwen Series Vision Models**: Support image input and visual understanding, but do not generate images
+  - **Qwen Image Generation Models**: Support image input and generate new images
+  - **Wan 2.6 Image Model**: Support image editing and interleave mode
+  - **DeepSeek Models**: Currently do not support image input. If images are connected, they will be automatically ignored with a warning message added to the prompt.
+- **Wan 2.6 Image Editing**: New Wan 2.6 model support provides professional image editing capabilities with advanced parameters including image size adjustment, prompt extension, watermark control, and more.
+- **Interleave Mode**: Wan 2.6 model supports interleave mode, allowing alternating text and image content processing within a single request for more flexible creative workflows.
 - **API Key Management**:
   - **Secure Storage**: API Keys are encrypted and stored in the `ComfyUI/user/API_keys/` directory, never saved in workflow or project files
   - **Key Manager**: Click the "API key management" button on the node to open the key management interface
   - **Profiles**: Support for multiple API Key profiles, each node can independently select a profile
   - **Usage Flow**:
     1. Click "API key management" button to open the key manager
-    2. Enter a profile name in "Profile name" and your API Key in "API Key"
+    2. Enter an API name in "API Name" and your API Key in "API Key"
     3. Click "Save" to store the encrypted API Key
     4. Select the desired profile from the "Select API key" dropdown
     5. The configuration will be automatically applied to the current node

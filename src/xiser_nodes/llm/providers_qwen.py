@@ -199,136 +199,6 @@ class QwenVLFlashProvider(QwenVLProvider):
         )
 
 
-class QwenMTImageProvider(BaseLLMProvider):
-    """Qwen MT Image cross-modal provider (text + image, returns text and images)."""
-
-    def __init__(self):
-        super().__init__(
-            LLMProviderConfig(
-                name="qwen-mt-image",
-                label="Qwen MT Image",
-                endpoint="https://bailian.console.aliyun.com/api/v1/model-service/models/qwen-mt-image/invoke",
-                model="qwen-mt-image",
-                default_system_prompt="",
-                timeout=120,
-                max_images=4,
-                default_params={"temperature": 0.5, "top_p": 0.8, "max_tokens": 1000},
-                extra_headers={},
-            )
-        )
-
-    def build_payload(
-        self, user_prompt: str, image_payloads: List[str], overrides: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
-        if not user_prompt.strip():
-            raise ValueError("Instruction cannot be empty for qwen-mt-image.")
-
-        model = overrides.get("model", self.config.model)
-        temperature = overrides.get("temperature", self.config.default_params.get("temperature", 0.5))
-        top_p = overrides.get("top_p", self.config.default_params.get("top_p", 0.8))
-        max_tokens = overrides.get("max_tokens", self.config.default_params.get("max_tokens"))
-
-        content: List[Dict[str, Any]] = [{"type": "text", "text": user_prompt}]
-        for encoded in image_payloads[: self.config.max_images]:
-            content.append({"type": "image_url", "image_url": _image_to_data_url_from_b64(encoded)})
-
-        payload: Dict[str, Any] = {
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": content,
-                }
-            ],
-            "temperature": temperature,
-            "top_p": top_p,
-        }
-        if max_tokens:
-            payload["max_tokens"] = int(max_tokens)
-
-        headers = {"Content-Type": "application/json"}
-        return self.config.endpoint, payload, headers
-
-    def extract_text(self, response: Dict[str, Any]) -> str:
-        if not isinstance(response, dict):
-            return ""
-        if response.get("code") not in (None, 200):
-            return f"Qwen MT Image code={response.get('code')} msg={response.get('message', '')}".strip()
-        data = response.get("data") if isinstance(response.get("data"), dict) else response
-        choices = data.get("choices") if isinstance(data, dict) else None
-        if not choices and isinstance(data, dict):
-            output = data.get("output")
-            if isinstance(output, dict):
-                choices = output.get("choices")
-        if not choices:
-            return "Qwen MT Image did not return any choices."
-
-        try:
-            content = choices[0].get("message", {}).get("content")
-        except Exception:
-            content = None
-
-        texts: List[str] = []
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict):
-                    if part.get("type") == "text" and isinstance(part.get("text"), str):
-                        texts.append(part["text"])
-                    elif isinstance(part.get("text"), str):
-                        texts.append(part["text"])
-                elif isinstance(part, str) and not part.startswith("http"):
-                    texts.append(part)
-        elif isinstance(content, str) and not content.startswith("http"):
-            texts.append(content)
-        return "\n".join(filter(None, texts))
-
-    def extract_images(self, response: Dict[str, Any]) -> List[torch.Tensor]:
-        urls = self.extract_image_urls(response)
-        results: List[torch.Tensor] = []
-        for url in urls:
-            self._fetch_and_append(url, results)
-        return results
-
-    def extract_image_urls(self, response: Dict[str, Any]) -> List[str]:
-        urls: List[str] = []
-        data = response.get("data") if isinstance(response, dict) else {}
-        choices = data.get("choices") if isinstance(data, dict) else None
-        if not choices and isinstance(response, dict):
-            output = response.get("output")
-            if isinstance(output, dict):
-                choices = output.get("choices")
-        if not choices:
-            return urls
-
-        try:
-            content = choices[0].get("message", {}).get("content")
-        except Exception:
-            content = None
-
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict):
-                    url_val: Optional[str] = None
-                    if part.get("type") == "image_url":
-                        if isinstance(part.get("image_url"), str):
-                            url_val = part.get("image_url")
-                        elif isinstance(part.get("image_url"), dict):
-                            url_val = part["image_url"].get("url") or part["image_url"].get("image_url")
-                    elif isinstance(part.get("image"), str):
-                        url_val = part.get("image")
-                    if isinstance(url_val, str) and url_val:
-                        urls.append(url_val)
-                elif isinstance(part, str) and part.startswith("http"):
-                    urls.append(part)
-        elif isinstance(content, str) and content.startswith("http"):
-            urls.append(content)
-        return urls
-
-    def _fetch_and_append(self, url: str, results: List[torch.Tensor]):
-        tensor = _download_image_to_tensor(url)
-        if tensor is not None:
-            results.append(tensor)
-        return results
 
 
 class QwenImageCreateProvider(BaseLLMProvider):
@@ -458,18 +328,20 @@ class QwenImageCreateProvider(BaseLLMProvider):
         return results
 
 
-class QwenImagePlusProvider(BaseLLMProvider):
-    """Qwen image-plus generation via compatible chat API."""
+
+
+class QwenImageMaxProvider(BaseLLMProvider):
+    """Qwen image-max generation via compatible chat API (high realism, low AI trace, fine text rendering)."""
 
     def __init__(self):
         super().__init__(
             LLMProviderConfig(
-                name="qwen_image_plus",
-                label="Qwen Image Plus",
+                name="qwen-image-max",
+                label="Qwen Image Max",
                 endpoint="https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-                model="qwen-image-plus",
+                model="qwen-image-max",
                 default_system_prompt="",
-                timeout=120,
+                timeout=180,  # Longer timeout for high-quality generation
                 max_images=0,
                 default_params={},
             )
@@ -480,16 +352,27 @@ class QwenImagePlusProvider(BaseLLMProvider):
     ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
         if not user_prompt.strip():
             raise ValueError("Instruction cannot be empty for image creation.")
+
+        # Validate prompt length (qwen-image-max supports up to 800 characters)
+        if len(user_prompt) > 800:
+            raise ValueError(f"Prompt too long ({len(user_prompt)} chars). qwen-image-max supports up to 800 characters.")
+
         model = overrides.get("model", self.config.model)
-        size_raw = str(overrides.get("image_size", "1328*1328"))
+        size_raw = str(overrides.get("image_size", "1664*928"))
         size = size_raw.replace("x", "*").replace("X", "*").strip()
-        allowed_sizes = {"1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"}
+
+        # qwen-image-max specific allowed sizes
+        allowed_sizes = {"1664*928", "1472*1104", "1328*1328", "1104*1472", "928*1664"}
         if size not in allowed_sizes:
-            size = "1328*1328"
+            size = "1664*928"  # Default size for qwen-image-max
+
         negative_prompt = overrides.get("negative_prompt", "")
         watermark = bool(overrides.get("watermark", False))
-        n_images = int(overrides.get("n_images", 1) or 1)
-        n_images = max(1, min(n_images, 4))
+        prompt_extend = bool(overrides.get("prompt_extend", True))
+        seed = overrides.get("seed")
+
+        # qwen-image-max always generates 1 image
+        n_images = 1
 
         payload: Dict[str, Any] = {
             "model": model,
@@ -507,9 +390,20 @@ class QwenImagePlusProvider(BaseLLMProvider):
                 "size": size,
                 "negative_prompt": negative_prompt,
                 "watermark": watermark,
+                "prompt_extend": prompt_extend,
                 "n": n_images,
             },
         }
+
+        # Add seed if provided (0~2147483647)
+        if seed is not None:
+            try:
+                seed_int = int(seed)
+                if 0 <= seed_int <= 2147483647:
+                    payload["parameters"]["seed"] = seed_int
+            except (ValueError, TypeError):
+                pass  # Ignore invalid seed values
+
         headers = {"Content-Type": "application/json"}
         return self.config.endpoint, payload, headers
 
@@ -517,15 +411,15 @@ class QwenImagePlusProvider(BaseLLMProvider):
         if isinstance(response, dict):
             if "error" in response:
                 err = response.get("error", {})
-                return f"Qwen image-plus error: {err.get('code', '')} {err.get('message', '')}".strip()
+                return f"Qwen image-max error: {err.get('code', '')} {err.get('message', '')}".strip()
             if response.get("code") not in (None, 200):
-                return f"Qwen image-plus code={response.get('code')} msg={response.get('message', '')}".strip()
+                return f"Qwen image-max code={response.get('code')} msg={response.get('message', '')}".strip()
             out = response.get("output", {}) if isinstance(response.get("output", {}), dict) else {}
             choices = out.get("choices")
             if choices:
                 rid = response.get("request_id", "")
-                return f"Qwen image-plus success. request_id={rid or 'unknown'}".strip()
-            return f"Qwen image-plus: no choices in response. raw={response}"
+                return f"Qwen image-max success. request_id={rid or 'unknown'}".strip()
+            return f"Qwen image-max: no choices in response. raw={response}"
         return ""
 
     def extract_images(self, response: Dict[str, Any]) -> List[torch.Tensor]:
@@ -562,8 +456,9 @@ class QwenImagePlusProvider(BaseLLMProvider):
                 for part in content:
                     if not isinstance(part, dict):
                         continue
-                    if "image" in part and isinstance(part.get("image"), str):
-                        urls.append(part.get("image"))
+                    image_url = part.get("image")
+                    if isinstance(image_url, str):
+                        urls.append(image_url)
             elif isinstance(content, str) and content.startswith("http"):
                 urls.append(content)
         return urls
@@ -581,7 +476,6 @@ __all__ = [
     "QwenVLProvider",
     "QwenVLPlusProvider",
     "QwenVLFlashProvider",
-    "QwenMTImageProvider",
     "QwenImageCreateProvider",
-    "QwenImagePlusProvider",
+    "QwenImageMaxProvider",
 ]
