@@ -18,15 +18,49 @@ app.registerExtension({
         const storageKey = "xiser.llm.profileMap"; // nodeId -> profile
         const providerHints = {
             "qwen-image-edit-plus": {
+                sizes: ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
                 hasImageParams: true,
             },
-            qwen_image_plus: {
-                sizes: ["1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"],
+            "qwen-image-max": {
+                sizes: ["", "1664*928", "1472*1104", "1328*1328", "1104*1472", "928*1664"],
                 hasImageParams: true,
             },
             "wan2.6-image": {
-                sizes: ["1280*1280", "1024*1024", "512*512", "2048*2048"],
+                sizes: ["", "1280*1280", "1024*1024", "512*512", "2048*2048"],
                 hasImageParams: true,
+            },
+            // 为其他提供者添加默认尺寸支持
+            "deepseek": {
+                sizes: [""],  // 视觉模型但不生成图像
+                hasImageParams: false,
+            },
+            "qwen": {
+                sizes: [""],  // 视觉模型但不生成图像
+                hasImageParams: false,
+            },
+            "qwen-flash": {
+                sizes: [""],  // 纯文本模型
+                hasImageParams: false,
+            },
+            "qwen_vl": {
+                sizes: [""],  // 视觉语言模型
+                hasImageParams: false,
+            },
+            "qwen-vl-plus": {
+                sizes: [""],  // 视觉语言模型
+                hasImageParams: false,
+            },
+            "qwen3-vl-flash": {
+                sizes: [""],  // 视觉语言模型
+                hasImageParams: false,
+            },
+            "moonshot": {
+                sizes: [""],  // 纯文本模型
+                hasImageParams: false,
+            },
+            "moonshot_vision": {
+                sizes: [""],  // 视觉模型但不生成图像
+                hasImageParams: false,
             },
         };
 
@@ -74,8 +108,11 @@ app.registerExtension({
                 const origModeCb = modeWidget.callback;
                 modeWidget.callback = function() {
                     if (origModeCb) origModeCb.apply(this, arguments);
-                    if (readProvider() === "wan2.6-image") {
+                    const provider = readProvider();
+                    if (provider === "wan2.6-image") {
                         applyModeVisibility(node);
+                    } else if (provider === "deepseek") {
+                        // DeepSeek不再使用mode控件，enable_thinking控件直接控制模式
                     }
                 };
             }
@@ -83,10 +120,15 @@ app.registerExtension({
             const origPropChanged = node.onPropertyChanged;
             node.onPropertyChanged = function(name, value) {
                 if (origPropChanged) origPropChanged.call(this, name, value);
+                const provider = readProvider();
                 if (name === "provider") {
                     applyProvider(node, value);
-                } else if (name === "mode" && readProvider() === "wan2.6-image") {
-                    applyModeVisibility(node);
+                } else if (name === "mode") {
+                    if (provider === "wan2.6-image") {
+                        applyModeVisibility(node);
+                    } else if (provider === "deepseek") {
+                        // DeepSeek不再使用mode控件，enable_thinking控件直接控制模式
+                    }
                 }
             };
         };
@@ -101,20 +143,66 @@ app.registerExtension({
                     w.hidden = false;
                     w.disabled = !needImageParams;
                     // Update allowed sizes if widget is image_size
-                    if (w.name === "image_size" && hint.sizes) {
-                        w.options = w.options || {};
-                        w.options.values = hint.sizes;
-                        if (!hint.sizes.includes(w.value)) {
-                            w.value = hint.sizes[0];
+                    if (w.name === "image_size") {
+                        if (hint.sizes) {
+                            w.options = w.options || {};
+                            w.options.values = hint.sizes;
+
+                            // 对于视觉模型（hasImageParams: true），需要特殊处理空字符串
+                            if (needImageParams) {
+                                // 视觉模型：优先使用非空的尺寸值
+                                const nonEmptySizes = hint.sizes.filter(size => size && size !== "");
+
+                                if (!w.value || w.value === "") {
+                                    // 当前值是空字符串，选择第一个非空的尺寸值
+                                    if (nonEmptySizes.length > 0) {
+                                        w.value = nonEmptySizes[0];
+                                    } else {
+                                        // 如果没有非空尺寸，使用第一个值（可能是空字符串）
+                                        w.value = hint.sizes[0];
+                                    }
+                                } else if (!hint.sizes.includes(w.value)) {
+                                    // 当前值存在但不在允许列表中
+                                    if (nonEmptySizes.length > 0) {
+                                        w.value = nonEmptySizes[0];  // 使用第一个非空尺寸
+                                    } else {
+                                        w.value = hint.sizes[0];  // 使用第一个值
+                                    }
+                                }
+                            } else {
+                                // 非视觉模型：如果当前值不在允许列表中，重置为第一个值
+                                if (!hint.sizes.includes(w.value)) {
+                                    w.value = hint.sizes[0];
+                                }
+                            }
+                        } else {
+                            // 如果没有指定尺寸，使用节点定义中的默认选项
+                            // 但隐藏控件，因为该提供者不支持图像参数
+                            w.hidden = true;
+                            w.disabled = true;
                         }
                     }
-                    // Special handling for wan2.6-image mode parameter
-                    if (w.name === "mode" && providerVal === "wan2.6-image") {
-                        w.hidden = false;
-                        w.disabled = false;
-                    } else if (w.name === "mode") {
-                        w.hidden = true;
-                        w.disabled = true;
+                    // Special handling for mode parameter
+                    if (w.name === "mode") {
+                        if (providerVal === "wan2.6-image") {
+                            w.hidden = false;
+                            w.disabled = false;
+                            // 设置wan2.6的选项
+                            if (w.options) {
+                                w.options.values = ["image_edit", "interleave"];
+                            }
+                            // 确保当前值有效
+                            if (w.value && !["image_edit", "interleave"].includes(w.value)) {
+                                w.value = "image_edit";
+                            }
+                        } else if (providerVal === "deepseek") {
+                            // DeepSeek使用enable_thinking控件切换对话和思考模式，隐藏mode控件
+                            w.hidden = true;
+                            w.disabled = true;
+                        } else {
+                            w.hidden = true;
+                            w.disabled = true;
+                        }
                     }
                 }
             });
@@ -122,6 +210,11 @@ app.registerExtension({
             // Apply mode-specific visibility for wan2.6-image
             if (providerVal === "wan2.6-image") {
                 applyModeVisibility(node);
+            }
+
+            // Ensure DeepSeek thinking controls are visible
+            if (providerVal === "deepseek") {
+                applyDeepSeekMode(node);
             }
 
             app.graph?.setDirtyCanvas(true, true);
@@ -146,6 +239,19 @@ app.registerExtension({
                 if (w.name === "max_images") {
                     w.hidden = !isInterleaveMode;
                     w.disabled = !isInterleaveMode;
+                }
+            });
+        };
+
+        const applyDeepSeekMode = (node) => {
+            // DeepSeek不再使用mode控件，enable_thinking控件直接控制模式
+            // 这个函数现在只确保enable_thinking和thinking_budget控件可见
+            (node.widgets || []).forEach(w => {
+                if (!w || !w.name) return;
+
+                if (w.name === "enable_thinking" || w.name === "thinking_budget") {
+                    w.hidden = false;
+                    w.disabled = false;
                 }
             });
         };

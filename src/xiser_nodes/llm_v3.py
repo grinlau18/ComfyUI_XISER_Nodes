@@ -1,13 +1,19 @@
 """LLM Orchestrator Node - V3版本"""
 
-from comfy_api.v0_0_2 import io, ui
+from comfy_api.v0_0_2 import io, ui, ComfyAPI, ComfyAPISync
 from typing import Dict, List, Optional, Any
 import torch
 import requests
+import time
+from comfy_execution.utils import get_executing_context
 
 from .llm.base import _gather_images, _image_to_base64
 from .llm.registry import _validate_inputs, build_default_registry
 from .key_store import KEY_STORE
+
+# 创建API实例用于进度更新
+api = ComfyAPI()
+api_sync = ComfyAPISync()
 
 REGISTRY = build_default_registry()
 
@@ -17,6 +23,38 @@ def _dummy_image_tensor():
     return torch.zeros((1, 1, 1, 3), dtype=torch.float32)
 
 
+def _update_progress(stage: str, progress: float, total_stages: int = 8, node_id: str = ""):
+    """更新进度显示
+
+    Args:
+        stage: 当前阶段描述
+        progress: 当前阶段进度 (0-1)
+        total_stages: 总阶段数
+        node_id: 节点ID
+    """
+    try:
+        # 阶段映射到索引
+        stage_index = {
+            "准备": 0, "验证": 1, "连接": 2, "处理": 3,
+            "轮询": 4, "流式": 5, "解析": 6, "完成": 7
+        }.get(stage, 0)
+
+        # 计算整体进度
+        base_progress = (stage_index / total_stages) * 100
+        stage_progress = progress * (100 / total_stages)
+        total_progress = min(base_progress + stage_progress, 100)
+
+        # 更新进度
+        api_sync.execution.set_progress(
+            value=total_progress,
+            max_value=100.0,
+            node_id=node_id
+        )
+    except Exception as e:
+        # 进度更新失败不影响主要功能
+        pass
+
+
 class XIS_LLMOrchestratorV3(io.ComfyNode):
     """LLM编排器节点 - V3版本"""
 
@@ -24,9 +62,6 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
         choices = REGISTRY.list_choices() or ["deepseek"]
-        # 向后兼容的别名
-        if "qwen_image" not in choices:
-            choices = choices + ["qwen_image"]
 
         return io.Schema(
             node_id="XIS_LLMOrchestrator",
@@ -36,7 +71,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 
 主要功能：
 • 支持多种LLM提供者：DeepSeek、Qwen系列、Moonshot、Wan2.6等
-• 图像生成和编辑：支持qwen-image-edit-plus、qwen_image_plus、wan2.6-image等视觉模型
+• 图像生成和编辑：支持qwen-image-edit-plus、qwen-image-max、wan2.6-image等视觉模型
 • 图文混排：wan2.6-image支持interleave模式，可生成图文混合内容
 • 多尺寸支持：提供所有视觉模型支持的图像尺寸预设
 • 固定种子：默认使用固定种子(42)确保可重复性
@@ -197,10 +232,10 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "mode",
-                    options=["image_edit", "interleave"],
+                    options=["image_edit", "interleave", "chat", "reasoner"],  # 包含所有可能的选项
                     default="image_edit",
                     optional=True,
-                    tooltip="模式选择：image_edit（图像编辑）或interleave（图文混排）"
+                    tooltip="模式选择：wan2.6-image支持image_edit/interleave，DeepSeek支持chat/reasoner"
                 ),
             ],
             outputs=[
@@ -233,14 +268,18 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         quality: str = "standard",
         watermark: bool = False,
         prompt_extend: bool = True,
-        mode: str = "image_edit",
+        mode: str = "chat",
     ) -> io.NodeOutput:
         """执行LLM调用"""
-        # 向后兼容的别名
-        if provider == "qwen_image":
-            provider = "qwen-image-edit-plus"
+        # 获取节点ID用于进度更新
+        executing_context = get_executing_context()
+        node_id = executing_context.node_id if executing_context else ""
+
 
         try:
+            # 进度：准备阶段
+            _update_progress("准备", 0.1, node_id=node_id)
+
             provider_impl = REGISTRY.get(provider)
         except KeyError:
             return io.NodeOutput(
@@ -255,6 +294,9 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 [_dummy_image_tensor()],                                           # images
                 []                                                                 # image_urls
             )
+
+        # 进度：验证阶段
+        _update_progress("验证", 0.3, node_id=node_id)
 
         # 获取API密钥
         profile_clean = (key_profile or "").strip()
@@ -274,6 +316,9 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 处理种子
         resolved_seed = seed if (seed is not None and seed >= 0) else None
 
+        # 进度：数据处理阶段
+        _update_progress("处理", 0.1, node_id=node_id)
+
         # 收集图像
         gathered = _gather_images(image, pack_images)
         max_provider_images = provider_impl.config.max_images
@@ -282,6 +327,35 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 
         # 转换图像为Base64
         image_payloads = [_image_to_base64(img) for img in gathered]
+
+        # 进度：数据处理完成
+        _update_progress("处理", 0.5, node_id=node_id)
+
+        # 修正image_size值，确保对当前提供者有效
+        from .llm.registry import PROVIDER_SCHEMA
+        schema = PROVIDER_SCHEMA.get(provider, {})
+        enums = schema.get("enums", {})
+        allowed_sizes = enums.get("image_size", [])
+
+        # 如果提供者有image_size枚举，确保使用有效的尺寸
+        # 对于视觉模型，优先使用非空的尺寸值
+        corrected_image_size = image_size
+        if allowed_sizes:
+            # 查找第一个非空的尺寸值（对于视觉模型很重要）
+            non_empty_sizes = [size for size in allowed_sizes if size]
+
+            if image_size and image_size not in allowed_sizes:
+                # 当前值存在但不在允许列表中
+                if non_empty_sizes:
+                    corrected_image_size = non_empty_sizes[0]  # 使用第一个非空尺寸
+                else:
+                    corrected_image_size = allowed_sizes[0] if allowed_sizes else ""
+            elif not image_size and allowed_sizes:
+                # 当前值是空字符串
+                if non_empty_sizes:
+                    corrected_image_size = non_empty_sizes[0]  # 使用第一个非空尺寸
+                else:
+                    corrected_image_size = ""  # 如果没有非空尺寸，保持空值
 
         # 构建覆盖参数
         overrides: Dict[str, Any] = {
@@ -294,7 +368,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             "thinking_budget": thinking_budget,
             "seed": resolved_seed if resolved_seed is not None else -1,
             "negative_prompt": negative_prompt,
-            "image_size": image_size,
+            "image_size": corrected_image_size,
             "n_images": gen_image,
             "max_images": max_images,
             "style": style,
@@ -313,12 +387,29 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 []                             # image_urls
             )
 
+        # 进度：验证完成
+        _update_progress("验证", 0.8, node_id=node_id)
+
         try:
+            # 进度：调用提供者
+            _update_progress("连接", 0.1, node_id=node_id)
+
+            # 创建进度回调函数
+            def progress_callback(stage: str, progress: float):
+                _update_progress(stage, progress, node_id=node_id)
+
             # 调用提供者
-            response = provider_impl.invoke(instruction, image_payloads, resolved_key, overrides)
+            response = provider_impl.invoke(instruction, image_payloads, resolved_key, overrides, progress_callback)
+
+            # 进度：解析响应
+            _update_progress("解析", 0.3, node_id=node_id)
+
             text = provider_impl.extract_text(response)
             images = provider_impl.extract_images(response)
             image_urls = provider_impl.extract_image_urls(response)
+
+            # 进度：解析完成
+            _update_progress("解析", 1.0, node_id=node_id)
         except requests.HTTPError as exc:
             err_detail = exc.response.text if exc.response is not None else str(exc)
             text = f"LLM request failed: {exc}: {err_detail}"
@@ -332,6 +423,9 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 确保至少返回一个虚拟图像
         images_out = images if images else [_dummy_image_tensor()]
         urls_out = image_urls if image_urls else []
+
+        # 进度：完成阶段
+        _update_progress("完成", 1.0, node_id=node_id)
 
         return io.NodeOutput(
             text or "",      # response

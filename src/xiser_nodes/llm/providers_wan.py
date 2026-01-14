@@ -138,7 +138,7 @@ class WanImageProvider(BaseLLMProvider):
 
         return endpoint, payload, extra_headers
 
-    def invoke(self, user_prompt: str, image_payloads: List[str], api_key: str, overrides: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def invoke(self, user_prompt: str, image_payloads: List[str], api_key: str, overrides: Optional[Dict[str, Any]] = None, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """Override invoke method to handle both async and streaming modes for wan2.6-image."""
         if not api_key:
             raise ValueError("API Key is required")
@@ -149,14 +149,18 @@ class WanImageProvider(BaseLLMProvider):
         headers = self._build_headers(api_key)
         headers.update(extra_headers)
 
+        # 进度：连接阶段
+        if progress_callback:
+            progress_callback("连接", 0.3)
+
         if mode == "image_edit":
             # Image edit mode uses async task polling
-            return self._invoke_async(endpoint, headers, payload)
+            return self._invoke_async(endpoint, headers, payload, progress_callback)
         else:  # interleave mode
             # Interleave mode uses SSE streaming
-            return self._invoke_streaming(endpoint, headers, payload)
+            return self._invoke_streaming(endpoint, headers, payload, progress_callback)
 
-    def _invoke_async(self, endpoint: str, headers: Dict[str, str], payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _invoke_async(self, endpoint: str, headers: Dict[str, str], payload: Dict[str, Any], progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """Handle async task polling for image_edit mode."""
         # Submit async task
         response = requests.post(
@@ -167,6 +171,10 @@ class WanImageProvider(BaseLLMProvider):
         )
         response.raise_for_status()
         task_response = response.json()
+
+        # 进度：连接完成
+        if progress_callback:
+            progress_callback("连接", 1.0)
 
         # Check for task_id
         if "output" not in task_response or "task_id" not in task_response["output"]:
@@ -180,6 +188,11 @@ class WanImageProvider(BaseLLMProvider):
 
         for attempt in range(max_attempts):
             time.sleep(poll_interval)
+
+            # 进度：轮询阶段
+            if progress_callback:
+                progress = (attempt + 1) / max_attempts
+                progress_callback("轮询", progress)
 
             # Query task status
             task_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
@@ -195,6 +208,9 @@ class WanImageProvider(BaseLLMProvider):
             if "output" in task_status and "task_status" in task_status["output"]:
                 status = task_status["output"]["task_status"]
                 if status == "SUCCEEDED":
+                    # 进度：轮询完成
+                    if progress_callback:
+                        progress_callback("轮询", 1.0)
                     return task_status
                 elif status in ["FAILED", "CANCELED"]:
                     raise RuntimeError(f"Task {task_id} failed with status: {status}")
@@ -202,11 +218,14 @@ class WanImageProvider(BaseLLMProvider):
 
             # If no task_status found, assume it's the final response
             if "output" in task_status and "choices" in task_status["output"]:
+                # 进度：轮询完成
+                if progress_callback:
+                    progress_callback("轮询", 1.0)
                 return task_status
 
         raise TimeoutError(f"Task {task_id} did not complete within {max_attempts * poll_interval} seconds")
 
-    def _invoke_streaming(self, endpoint: str, headers: Dict[str, str], payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _invoke_streaming(self, endpoint: str, headers: Dict[str, str], payload: Dict[str, Any], progress_callback: Optional[callable] = None) -> Dict[str, Any]:
         """Handle SSE streaming for interleave mode."""
         response = requests.post(
             endpoint,
@@ -216,6 +235,10 @@ class WanImageProvider(BaseLLMProvider):
             stream=True,
         )
         response.raise_for_status()
+
+        # 进度：连接完成
+        if progress_callback:
+            progress_callback("连接", 1.0)
 
         # 收集所有SSE事件的内容
         all_content = []
@@ -228,6 +251,11 @@ class WanImageProvider(BaseLLMProvider):
                 event_count += 1
                 line_str = line.decode('utf-8')
 
+                # 进度：流式处理阶段
+                if progress_callback and event_count % 10 == 0:  # 每10个事件更新一次进度
+                    progress = min(event_count / 100, 0.9)  # 假设最多100个事件
+                    progress_callback("流式", progress)
+
                 # 修复：检查 data: 开头（有或没有空格）
                 if line_str.startswith('data:'):
                     # 移除 'data:' 前缀
@@ -237,6 +265,9 @@ class WanImageProvider(BaseLLMProvider):
                         event_data = line_str[5:]  # 移除 'data:'（没有空格）
 
                     if event_data == '[DONE]':
+                        # 进度：流式处理完成
+                        if progress_callback:
+                            progress_callback("流式", 1.0)
                         break
 
                     try:

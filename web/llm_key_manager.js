@@ -130,7 +130,7 @@ class KeyManager {
         <br>
         <strong>Image Generation Models</strong><br>
         - <code>qwen-image-edit-plus</code>: Uses reference image(s) for editing. Size optional (blank for auto). Supported sizes: 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664, 1024*1024, 512*512, 2048*2048.<br>
-        - <code>qwen_image_plus</code>: Image generation without reference. Supported sizes: 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664.<br>
+        - <code>qwen-image-max</code>: High-quality image generation without reference. Supported sizes: 1664*928, 1472*1104, 1328*1328, 1104*1472, 928*1664.<br>
         - <code>wan2.6-image</code>: Supports two modes:<br>
           &nbsp;&nbsp;• <code>image_edit</code>: Requires input image for editing. Uses async API.<br>
           &nbsp;&nbsp;• <code>interleave</code>: Generates text and images mixed content. No image input required. Uses streaming API.<br>
