@@ -470,6 +470,73 @@ class QwenImageMaxProvider(BaseLLMProvider):
         return results
 
 
+class Qwen3MaxProvider(BaseLLMProvider):
+    """Qwen3-Max provider via OpenAI-compatible endpoint (text only)."""
+
+    def __init__(self):
+        super().__init__(
+            LLMProviderConfig(
+                name="qwen3-max",  # 用户要求的名称
+                label="Qwen3-Max",
+                endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1",  # 用户指定的端点
+                model="qwen3-max",  # 模型名称
+                default_system_prompt="You are Qwen3-Max, a helpful assistant.",
+                timeout=120,
+                max_images=0,  # 纯文本模型，不支持图像
+                default_params={"temperature": 0.35, "top_p": 0.9},
+                extra_headers={},
+            )
+        )
+
+    def build_payload(
+        self, user_prompt: str, image_payloads: List[str], overrides: Dict[str, Any]
+    ) -> Tuple[str, Dict[str, Any], Dict[str, str]]:
+        if image_payloads:
+            raise ValueError("Qwen3-Max provider does not support image inputs.")
+
+        system_prompt = overrides.get("system_prompt", self.config.default_system_prompt)
+        model = overrides.get("model", self.config.model)
+        temperature = overrides.get("temperature", self.config.default_params.get("temperature", 0.35))
+        top_p = overrides.get("top_p", self.config.default_params.get("top_p", 0.9))
+        max_tokens = overrides.get("max_tokens")
+        enable_thinking = overrides.get("enable_thinking", False)
+        thinking_budget = overrides.get("thinking_budget")
+        seed = overrides.get("seed")
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": user_prompt})
+
+        payload: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
+        if max_tokens:
+            payload["max_tokens"] = int(max_tokens)
+        if seed is not None and seed >= 0:
+            payload["seed"] = int(seed)
+        if enable_thinking:
+            extra = payload.setdefault("extra_body", {})
+            extra["enable_thinking"] = True
+            if thinking_budget:
+                extra["thinking_budget"] = int(thinking_budget)
+
+        # 拼接完整的端点URL
+        full_endpoint = self.config.endpoint + "/chat/completions"
+        return full_endpoint, payload, {}
+
+    def extract_text(self, response: Dict[str, Any]) -> str:
+        choices = response.get("choices", [])
+        if not choices:
+            return "Qwen3-Max did not return any choices."
+        content = choices[0].get("message", {}).get("content")
+        return content or ""
+
+
 __all__ = [
     "QwenChatProvider",
     "QwenFlashProvider",
@@ -478,4 +545,5 @@ __all__ = [
     "QwenVLFlashProvider",
     "QwenImageCreateProvider",
     "QwenImageMaxProvider",
+    "Qwen3MaxProvider",
 ]
