@@ -35,13 +35,13 @@ app.registerExtension({
         const storageKey = "xiser.llm.profileMap"; // nodeId -> profile
 
         // 高频使用控件（始终显示）
-        const highFrequencyWidgets = ["provider", "instruction", "seed", "image_size", "mode"];
+        const highFrequencyWidgets = ["provider", "instruction", "seed", "mode"];
 
         // 低频使用控件（默认隐藏，可通过高级设置按钮显示）
         // 注意：style和quality参数目前不被任何provider使用，已移除
         const lowFrequencyWidgets = [
             "temperature", "top_p", "max_tokens", "enable_thinking", "thinking_budget",
-            "negative_prompt", "gen_image", "max_images",
+            "negative_prompt", "gen_image", "max_images", "image_size",
             "watermark", "prompt_extend", "model_override"
         ];
 
@@ -52,7 +52,8 @@ app.registerExtension({
             "qwen-flash",         // Qwen Flash支持思考模式
             "qwen_vl",            // Qwen VL支持思考模式
             "qwen-vl-plus",       // Qwen VL Plus支持思考模式
-            "qwen3-vl-flash"      // Qwen3 VL Flash支持思考模式
+            "qwen3-vl-flash",     // Qwen3 VL Flash支持思考模式
+            "qwen3-max"           // Qwen3-Max支持思考模式
         ];
 
         // 存储每个节点的高级设置展开状态
@@ -93,6 +94,10 @@ app.registerExtension({
             },
             "qwen3-vl-flash": {
                 sizes: [""],  // 视觉语言模型
+                hasImageParams: false,
+            },
+            "qwen3-max": {
+                sizes: [""],  // 纯文本模型
                 hasImageParams: false,
             },
             "moonshot": {
@@ -263,10 +268,41 @@ app.registerExtension({
 
                 if (imageParams.includes(w.name)) {
                     // 如果高级设置未展开，隐藏低频控件
+                    // 但对于图像生成模型的gen_image控件，始终显示
+                    // 对于支持图像输出的模型的image_size控件，始终显示
                     if (!isAdvancedExpanded && lowFrequencyWidgets.includes(w.name)) {
-                        w.hidden = true;
-                        w.disabled = true;
-                        return;
+                        // 检查是否是图像生成模型的gen_image控件
+                        if (w.name === "gen_image") {
+                            const providerHint = providerHints[providerVal];
+                            const isImageGenerationProvider = providerHint?.hasImageParams === true;
+                            if (isImageGenerationProvider) {
+                                // 图像生成模型的gen_image始终显示，跳过隐藏逻辑
+                            } else {
+                                // 非图像生成模型的gen_image，正常隐藏
+                                w.hidden = true;
+                                w.disabled = true;
+                                return;
+                            }
+                        }
+                        // 检查是否是支持图像输出的模型的image_size控件
+                        else if (w.name === "image_size") {
+                            const providerHint = providerHints[providerVal];
+                            const isImageOutputProvider = providerHint?.hasImageParams === true;
+                            if (isImageOutputProvider) {
+                                // 支持图像输出的模型的image_size始终显示，跳过隐藏逻辑
+                            } else {
+                                // 不支持图像输出的模型的image_size，正常隐藏
+                                w.hidden = true;
+                                w.disabled = true;
+                                return;
+                            }
+                        }
+                        else {
+                            // 其他低频控件，正常隐藏
+                            w.hidden = true;
+                            w.disabled = true;
+                            return;
+                        }
                     }
 
                     w.hidden = false;
@@ -382,15 +418,26 @@ app.registerExtension({
                 }
 
                 if (w.name === "gen_image") {
-                    // gen_image在lowFrequencyWidgets中
-                    // 如果高级设置未展开，隐藏这个控件
-                    if (!isAdvancedExpanded) {
-                        w.hidden = true;
-                        w.disabled = true;
-                    } else {
-                        // 高级设置已展开，根据模式显示/隐藏
+                    // 检查当前提供者是否支持图像生成
+                    const providerHint = providerHints[providerVal];
+                    const isImageGenerationProvider = providerHint?.hasImageParams === true;
+
+                    if (isImageGenerationProvider) {
+                        // 对于图像生成模型，gen_image始终显示（高频控件）
+                        // 根据模式显示/隐藏
                         w.hidden = isInterleaveMode;
                         w.disabled = isInterleaveMode;
+                    } else {
+                        // 对于非图像生成模型，gen_image是低频控件
+                        // 如果高级设置未展开，隐藏这个控件
+                        if (!isAdvancedExpanded) {
+                            w.hidden = true;
+                            w.disabled = true;
+                        } else {
+                            // 高级设置已展开，根据模式显示/隐藏
+                            w.hidden = isInterleaveMode;
+                            w.disabled = isInterleaveMode;
+                        }
                     }
                 }
 

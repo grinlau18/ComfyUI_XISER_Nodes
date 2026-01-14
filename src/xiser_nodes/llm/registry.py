@@ -17,6 +17,7 @@ from .providers_qwen import (
     QwenVLFlashProvider,
     QwenVLPlusProvider,
     QwenVLProvider,
+    Qwen3MaxProvider,
 )
 from .providers_wan import (
     WanImageProvider,
@@ -32,10 +33,10 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
         },
     },
     "qwen": {
-        "capabilities": {"text": True, "vision": True, "image_out": False},
-        "requirements": {"instruction": True, "image_requires_text": True},
+        "capabilities": {"text": True, "vision": False, "image_out": False},
+        "requirements": {"instruction": True},
         "enums": {
-            "image_size": [""],  # 视觉模型但不生成图像，只允许空值
+            "image_size": [""],  # 纯文本模型，只允许空值
         },
     },
     "qwen-flash": {
@@ -66,6 +67,13 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
             "image_size": [""],  # 视觉语言模型，只允许空值
         },
     },
+    "qwen3-max": {
+        "capabilities": {"text": True, "vision": False, "image_out": False},
+        "requirements": {"instruction": True},
+        "enums": {
+            "image_size": [""],  # 纯文本模型，只允许空值
+        },
+    },
     "moonshot": {
         "capabilities": {"text": True, "vision": False, "image_out": False},
         "requirements": {"instruction": True},
@@ -81,7 +89,7 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
         },
     },
     "qwen-image-edit-plus": {
-        "capabilities": {"text": True, "vision": False, "image_out": True},
+        "capabilities": {"text": True, "vision": True, "image_out": True},
         "requirements": {"instruction": True, "image_required": True},
         "enums": {
             "image_size": ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
@@ -162,6 +170,7 @@ def build_default_registry() -> LLMProviderRegistry:
     registry.register(QwenVLProvider())
     registry.register(QwenVLPlusProvider())
     registry.register(QwenVLFlashProvider())
+    registry.register(Qwen3MaxProvider())
     registry.register(MoonshotChatProvider())
     registry.register(MoonshotVisionProvider())
     registry.register(QwenImageCreateProvider())
