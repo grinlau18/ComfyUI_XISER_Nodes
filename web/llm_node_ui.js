@@ -11,6 +11,23 @@ function openKeyManager(node) {
     }
 }
 
+// 更新API Key Management按钮文字
+function updateApiKeyButtonText(node) {
+    const buttonWidget = node.widgets?.find(w => w.name === "API key management");
+    if (!buttonWidget) return;
+
+    const keyWidget = node.widgets?.find(w => w.name === "key_profile");
+    const profileName = keyWidget?.value || "";
+
+    if (profileName && profileName.trim() !== "") {
+        // 已选择API Key：显示"API Key  (名称) used"
+        buttonWidget.label = `API Key (${profileName}) used`;
+    } else {
+        // 未选择API Key：显示"Please set the API Key"
+        buttonWidget.label = "Please set the API Key";
+    }
+}
+
 app.registerExtension({
     name: "xiser.llm.nodeui",
     setup() {
@@ -26,6 +43,16 @@ app.registerExtension({
             "temperature", "top_p", "max_tokens", "enable_thinking", "thinking_budget",
             "negative_prompt", "gen_image", "max_images",
             "watermark", "prompt_extend", "model_override"
+        ];
+
+        // 支持思考模式的providers列表
+        const thinkingEnabledProviders = [
+            "deepseek",           // DeepSeek支持思考模式
+            "qwen",               // Qwen系列支持思考模式
+            "qwen-flash",         // Qwen Flash支持思考模式
+            "qwen_vl",            // Qwen VL支持思考模式
+            "qwen-vl-plus",       // Qwen VL Plus支持思考模式
+            "qwen3-vl-flash"      // Qwen3 VL Flash支持思考模式
         ];
 
         // 存储每个节点的高级设置展开状态
@@ -115,11 +142,6 @@ app.registerExtension({
                     toggleAdvancedSettings);
             }
 
-            // Add key manager button
-            if (!node.widgets.some(w => w.name === "API key management")) {
-                node.addWidget("button", "API key management", "open", () => openKeyManager(node));
-            }
-
             // Hide key_profile widget if present and keep it updated from modal selection
             const keyWidget = node.widgets.find(w => w.name === "key_profile");
             if (keyWidget) {
@@ -134,6 +156,14 @@ app.registerExtension({
                     keyWidget.value = node.properties.provider; // fallback to provider-named profile
                 }
             }
+
+            // Add key manager button
+            if (!node.widgets.some(w => w.name === "API key management")) {
+                node.addWidget("button", "API key management", "open", () => openKeyManager(node));
+            }
+            // 初始化按钮文字（无论按钮是否新创建都需要更新）
+            // 注意：必须在key_profile值恢复后调用
+            updateApiKeyButtonText(node);
 
             const providerWidget = node.widgets.find(w => w.name === "provider");
             const modeWidget = node.widgets.find(w => w.name === "mode");
@@ -199,6 +229,38 @@ app.registerExtension({
             (node.widgets || []).forEach(w => {
                 if (!w || !w.name) return;
                 if (w.name === "key_profile") return;
+
+                // 处理思考模式控件
+                if (w.name === "enable_thinking") {
+                    if (thinkingEnabledProviders.includes(providerVal)) {
+                        // 支持思考模式的provider：始终显示enable_thinking控件
+                        w.hidden = false;
+                        w.disabled = false;
+                    } else {
+                        // 不支持思考模式的provider：根据高级设置状态显示/隐藏
+                        if (!isAdvancedExpanded) {
+                            w.hidden = true;
+                            w.disabled = true;
+                        } else {
+                            w.hidden = false;
+                            w.disabled = false;
+                        }
+                    }
+                    return;
+                }
+
+                if (w.name === "thinking_budget") {
+                    // thinking_budget控件始终根据高级设置状态显示/隐藏
+                    if (!isAdvancedExpanded) {
+                        w.hidden = true;
+                        w.disabled = true;
+                    } else {
+                        w.hidden = false;
+                        w.disabled = false;
+                    }
+                    return;
+                }
+
                 if (imageParams.includes(w.name)) {
                     // 如果高级设置未展开，隐藏低频控件
                     if (!isAdvancedExpanded && lowFrequencyWidgets.includes(w.name)) {
@@ -283,10 +345,8 @@ app.registerExtension({
                 applyModeVisibility(node);
             }
 
-            // Ensure DeepSeek thinking controls are visible
-            if (providerVal === "deepseek") {
-                applyDeepSeekMode(node);
-            }
+            // Note: enable_thinking and thinking_budget controls are now handled
+            // in the main widget loop based on thinkingEnabledProviders list
 
             app.graph?.setDirtyCanvas(true, true);
         };
@@ -349,31 +409,6 @@ app.registerExtension({
             });
         };
 
-        const applyDeepSeekMode = (node) => {
-            // DeepSeek不再使用mode控件，enable_thinking控件直接控制模式
-            // 这个函数现在只确保enable_thinking和thinking_budget控件可见
-
-            // 获取节点的高级设置状态
-            const rawSettings = localStorage.getItem(advancedSettingsKey);
-            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
-            const nodeSettings = settingsMap[node.id] || { expanded: false };
-            const isAdvancedExpanded = nodeSettings.expanded;
-
-            (node.widgets || []).forEach(w => {
-                if (!w || !w.name) return;
-
-                if (w.name === "enable_thinking" || w.name === "thinking_budget") {
-                    // 如果高级设置未展开，隐藏这些控件
-                    if (!isAdvancedExpanded) {
-                        w.hidden = true;
-                        w.disabled = true;
-                    } else {
-                        w.hidden = false;
-                        w.disabled = false;
-                    }
-                }
-            });
-        };
 
         const applyAdvancedSettingsVisibility = (node, isExpanded) => {
             // 获取节点的高级设置状态
@@ -401,8 +436,19 @@ app.registerExtension({
 
                 // 低频控件根据展开状态显示/隐藏
                 if (lowFrequencyWidgets.includes(w.name)) {
-                    w.hidden = !expanded;
-                    w.disabled = !expanded;
+                    // 获取当前provider
+                    const providerWidget = node.widgets.find(w2 => w2.name === "provider");
+                    const providerVal = providerWidget?.value || node.properties?.provider;
+
+                    // 对于支持思考模式的providers，enable_thinking控件始终显示
+                    if (w.name === "enable_thinking" && thinkingEnabledProviders.includes(providerVal)) {
+                        w.hidden = false;
+                        w.disabled = false;
+                    } else {
+                        // thinking_budget和其他低频控件根据高级设置状态显示/隐藏
+                        w.hidden = !expanded;
+                        w.disabled = !expanded;
+                    }
                 }
             });
 
@@ -423,6 +469,8 @@ app.registerExtension({
                 if (nodeId != null && n.id !== nodeId) return;
                 const w = n.widgets?.find(x => x.name === "key_profile");
                 if (w) w.value = profile;
+                // 更新按钮文字
+                updateApiKeyButtonText(n);
             });
             app.graph?.setDirtyCanvas(true, true);
         });
