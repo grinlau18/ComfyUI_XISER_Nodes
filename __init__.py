@@ -7,7 +7,7 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.6"
+__version__ = "1.3.7"
 
 # V3 API imports
 from comfy_api.v0_0_2 import ComfyExtension, io, ui
@@ -138,7 +138,7 @@ if HAS_PROMPT_SERVER:
         from .src.xiser_nodes.image_manager.api import register_routes
         register_routes()
 
-        print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, /upload/xis_image_manager, /delete/xis_image_manager")
+        # print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, /upload/xis_image_manager, /delete/xis_image_manager")  # 简化日志，不显示此信息
     except Exception as e:
         print("[XISER] Failed to register routes:", str(e))
 else:
@@ -189,6 +189,8 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.image_manager_v3 import V3_NODE_CLASSES as IMAGE_MANAGER_NODES
             # 新增节点 - image preview
             from .src.xiser_nodes.image_preview_v3 import V3_NODE_CLASSES as IMAGE_PREVIEW_NODES
+            # 新增节点 - LLM
+            from .src.xiser_nodes.llm_v3 import V3_NODE_CLASSES as LLM_NODES
 
             # 合并所有V3节点
             v3_nodes = []
@@ -215,9 +217,9 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(LABEL_NODES)
             v3_nodes.extend(IMAGE_MANAGER_NODES)
             v3_nodes.extend(IMAGE_PREVIEW_NODES)
+            v3_nodes.extend(LLM_NODES)
 
-            print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")
-            # 简化显示，只显示成功加载信息
+            # print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")  # 简化日志，不显示此信息
             print("[XISER V3] 成功全部节点")
 
             return v3_nodes

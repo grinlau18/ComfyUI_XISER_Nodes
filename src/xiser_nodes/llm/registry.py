@@ -19,6 +19,9 @@ from .providers_qwen import (
     QwenVLPlusProvider,
     QwenVLProvider,
 )
+from .providers_wan import (
+    WanImageProvider,
+)
 
 # Schema describing provider-specific capabilities and UI hints.
 PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
@@ -71,7 +74,7 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
         "capabilities": {"text": True, "vision": False, "image_out": True},
         "requirements": {"instruction": True, "image_required": True},
         "enums": {
-            "image_size": ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024x1024", "512x512", "2048x2048"],
+            "image_size": ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
         },  # "" means auto
     },
     "qwen_image_plus": {
@@ -80,6 +83,16 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
         "enums": {
             "image_size": ["1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"],
         },
+    },
+    "wan2.6-image": {
+        "capabilities": {"text": True, "vision": True, "image_out": True},
+        "requirements": {"instruction": True, "image_requires_text": True},
+        "enums": {
+            "image_size": ["1280*1280", "1024*1024", "512*512", "2048*2048"],
+            "mode": ["image_edit", "interleave"],
+        },
+        # Note: image_edit mode requires at least one image (validated in provider)
+        # interleave mode can generate images without input images
     },
 }
 
@@ -138,6 +151,7 @@ def build_default_registry() -> LLMProviderRegistry:
     registry.register(MoonshotVisionProvider())
     registry.register(QwenImageCreateProvider())
     registry.register(QwenImagePlusProvider())
+    registry.register(WanImageProvider())
     return registry
 
 

@@ -14,7 +14,7 @@ function openKeyManager(node) {
 app.registerExtension({
     name: "xiser.llm.nodeui",
     setup() {
-        const imageParams = ["negative_prompt", "image_size", "n_images", "style", "quality", "watermark"];
+        const imageParams = ["negative_prompt", "image_size", "gen_image", "max_images", "style", "quality", "watermark", "prompt_extend", "mode"];
         const storageKey = "xiser.llm.profileMap"; // nodeId -> profile
         const providerHints = {
             "qwen-image-edit-plus": {
@@ -22,6 +22,10 @@ app.registerExtension({
             },
             qwen_image_plus: {
                 sizes: ["1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664"],
+                hasImageParams: true,
+            },
+            "wan2.6-image": {
+                sizes: ["1280*1280", "1024*1024", "512*512", "2048*2048"],
                 hasImageParams: true,
             },
         };
@@ -51,6 +55,7 @@ app.registerExtension({
             }
 
             const providerWidget = node.widgets.find(w => w.name === "provider");
+            const modeWidget = node.widgets.find(w => w.name === "mode");
             const readProvider = () => providerWidget?.value || node.properties?.provider;
 
             if (providerWidget) {
@@ -64,10 +69,25 @@ app.registerExtension({
                 applyProvider(node, readProvider());
             }
 
+            // Add callback for mode widget
+            if (modeWidget) {
+                const origModeCb = modeWidget.callback;
+                modeWidget.callback = function() {
+                    if (origModeCb) origModeCb.apply(this, arguments);
+                    if (readProvider() === "wan2.6-image") {
+                        applyModeVisibility(node);
+                    }
+                };
+            }
+
             const origPropChanged = node.onPropertyChanged;
             node.onPropertyChanged = function(name, value) {
                 if (origPropChanged) origPropChanged.call(this, name, value);
-                if (name === "provider") applyProvider(node, value);
+                if (name === "provider") {
+                    applyProvider(node, value);
+                } else if (name === "mode" && readProvider() === "wan2.6-image") {
+                    applyModeVisibility(node);
+                }
             };
         };
 
@@ -88,9 +108,46 @@ app.registerExtension({
                             w.value = hint.sizes[0];
                         }
                     }
+                    // Special handling for wan2.6-image mode parameter
+                    if (w.name === "mode" && providerVal === "wan2.6-image") {
+                        w.hidden = false;
+                        w.disabled = false;
+                    } else if (w.name === "mode") {
+                        w.hidden = true;
+                        w.disabled = true;
+                    }
                 }
             });
+
+            // Apply mode-specific visibility for wan2.6-image
+            if (providerVal === "wan2.6-image") {
+                applyModeVisibility(node);
+            }
+
             app.graph?.setDirtyCanvas(true, true);
+        };
+
+        const applyModeVisibility = (node) => {
+            const modeWidget = node.widgets?.find(w => w.name === "mode");
+            if (!modeWidget) return;
+
+            const mode = modeWidget.value || "image_edit";
+            const isInterleaveMode = mode === "interleave";
+
+            (node.widgets || []).forEach(w => {
+                if (!w || !w.name) return;
+
+                // Show/hide parameters based on mode
+                if (w.name === "prompt_extend" || w.name === "watermark" || w.name === "gen_image") {
+                    w.hidden = isInterleaveMode;
+                    w.disabled = isInterleaveMode;
+                }
+
+                if (w.name === "max_images") {
+                    w.hidden = !isInterleaveMode;
+                    w.disabled = !isInterleaveMode;
+                }
+            });
         };
 
         // Sync hidden key_profile when modal selection changes (per-node)

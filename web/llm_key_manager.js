@@ -90,8 +90,8 @@ class KeyManager {
         const body = createElement("div", "xiser-body");
 
         const rowProfile = createElement("div", "xiser-row");
-        rowProfile.appendChild(createElement("label", "", { innerText: "Profile name" }));
-        this.inputProfile = createElement("input", "xiser-input", { placeholder: "profile name" });
+        rowProfile.appendChild(createElement("label", "", { innerText: "API Name" }));
+        this.inputProfile = createElement("input", "xiser-input", { placeholder: "API name" });
         rowProfile.appendChild(this.inputProfile);
         body.appendChild(rowProfile);
 
@@ -116,7 +116,7 @@ class KeyManager {
         body.appendChild(rowSelect);
 
         const rowDelete = createElement("div", "xiser-row");
-        const delBtn = createElement("button", "xiser-btn danger", { innerText: "Delete profile" });
+        const delBtn = createElement("button", "xiser-btn danger", { innerText: "Delete API" });
         delBtn.onclick = () => this.deleteSelected();
         rowDelete.appendChild(delBtn);
         body.appendChild(rowDelete);
@@ -125,10 +125,30 @@ class KeyManager {
         instr.innerHTML = `
         <strong>Usage</strong><br>
         - Keys are stored encrypted in <code>ComfyUI/user/API_keys/</code> (never saved into workflows/projects).<br>
-        - Open this panel from a node, pick an API key (Select API key); it applies only to that node (profile name is saved, key is not embedded).<br>
+        - Open this panel from a node, pick an API key (Select API key); it applies only to that node (API name is saved, key is not embedded).<br>
         - Text/vision: providers like <code>deepseek</code> / <code>qwen_vl</code> / <code>moonshot_vision</code> require a non-empty instruction; images must pair with text.<br>
-        - Image generation: <code>qwen-image-edit-plus</code> uses reference image(s); size is optional (leave blank for auto). <code>qwen_image_plus</code> sizes allowed 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664 (UI enforces).<br>
-        - Seed: widget value is the actual seed; &ge;0 fixed, &lt;0 uses model default random.<br>
+        <br>
+        <strong>Image Generation Models</strong><br>
+        - <code>qwen-image-edit-plus</code>: Uses reference image(s) for editing. Size optional (blank for auto). Supported sizes: 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664, 1024*1024, 512*512, 2048*2048.<br>
+        - <code>qwen_image_plus</code>: Image generation without reference. Supported sizes: 1664*928, 1472*1140, 1328*1328, 1140*1472, 928*1664.<br>
+        - <code>wan2.6-image</code>: Supports two modes:<br>
+          &nbsp;&nbsp;• <code>image_edit</code>: Requires input image for editing. Uses async API.<br>
+          &nbsp;&nbsp;• <code>interleave</code>: Generates text and images mixed content. No image input required. Uses streaming API.<br>
+          &nbsp;&nbsp;Supported sizes: 1280*1280, 1024*1024, 512*512, 2048*2048.<br>
+        <br>
+        <strong>Image Size Notes</strong><br>
+        - UI provides all supported sizes: 512*512, 928*1664, 1024*1024, 1140*1472, 1280*1280, 1328*1328, 1472*1140, 1664*928, 2048*2048.<br>
+        - Unsupported sizes are automatically adjusted or may cause errors depending on the model.<br>
+        <br>
+        <strong>Seed Parameter</strong><br>
+        - Default: <code>42</code> (fixed mode).<br>
+        - <code>&ge;0</code>: Fixed seed for reproducible results.<br>
+        - <code>-1</code>: Random seed each time.<br>
+        - <code>-2</code>: Incremental counter mode.<br>
+        <br>
+        <strong>Image Count Parameters</strong><br>
+        - <code>gen_image</code>: Number of images to generate (1-4).<br>
+        - <code>max_images</code>: Maximum images for interleave mode (1-10).<br>
         `;
         body.appendChild(instr);
 
@@ -223,10 +243,10 @@ class KeyManager {
     async deleteSelected() {
         const profile = this.profileSelect.value;
         if (!profile) {
-            showToast("Select a profile", true);
+            showToast("Select an API", true);
             return;
         }
-        if (!confirm(`Delete profile '${profile}'?`)) return;
+        if (!confirm(`Delete API '${profile}'?`)) return;
         try {
             await apiFetch(ENDPOINT_DELETE(profile), { method: "DELETE" });
             showToast("Deleted");

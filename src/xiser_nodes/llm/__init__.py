@@ -1,11 +1,8 @@
-"""LLM package exposing orchestrator and provider registry."""
+"""LLM package exposing provider registry and utilities."""
 
-from .orchestrator import NODE_CLASS_MAPPINGS, REGISTRY, XIS_LLMOrchestrator
-from .registry import PROVIDER_SCHEMA
+from .registry import PROVIDER_SCHEMA, build_default_registry
 
 __all__ = [
-    "NODE_CLASS_MAPPINGS",
-    "REGISTRY",
-    "XIS_LLMOrchestrator",
     "PROVIDER_SCHEMA",
+    "build_default_registry",
 ]
