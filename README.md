@@ -81,10 +81,21 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 
 ### 🤖 LLM Automation Bridge (XIS_LLMOrchestrator)
 - **Purpose**: Route instructions plus optional `image`/`pack_images` tensors to a selected LLM provider (currently supports DeepSeek, Qwen series, Kimi models, Wan 2.6, with more to come) and emit the reply as a STRING output for downstream nodes.
-- **Inputs**: API Key field, free-form instruction text, optional system prompt, adjustable temperature/top-p/max tokens, and optional vision inputs (`image`, `pack_images`).
+- **Inputs**:
+  - **Core Parameters** (always visible): Provider selection, instruction text, seed, image size, mode (for wan2.6)
+  - **Advanced Parameters** (collapsible): Temperature, top-p, max tokens, negative prompt, watermark, prompt extend, etc.
+  - **Vision Inputs**: Optional `image` (single) and `pack_images` (multiple) inputs
+- **UI Optimization**:
+  - **Collapsible Advanced Settings**: Infrequently used parameters are hidden by default, click "Show Advanced Settings" to expand
+  - **Clean Interface**: Removed unused style and quality parameters for a cleaner user experience
+  - **wan2.6 Mode Optimization**: Mode control always visible, watermark and prompt_extend moved to advanced settings
 - **Attachment Processing**: Automatically converts all input images to PNG Base64 strings, truncating to the model's image limit for convenient multi-image requests.
 - **Extensibility**: Providers register via lightweight config + interface, allowing new models or custom inference endpoints to be added without modifying node core logic.
-- **Vision Support**: When `image`/`pack_images` inputs are connected, the node automatically switches to DeepSeek's `responses` endpoint (OpenAI-compatible multi-modal format), using `input_text` + `input_image` structure to meet official validation rules.
+- **Vision Input Support**:
+  - **Qwen Series Vision Models**: Support image input and visual understanding, but do not generate images
+  - **Qwen Image Generation Models**: Support image input and generate new images
+  - **Wan 2.6 Image Model**: Support image editing and interleave mode
+  - **DeepSeek Models**: Currently do not support image input. If images are connected, they will be automatically ignored with a warning message added to the prompt.
 - **Wan 2.6 Image Editing**: New Wan 2.6 model support provides professional image editing capabilities with advanced parameters including image size adjustment, prompt extension, watermark control, and more.
 - **Interleave Mode**: Wan 2.6 model supports interleave mode, allowing alternating text and image content processing within a single request for more flexible creative workflows.
 - **API Key Management**:

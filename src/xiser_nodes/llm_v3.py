@@ -206,18 +206,6 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     optional=True,
                     tooltip="最大图像数量（用于interleave模式）"
                 ),
-                io.String.Input(
-                    "style",
-                    default="写实",
-                    optional=True,
-                    tooltip="风格设置"
-                ),
-                io.String.Input(
-                    "quality",
-                    default="standard",
-                    optional=True,
-                    tooltip="质量设置"
-                ),
                 io.Boolean.Input(
                     "watermark",
                     default=False,
@@ -264,8 +252,6 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         image_size: str = "",
         gen_image: int = 1,
         max_images: int = 3,
-        style: str = "写实",
-        quality: str = "standard",
         watermark: bool = False,
         prompt_extend: bool = True,
         mode: str = "chat",
@@ -371,8 +357,6 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             "image_size": corrected_image_size,
             "n_images": gen_image,
             "max_images": max_images,
-            "style": style,
-            "quality": quality,
             "watermark": watermark,
             "prompt_extend": prompt_extend,
             "mode": mode,

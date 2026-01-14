@@ -14,8 +14,22 @@ function openKeyManager(node) {
 app.registerExtension({
     name: "xiser.llm.nodeui",
     setup() {
-        const imageParams = ["negative_prompt", "image_size", "gen_image", "max_images", "style", "quality", "watermark", "prompt_extend", "mode"];
+        const imageParams = ["negative_prompt", "image_size", "gen_image", "max_images", "watermark", "prompt_extend", "mode"];
         const storageKey = "xiser.llm.profileMap"; // nodeId -> profile
+
+        // 高频使用控件（始终显示）
+        const highFrequencyWidgets = ["provider", "instruction", "seed", "image_size", "mode"];
+
+        // 低频使用控件（默认隐藏，可通过高级设置按钮显示）
+        // 注意：style和quality参数目前不被任何provider使用，已移除
+        const lowFrequencyWidgets = [
+            "temperature", "top_p", "max_tokens", "enable_thinking", "thinking_budget",
+            "negative_prompt", "gen_image", "max_images",
+            "watermark", "prompt_extend", "model_override"
+        ];
+
+        // 存储每个节点的高级设置展开状态
+        const advancedSettingsKey = "xiser.llm.advancedSettings";
         const providerHints = {
             "qwen-image-edit-plus": {
                 sizes: ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
@@ -67,6 +81,39 @@ app.registerExtension({
         const attach = async node => {
             if (node?.comfyClass !== "XIS_LLMOrchestrator") return;
             node.widgets = node.widgets || [];
+
+            // 初始化节点的高级设置状态
+            const rawSettings = localStorage.getItem(advancedSettingsKey);
+            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
+            const nodeSettings = settingsMap[node.id] || { expanded: false };
+
+            // 保存回本地存储
+            settingsMap[node.id] = nodeSettings;
+            localStorage.setItem(advancedSettingsKey, JSON.stringify(settingsMap));
+
+            // 添加高级设置按钮
+            if (!node.widgets.some(w => w.name === "Advanced Settings")) {
+                const toggleAdvancedSettings = () => {
+                    // 切换展开状态
+                    nodeSettings.expanded = !nodeSettings.expanded;
+                    settingsMap[node.id] = nodeSettings;
+                    localStorage.setItem(advancedSettingsKey, JSON.stringify(settingsMap));
+
+                    // 更新按钮文本
+                    const btn = node.widgets.find(w => w.name === "Advanced Settings");
+                    if (btn) {
+                        btn.label = nodeSettings.expanded ? "Hide Advanced Settings" : "Show Advanced Settings";
+                    }
+
+                    // 应用控件可见性
+                    applyAdvancedSettingsVisibility(node, nodeSettings.expanded);
+                    app.graph?.setDirtyCanvas(true, true);
+                };
+
+                node.addWidget("button", "Advanced Settings",
+                    nodeSettings.expanded ? "Hide Advanced Settings" : "Show Advanced Settings",
+                    toggleAdvancedSettings);
+            }
 
             // Add key manager button
             if (!node.widgets.some(w => w.name === "API key management")) {
@@ -131,15 +178,35 @@ app.registerExtension({
                     }
                 }
             };
+
+            // 初始化控件可见性
+            setTimeout(() => {
+                applyAdvancedSettingsVisibility(node, nodeSettings.expanded);
+                app.graph?.setDirtyCanvas(true, true);
+            }, 50);
         };
 
         const applyProvider = (node, providerVal) => {
             const hint = providerHints[providerVal] || {};
             const needImageParams = !!hint.hasImageParams;
+
+            // 获取节点的高级设置状态
+            const rawSettings = localStorage.getItem(advancedSettingsKey);
+            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
+            const nodeSettings = settingsMap[node.id] || { expanded: false };
+            const isAdvancedExpanded = nodeSettings.expanded;
+
             (node.widgets || []).forEach(w => {
                 if (!w || !w.name) return;
                 if (w.name === "key_profile") return;
                 if (imageParams.includes(w.name)) {
+                    // 如果高级设置未展开，隐藏低频控件
+                    if (!isAdvancedExpanded && lowFrequencyWidgets.includes(w.name)) {
+                        w.hidden = true;
+                        w.disabled = true;
+                        return;
+                    }
+
                     w.hidden = false;
                     w.disabled = !needImageParams;
                     // Update allowed sizes if widget is image_size
@@ -184,6 +251,9 @@ app.registerExtension({
                     }
                     // Special handling for mode parameter
                     if (w.name === "mode") {
+                        // mode控件现在始终显示（在highFrequencyWidgets中）
+                        // 但需要根据提供者设置正确的选项和可见性
+
                         if (providerVal === "wan2.6-image") {
                             w.hidden = false;
                             w.disabled = false;
@@ -200,6 +270,7 @@ app.registerExtension({
                             w.hidden = true;
                             w.disabled = true;
                         } else {
+                            // 其他提供者隐藏mode控件
                             w.hidden = true;
                             w.disabled = true;
                         }
@@ -227,18 +298,53 @@ app.registerExtension({
             const mode = modeWidget.value || "image_edit";
             const isInterleaveMode = mode === "interleave";
 
+            // 获取节点的高级设置状态
+            const rawSettings = localStorage.getItem(advancedSettingsKey);
+            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
+            const nodeSettings = settingsMap[node.id] || { expanded: false };
+            const isAdvancedExpanded = nodeSettings.expanded;
+
             (node.widgets || []).forEach(w => {
                 if (!w || !w.name) return;
 
                 // Show/hide parameters based on mode
-                if (w.name === "prompt_extend" || w.name === "watermark" || w.name === "gen_image") {
-                    w.hidden = isInterleaveMode;
-                    w.disabled = isInterleaveMode;
+                if (w.name === "prompt_extend" || w.name === "watermark") {
+                    // watermark和prompt_extend现在在lowFrequencyWidgets中
+                    // 如果高级设置未展开，隐藏这些控件
+                    if (!isAdvancedExpanded) {
+                        w.hidden = true;
+                        w.disabled = true;
+                    } else {
+                        // 高级设置已展开，根据模式显示/隐藏
+                        w.hidden = isInterleaveMode;
+                        w.disabled = isInterleaveMode;
+                    }
+                }
+
+                if (w.name === "gen_image") {
+                    // gen_image在lowFrequencyWidgets中
+                    // 如果高级设置未展开，隐藏这个控件
+                    if (!isAdvancedExpanded) {
+                        w.hidden = true;
+                        w.disabled = true;
+                    } else {
+                        // 高级设置已展开，根据模式显示/隐藏
+                        w.hidden = isInterleaveMode;
+                        w.disabled = isInterleaveMode;
+                    }
                 }
 
                 if (w.name === "max_images") {
-                    w.hidden = !isInterleaveMode;
-                    w.disabled = !isInterleaveMode;
+                    // max_images在lowFrequencyWidgets中
+                    // 如果高级设置未展开，隐藏这个控件
+                    if (!isAdvancedExpanded) {
+                        w.hidden = true;
+                        w.disabled = true;
+                    } else {
+                        // 高级设置已展开，根据模式显示/隐藏
+                        w.hidden = !isInterleaveMode;
+                        w.disabled = !isInterleaveMode;
+                    }
                 }
             });
         };
@@ -246,14 +352,65 @@ app.registerExtension({
         const applyDeepSeekMode = (node) => {
             // DeepSeek不再使用mode控件，enable_thinking控件直接控制模式
             // 这个函数现在只确保enable_thinking和thinking_budget控件可见
+
+            // 获取节点的高级设置状态
+            const rawSettings = localStorage.getItem(advancedSettingsKey);
+            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
+            const nodeSettings = settingsMap[node.id] || { expanded: false };
+            const isAdvancedExpanded = nodeSettings.expanded;
+
             (node.widgets || []).forEach(w => {
                 if (!w || !w.name) return;
 
                 if (w.name === "enable_thinking" || w.name === "thinking_budget") {
-                    w.hidden = false;
-                    w.disabled = false;
+                    // 如果高级设置未展开，隐藏这些控件
+                    if (!isAdvancedExpanded) {
+                        w.hidden = true;
+                        w.disabled = true;
+                    } else {
+                        w.hidden = false;
+                        w.disabled = false;
+                    }
                 }
             });
+        };
+
+        const applyAdvancedSettingsVisibility = (node, isExpanded) => {
+            // 获取节点的高级设置状态
+            const rawSettings = localStorage.getItem(advancedSettingsKey);
+            const settingsMap = rawSettings ? JSON.parse(rawSettings) : {};
+            const nodeSettings = settingsMap[node.id] || { expanded: false };
+
+            // 实际使用传入的isExpanded参数
+            const expanded = isExpanded !== undefined ? isExpanded : nodeSettings.expanded;
+
+            (node.widgets || []).forEach(w => {
+                if (!w || !w.name) return;
+
+                // 跳过特殊控件
+                if (w.name === "key_profile" || w.name === "API key management" || w.name === "Advanced Settings") {
+                    return;
+                }
+
+                // 高频控件始终显示
+                if (highFrequencyWidgets.includes(w.name)) {
+                    w.hidden = false;
+                    w.disabled = false;
+                    return;
+                }
+
+                // 低频控件根据展开状态显示/隐藏
+                if (lowFrequencyWidgets.includes(w.name)) {
+                    w.hidden = !expanded;
+                    w.disabled = !expanded;
+                }
+            });
+
+            // 应用提供者特定的可见性（这会覆盖高级设置的状态）
+            const providerWidget = node.widgets.find(w => w.name === "provider");
+            if (providerWidget) {
+                applyProvider(node, providerWidget.value || node.properties?.provider);
+            }
         };
 
         // Sync hidden key_profile when modal selection changes (per-node)
