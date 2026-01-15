@@ -1,14 +1,16 @@
 """LLM Orchestrator Node - V3版本"""
 
-from comfy_api.v0_0_2 import io, ui, ComfyAPI, ComfyAPISync
-from typing import Dict, List, Optional, Any
+from comfy_api.v0_0_2 import io, ComfyAPI, ComfyAPISync
+from typing import Dict, List, Optional, Any, Tuple
 import torch
 import requests
 import time
+# import sys  # 调试日志已关闭
 from comfy_execution.utils import get_executing_context
 
 from .llm.base import _gather_images, _image_to_base64
 from .llm.registry import _validate_inputs, build_default_registry
+from .llm import SEED_CACHE  # 从llm模块导入缓存
 from .key_store import KEY_STORE
 
 # 创建API实例用于进度更新
@@ -16,6 +18,9 @@ api = ComfyAPI()
 api_sync = ComfyAPISync()
 
 REGISTRY = build_default_registry()
+
+# Seed缓存功能已模块化到 llm.cache 模块
+# 通过 from .llm import SEED_CACHE 导入
 
 
 def _dummy_image_tensor():
@@ -61,7 +66,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
-        choices = REGISTRY.list_choices() or ["deepseek"]
+        choices = REGISTRY.list_grouped_choices() or ["deepseek"]
 
         return io.Schema(
             node_id="XIS_LLMOrchestrator",
@@ -75,6 +80,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 • 图文混排：wan2.6-image支持interleave模式，可生成图文混合内容
 • 多尺寸支持：提供所有视觉模型支持的图像尺寸预设
 • 固定种子：默认使用固定种子(42)确保可重复性
+• 智能缓存：seed≥0时自动缓存结果，相同参数直接返回缓存内容
 
 使用说明：
 1. 选择提供者：根据需求选择文本对话或图像生成模型
@@ -86,6 +92,12 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 4. wan2.6-image特殊说明：
    - image_edit模式：需要输入图像，用于图像编辑
    - interleave模式：可无图像输入，生成图文混合内容
+5. 缓存机制：
+   - 固定seed（≥0）的结果会自动缓存
+   - 相同seed、提示词、图像和参数会直接返回缓存结果
+   - 缓存最大容量：50个结果（LRU淘汰）
+   - 随机seed（-1）和递增seed（-2）不缓存
+   - 缓存开关：通过enable_cache参数可启用/禁用缓存功能
 
 注意：不同模型对参数要求不同，请参考各模型文档。""",
             inputs=[
@@ -169,10 +181,11 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     "seed",
                     default=42,
                     min=-2,
-                    max=2147483647,
+                    max=4294967295,
                     step=1,
+                    control_after_generate=True,
                     optional=True,
-                    tooltip="随机种子（生成模式）：-1每次随机，-2递增计数，≥0固定值。默认42为固定模式"
+                    tooltip="随机种子：≥0为固定模式，-1每次随机，-2递增计数"
                 ),
                 io.String.Input(
                     "negative_prompt",
@@ -183,7 +196,18 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "image_size",
-                    options=["", "512*512", "928*1664", "1024*1024", "1140*1472", "1280*1280", "1328*1328", "1472*1140", "1664*928", "2048*2048"],
+                    options=[
+                        "",  # 自动选择
+                        "1024*1024", "1024*1536", "1104*1472", "1120*1440", "1140*1472",
+                        "1152*2048", "1152*864", "1152*896", "1248*1872", "1248*832",
+                        "1280*1280", "1280*720", "1280*960", "1296*1728", "1328*1328",
+                        "1344*1728", "1344*576", "1440*1120", "1472*1104", "1472*1140",
+                        "1536*1024", "1536*1536", "1536*864", "1664*928", "1680*720",
+                        "1728*1296", "1728*1344", "1872*1248", "2016*864", "2048*1152",
+                        "2048*2048", "512*512", "576*1344", "720*1280", "720*1680",
+                        "768*768", "832*1248", "864*1152", "864*1536", "864*2016",
+                        "896*1152", "928*1664", "960*1280"
+                    ],
                     default="",
                     optional=True,
                     tooltip="图像尺寸（空值表示自动）。包含所有视觉模型支持的尺寸。注意：不同模型支持的尺寸不同，不支持的尺寸会被自动调整或报错"
@@ -225,6 +249,12 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     optional=True,
                     tooltip="模式选择：wan2.6-image支持image_edit/interleave，DeepSeek支持chat/reasoner"
                 ),
+                io.Boolean.Input(
+                    "enable_cache",
+                    default=True,
+                    optional=True,
+                    tooltip="启用seed缓存：固定seed（≥0）的结果会自动缓存，相同参数直接返回缓存内容，避免重复调用API。缓存最大容量50个结果（LRU淘汰）。"
+                ),
             ],
             outputs=[
                 io.String.Output("response", display_name="文本响应"),
@@ -247,7 +277,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         max_tokens: int = 512,
         enable_thinking: bool = False,
         thinking_budget: int = 0,
-        seed: int = -1,
+        seed: int = 42,
         negative_prompt: str = "",
         image_size: str = "",
         gen_image: int = 1,
@@ -255,6 +285,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         watermark: bool = False,
         prompt_extend: bool = True,
         mode: str = "chat",
+        enable_cache: bool = True,
     ) -> io.NodeOutput:
         """执行LLM调用"""
         # 获取节点ID用于进度更新
@@ -266,7 +297,13 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             # 进度：准备阶段
             _update_progress("准备", 0.1, node_id=node_id)
 
-            provider_impl = REGISTRY.get(provider)
+            # 将分组名称转换为实际的提供者名称
+            actual_provider = REGISTRY.get_actual_provider_name(provider)
+            provider_impl = REGISTRY.get(actual_provider)
+
+            # 统一使用实际的提供者名称，避免分组名称问题
+            # 这样后续代码就不需要区分 provider 和 actual_provider 了
+            provider = actual_provider
         except KeyError:
             return io.NodeOutput(
                 f"Error: unknown provider '{provider}'",  # response
@@ -299,7 +336,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 []                                                                                            # image_urls
             )
 
-        # 处理种子
+        # 处理种子：seed已经是整数
         resolved_seed = seed if (seed is not None and seed >= 0) else None
 
         # 进度：数据处理阶段
@@ -317,7 +354,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 进度：数据处理完成
         _update_progress("处理", 0.5, node_id=node_id)
 
-        # 修正image_size值，确保对当前提供者有效
+        # 修正image_size值，确保对当前提供者有效（必须在缓存检查前计算）
         from .llm.registry import PROVIDER_SCHEMA
         schema = PROVIDER_SCHEMA.get(provider, {})
         enums = schema.get("enums", {})
@@ -342,6 +379,60 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     corrected_image_size = non_empty_sizes[0]  # 使用第一个非空尺寸
                 else:
                     corrected_image_size = ""  # 如果没有非空尺寸，保持空值
+
+        # 特殊处理：对于只允许空image_size的模型，强制设置为空
+        # 这可以防止用户从UI选择无效的尺寸
+        if allowed_sizes and len(allowed_sizes) == 1 and allowed_sizes[0] == "":
+            corrected_image_size = ""
+
+        # 检查缓存（只对固定seed≥0且启用缓存的情况）
+        if seed >= 0 and enable_cache:
+            # 直接使用输入参数构建缓存参数，避免使用locals()的动态性
+            # 对于wan2.6模型，需要确保参数与提供者实际使用的参数一致
+            cache_params = {
+                'model_override': model_override,
+                'key_profile': key_profile,
+                'temperature': temperature,
+                'top_p': top_p,
+                'max_tokens': max_tokens,
+                'enable_thinking': enable_thinking,
+                'thinking_budget': thinking_budget,
+                'negative_prompt': negative_prompt,
+                'image_size': corrected_image_size,  # 使用修正后的image_size确保一致性
+                'gen_image': gen_image,
+                'max_images': max_images,
+                'watermark': watermark,
+                'prompt_extend': prompt_extend,
+                'mode': mode,
+                'profile_clean': profile_clean,
+                'resolved_seed': resolved_seed,
+            }
+
+            # 特殊处理：对于wan2.6-image提供者，需要调整参数名称以匹配实际使用
+            if provider == 'wan2.6-image':
+                # wan2.6在image_edit模式下使用'n_images'参数，而不是'gen_image'
+                # 确保缓存参数与提供者实际使用的参数一致
+                if mode == 'image_edit':
+                    cache_params['n_images'] = gen_image
+                # 对于interleave模式，使用max_images参数
+
+            # 缓存检查
+            cached_result = SEED_CACHE.get(
+                seed=seed,
+                provider=provider,
+                instruction=instruction,
+                images=gathered,
+                **cache_params
+            )
+            if cached_result:
+                # 进度：从缓存返回
+                _update_progress("完成", 1.0, node_id=node_id)
+                text, images_out, urls_out = cached_result
+                return io.NodeOutput(
+                    text or "",      # response
+                    images_out,      # images
+                    urls_out         # image_urls
+                )
 
         # 构建覆盖参数
         overrides: Dict[str, Any] = {
@@ -407,6 +498,67 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 确保至少返回一个虚拟图像
         images_out = images if images else [_dummy_image_tensor()]
         urls_out = image_urls if image_urls else []
+
+        # 缓存结果（只对固定seed≥0、启用缓存且成功的情况）
+
+        if seed >= 0 and enable_cache and text and not text.startswith("Error:") and not text.startswith("LLM request failed:"):
+            try:
+                # 使用与缓存检查相同的参数构建方式
+                cache_params = {
+                    'model_override': model_override,
+                    'key_profile': key_profile,
+                    'temperature': temperature,
+                    'top_p': top_p,
+                    'max_tokens': max_tokens,
+                    'enable_thinking': enable_thinking,
+                    'thinking_budget': thinking_budget,
+                    'negative_prompt': negative_prompt,
+                    'image_size': corrected_image_size,  # 使用修正后的image_size确保一致性
+                    'gen_image': gen_image,
+                    'max_images': max_images,
+                    'watermark': watermark,
+                    'prompt_extend': prompt_extend,
+                    'mode': mode,
+                    'profile_clean': profile_clean,
+                    'resolved_seed': resolved_seed,
+                }
+
+                # 特殊处理：对于wan2.6-image提供者，需要调整参数名称以匹配实际使用
+                if provider == 'wan2.6-image':
+                    # wan2.6在image_edit模式下使用'n_images'参数，而不是'gen_image'
+                    # 确保缓存参数与提供者实际使用的参数一致
+                    if mode == 'image_edit':
+                        cache_params['n_images'] = gen_image
+                    # 对于interleave模式，使用max_images参数
+
+                # 调试：计算并显示缓存键信息（临时启用）
+                try:
+                    # 计算图像哈希
+                    image_hash = SEED_CACHE._hash_images(gathered)
+                    # 计算参数哈希
+                    params_hash = SEED_CACHE._hash_params(**cache_params)
+                    # 生成缓存键
+                    cache_key = SEED_CACHE._generate_cache_key(seed, provider, instruction, image_hash, params_hash)
+
+                except Exception:
+                    pass  # 缓存键计算错误不影响主要功能
+
+                SEED_CACHE.set(
+                    seed=seed,
+                    provider=provider,
+                    instruction=instruction,
+                    images=gathered,
+                    result=(text, images_out, urls_out),
+                    **cache_params
+                )
+                # 调试信息：记录缓存设置（已关闭）
+                # try:
+                #     print(f"[XISER LLM] 缓存设置成功，seed={seed}, provider={provider}, 当前缓存大小: {SEED_CACHE.size()}", file=sys.stderr)
+                # except:
+                #     pass
+            except Exception:
+                # 缓存失败不影响主要功能
+                pass
 
         # 进度：完成阶段
         _update_progress("完成", 1.0, node_id=node_id)

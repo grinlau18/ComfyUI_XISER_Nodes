@@ -76,8 +76,41 @@ class WanImageProvider(BaseLLMProvider):
             })
 
         # Build parameters based on mode
+        size_raw = str(overrides.get("image_size", self.config.default_params.get("size", "1280*1280")))
+
+        # Validate image size for wan2.6 constraints
+        if size_raw and size_raw != "":
+            try:
+                # Parse width and height
+                if "*" in size_raw:
+                    width_str, height_str = size_raw.split("*")
+                    width = int(width_str.strip())
+                    height = int(height_str.strip())
+
+                    # Calculate total pixels
+                    total_pixels = width * height
+
+                    # Validate constraints
+                    min_pixels = 589824  # 768×768
+                    max_pixels = 1638400  # 1280×1280
+
+                    if total_pixels < min_pixels:
+                        raise ValueError(f"Image size {size_raw} has {total_pixels} pixels, which is below the minimum {min_pixels} (768×768)")
+                    if total_pixels > max_pixels:
+                        raise ValueError(f"Image size {size_raw} has {total_pixels} pixels, which exceeds the maximum {max_pixels} (1280×1280)")
+
+                    # Validate aspect ratio (1:4 to 4:1)
+                    aspect_ratio = width / height
+                    if aspect_ratio < 0.25 or aspect_ratio > 4.0:
+                        raise ValueError(f"Image size {size_raw} has aspect ratio {aspect_ratio:.2f}, which is outside the allowed range 0.25 to 4.0 (1:4 to 4:1)")
+
+            except (ValueError, AttributeError) as e:
+                # If validation fails, use default size
+                size_raw = "1280*1280"
+                # print(f"[Wan2.6] Invalid image size, using default 1280*1280: {e}")  # 调试日志已关闭
+
         params: Dict[str, Any] = {
-            "size": overrides.get("image_size", self.config.default_params.get("size", "1280*1280")),
+            "size": size_raw,
         }
 
         if mode == "image_edit":
@@ -307,17 +340,11 @@ class WanImageProvider(BaseLLMProvider):
         if final_usage:
             merged_response["output"]["usage"] = final_usage
 
-        # 添加调试信息（可选）
-        merged_response["_debug"] = {
-            "total_events": event_count,
-            "content_events": content_event_count,
-            "content_items": len(all_content)
-        }
-
         return merged_response
 
     def extract_text(self, response: Dict[str, Any]) -> str:
         """Extract text from Wan 2.6 response."""
+
         # Check for output in different response formats
         if "output" in response:
             output = response["output"]
@@ -330,14 +357,24 @@ class WanImageProvider(BaseLLMProvider):
                     elif isinstance(content, list):
                         # Extract text from content list (for interleave mode)
                         texts = []
+                        image_count = 0
                         for item in content:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text = item.get("text", "")
-                                if text:
-                                    texts.append(text)
+                            if isinstance(item, dict):
+                                if item.get("type") == "text":
+                                    text = item.get("text", "")
+                                    if text:
+                                        texts.append(text)
+                                elif item.get("type") == "image":
+                                    image_count += 1
+
+                        # 如果有文本，返回文本
                         if texts:
                             # 修复：对于逐字符的文本，直接拼接而不是用换行符
                             return "".join(texts)
+                        # 如果只有图像，返回描述性文本（类似Qwen图像编辑提供者）
+                        elif image_count > 0:
+                            request_id = response.get("request_id", "")
+                            return f"Wan2.6 image edit success: {image_count} image(s). request_id={request_id}".strip()
 
         # Fallback: try to find text in response
         if "choices" in response:
@@ -350,16 +387,32 @@ class WanImageProvider(BaseLLMProvider):
         # Check for direct content in response (for streaming)
         if "content" in response and isinstance(response["content"], list):
             texts = []
+            image_count = 0
             for item in response["content"]:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    text = item.get("text", "")
-                    if text:
-                        texts.append(text)
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        text = item.get("text", "")
+                        if text:
+                            texts.append(text)
+                    elif item.get("type") == "image":
+                        image_count += 1
+
             if texts:
                 # 修复：对于逐字符的文本，直接拼接而不是用换行符
                 return "".join(texts)
+            elif image_count > 0:
+                request_id = response.get("request_id", "")
+                return f"Wan2.6 image edit success: {image_count} image(s). request_id={request_id}".strip()
 
-        return ""
+        # 检查错误情况
+        if "error" in response:
+            err = response.get("error", {})
+            return f"Wan2.6 error: {err.get('code', '')} {err.get('message', '')}".strip()
+
+        if response.get("code") not in (None, 200):
+            return f"Wan2.6 code: {response.get('code')} {response.get('message', '')}".strip()
+
+        return "Wan2.6: no text content in response"
 
     def extract_images(self, response: Dict[str, Any]) -> List[torch.Tensor]:
         """Extract images from Wan 2.6 response."""

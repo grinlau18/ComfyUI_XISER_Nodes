@@ -478,6 +478,9 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
         card.classList.add("disabled");
       }
 
+      // 创建图片容器
+      const imgContainer = createElementWithClass("div", "xiser-image-manager-preview-container");
+
       const img = createElementWithClass("img", "xiser-image-manager-preview", {
         src: `data:image/png;base64,${preview.preview}`
       });
@@ -495,9 +498,10 @@ function createImageManagerUI(node, nodeId, initialState, updateState, uploadIma
           imageState
         });
       };
-      card.addEventListener("dblclick", openEditor);
-      img.addEventListener("dblclick", openEditor);
-      card.appendChild(img);
+      imgContainer.addEventListener("click", openEditor);
+
+      imgContainer.appendChild(img);
+      card.appendChild(imgContainer);
 
       const info = createElementWithClass("div", "xiser-image-manager-info");
       const layerSize = createElementWithClass("div", "xiser-image-manager-layer-size");

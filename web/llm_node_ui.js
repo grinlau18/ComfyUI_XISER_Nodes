@@ -2,9 +2,20 @@ import { app } from "/scripts/app.js";
 
 function openKeyManager(node) {
     window.__XISER_ACTIVE_NODE_ID = node?.id ?? null;
+
+    // 获取节点的当前key_profile值
+    let currentProfile = "";
+    if (node) {
+        const keyWidget = node.widgets?.find(w => w.name === "key_profile");
+        if (keyWidget && keyWidget.value) {
+            currentProfile = keyWidget.value;
+        }
+    }
+
     const mgr = window.__XISER_KEY_MGR;
     if (mgr && typeof mgr.toggleModal === "function") {
-        mgr.restoreSelectionForActiveNode?.();
+        // 传递当前profile值给API Key管理面板
+        mgr.restoreSelectionForActiveNode?.(currentProfile);
         mgr.toggleModal(true);
     } else {
         alert("LLM key manager not ready. Please reload.");
@@ -58,6 +69,17 @@ app.registerExtension({
 
         // 存储每个节点的高级设置展开状态
         const advancedSettingsKey = "xiser.llm.advancedSettings";
+        // 辅助函数：处理分组提供者名称
+        const getActualProviderName = (groupedName) => {
+            if (groupedName.startsWith("alibaba/")) {
+                return groupedName.substring(8); // 移除"alibaba/"前缀
+            }
+            if (groupedName.startsWith("moonshot/")) {
+                return groupedName.substring(9); // 移除"moonshot/"前缀
+            }
+            return groupedName;
+        };
+
         const providerHints = {
             "qwen-image-edit-plus": {
                 sizes: ["", "1664*928", "1472*1140", "1328*1328", "1140*1472", "928*1664", "1024*1024", "512*512", "2048*2048"],
@@ -68,7 +90,7 @@ app.registerExtension({
                 hasImageParams: true,
             },
             "wan2.6-image": {
-                sizes: ["", "1280*1280", "1024*1024", "512*512", "2048*2048"],
+                sizes: ["", "1280*1280", "1280*720", "720*1280", "1280*960", "960*1280", "1024*1024", "1152*896", "896*1152", "768*768"],
                 hasImageParams: true,
             },
             // 为其他提供者添加默认尺寸支持
@@ -107,6 +129,23 @@ app.registerExtension({
             "moonshot_vision": {
                 sizes: [""],  // 视觉模型但不生成图像
                 hasImageParams: false,
+            },
+            "z-image-turbo": {
+                sizes: [
+                    "",  // 自动选择
+                    // 总像素1024*1024的推荐分辨率
+                    "1024*1024", "832*1248", "1248*832", "864*1152", "1152*864",
+                    "896*1152", "1152*896", "720*1280", "576*1344", "1280*720", "1344*576",
+                    // 总像素1280*1280的推荐分辨率
+                    "1280*1280", "1024*1536", "1536*1024", "1104*1472", "1472*1104",
+                    "1120*1440", "1440*1120", "864*1536", "720*1680", "1536*864", "1680*720",
+                    // 总像素1536*1536的推荐分辨率
+                    "1536*1536", "1248*1872", "1872*1248", "1296*1728", "1728*1296",
+                    "1344*1728", "1728*1344", "1152*2048", "864*2016", "2048*1152", "2016*864",
+                    // 其他常用分辨率
+                    "512*512", "768*768", "1024*1536", "1536*1024", "2048*2048"
+                ],
+                hasImageParams: true,
             },
         };
 
@@ -152,13 +191,22 @@ app.registerExtension({
             if (keyWidget) {
                 keyWidget.hidden = true;
                 keyWidget.computeSize = () => [0, 0];
-                const raw = localStorage.getItem(storageKey);
-                const map = raw ? JSON.parse(raw) : {};
-                const stored = map[node.id];
-                if (stored) {
-                    keyWidget.value = stored;
-                } else if (node.properties?.provider) {
-                    keyWidget.value = node.properties.provider; // fallback to provider-named profile
+
+                // 检查节点是否已经有key_profile值（复制节点时可能已经设置了）
+                const existingValue = keyWidget.value;
+                if (existingValue && existingValue.trim() !== "") {
+                    // 节点已经有值，保留它（复制节点的情况）
+                    // 不需要从localStorage读取
+                } else {
+                    // 节点没有值，从localStorage读取
+                    const raw = localStorage.getItem(storageKey);
+                    const map = raw ? JSON.parse(raw) : {};
+                    const stored = map[node.id];
+                    if (stored) {
+                        keyWidget.value = stored;
+                    } else if (node.properties?.provider) {
+                        keyWidget.value = node.properties.provider; // fallback to provider-named profile
+                    }
                 }
             }
 
@@ -222,7 +270,9 @@ app.registerExtension({
         };
 
         const applyProvider = (node, providerVal) => {
-            const hint = providerHints[providerVal] || {};
+            // 处理分组提供者名称
+            const actualProvider = getActualProviderName(providerVal);
+            const hint = providerHints[actualProvider] || {};
             const needImageParams = !!hint.hasImageParams;
 
             // 获取节点的高级设置状态
@@ -237,7 +287,7 @@ app.registerExtension({
 
                 // 处理思考模式控件
                 if (w.name === "enable_thinking") {
-                    if (thinkingEnabledProviders.includes(providerVal)) {
+                    if (thinkingEnabledProviders.includes(actualProvider)) {
                         // 支持思考模式的provider：始终显示enable_thinking控件
                         w.hidden = false;
                         w.disabled = false;
@@ -273,7 +323,7 @@ app.registerExtension({
                     if (!isAdvancedExpanded && lowFrequencyWidgets.includes(w.name)) {
                         // 检查是否是图像生成模型的gen_image控件
                         if (w.name === "gen_image") {
-                            const providerHint = providerHints[providerVal];
+                            const providerHint = providerHints[actualProvider];
                             const isImageGenerationProvider = providerHint?.hasImageParams === true;
                             if (isImageGenerationProvider) {
                                 // 图像生成模型的gen_image始终显示，跳过隐藏逻辑
@@ -286,7 +336,7 @@ app.registerExtension({
                         }
                         // 检查是否是支持图像输出的模型的image_size控件
                         else if (w.name === "image_size") {
-                            const providerHint = providerHints[providerVal];
+                            const providerHint = providerHints[actualProvider];
                             const isImageOutputProvider = providerHint?.hasImageParams === true;
                             if (isImageOutputProvider) {
                                 // 支持图像输出的模型的image_size始终显示，跳过隐藏逻辑
@@ -352,7 +402,7 @@ app.registerExtension({
                         // mode控件现在始终显示（在highFrequencyWidgets中）
                         // 但需要根据提供者设置正确的选项和可见性
 
-                        if (providerVal === "wan2.6-image") {
+                        if (actualProvider === "wan2.6-image") {
                             w.hidden = false;
                             w.disabled = false;
                             // 设置wan2.6的选项
@@ -363,7 +413,7 @@ app.registerExtension({
                             if (w.value && !["image_edit", "interleave"].includes(w.value)) {
                                 w.value = "image_edit";
                             }
-                        } else if (providerVal === "deepseek") {
+                        } else if (actualProvider === "deepseek") {
                             // DeepSeek使用enable_thinking控件切换对话和思考模式，隐藏mode控件
                             w.hidden = true;
                             w.disabled = true;
@@ -377,7 +427,7 @@ app.registerExtension({
             });
 
             // Apply mode-specific visibility for wan2.6-image
-            if (providerVal === "wan2.6-image") {
+            if (actualProvider === "wan2.6-image") {
                 applyModeVisibility(node);
             }
 

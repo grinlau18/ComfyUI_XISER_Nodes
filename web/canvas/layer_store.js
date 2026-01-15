@@ -62,136 +62,101 @@ export const getLayerOrderList = (node, nodeState) => {
 };
 
 export const mergeIncomingStates = (node, nodeState, incomingStates, paths) => {
-  ensureLayerIds(node, paths);
-  // Base map from persisted image_states to preserve order/visible
-  const byLayerId = new Map();
-  if (Array.isArray(node.properties?.image_states)) {
-    // 调试日志：记录基础状态
-    if (nodeState.log) {
-      nodeState.log.debug(`mergeIncomingStates: base image_states count=${node.properties.image_states.length}`);
-      node.properties.image_states.forEach((s, idx) => {
-        nodeState.log.debug(`  base layer ${idx}: opacity=${s.opacity}, brightness=${s.brightness}, contrast=${s.contrast}, saturation=${s.saturation}`);
-      });
-    }
-    node.properties.image_states.forEach((s, idx) => {
-      const lid = s?.layer_id || layerIdOf(node, idx);
-      if (!lid) return;
-      byLayerId.set(lid, normalizeLayerState(s, lid, paths[idx], idx));
+    ensureLayerIds(node, paths);
+    
+    // Simplified state merging: prioritize incoming states from backend
+    // If backend returned states, use them as base and only merge essential properties
+    const baseStates = Array.isArray(incomingStates) && incomingStates.length === paths.length 
+        ? incomingStates 
+        : (nodeState.initialStates || []);
+    
+    // Generate merged states for each path
+    const result = paths.map((path, idx) => {
+        const layerId = layerIdOf(node, idx);
+        const baseState = baseStates[idx] || {};
+        
+        // Create complete state with default values where needed
+        const mergedState = normalizeLayerState(
+            {
+                ...baseState,
+                layer_id: baseState.layer_id || layerId,
+                filename: baseState.filename || path,
+                // Ensure all essential transform and adjustment properties are present
+                x: baseState.x ?? (node.properties?.ui_config?.border_width || 120) + (node.properties?.ui_config?.board_width || 1024) / 2,
+                y: baseState.y ?? (node.properties?.ui_config?.border_width || 120) + (node.properties?.ui_config?.board_height || 1024) / 2,
+                scaleX: baseState.scaleX ?? 1,
+                scaleY: baseState.scaleY ?? 1,
+                rotation: baseState.rotation ?? 0,
+                brightness: baseState.brightness ?? 0,
+                contrast: baseState.contrast ?? 0,
+                saturation: baseState.saturation ?? 0,
+                opacity: baseState.opacity ?? 100,
+                visible: typeof baseState.visible === 'boolean' ? baseState.visible : true,
+                locked: typeof baseState.locked === 'boolean' ? baseState.locked : false,
+                order: Number.isFinite(baseState.order) ? baseState.order : idx
+            },
+            layerId,
+            path,
+            baseState.order || idx
+        );
+        
+        return mergedState;
     });
-  }
-  // Overlay current initialStates for transforms while keeping persisted visible/order
-  (nodeState.initialStates || []).forEach((s, idx) => {
-    const lid = layerIdOf(node, idx);
-    const base = byLayerId.get(lid) || withAdjustmentDefaults({});
-    byLayerId.set(lid, withAdjustmentDefaults({
-      ...base,
-      x: s?.x ?? base.x,
-      y: s?.y ?? base.y,
-      scaleX: s?.scaleX ?? base.scaleX,
-      scaleY: s?.scaleY ?? base.scaleY,
-      rotation: s?.rotation ?? base.rotation,
-      skewX: s?.skewX ?? base.skewX,
-      skewY: s?.skewY ?? base.skewY,
-      brightness: s?.brightness ?? base.brightness,
-      contrast: s?.contrast ?? base.contrast,
-      saturation: s?.saturation ?? base.saturation,
-      opacity: s?.opacity ?? base.opacity,
-      // keep persisted visible unless explicitly set in incoming states later
-    }));
-  });
-
-  const incomingList = Array.isArray(incomingStates)
-    ? incomingStates.map((s) => withAdjustmentDefaults(s || {}))
-    : [];
-  const incomingByLayerId = new Map(
-    incomingList
-      .map((s) => [s?.layer_id, s])
-      .filter(([k]) => k)
-  );
-  const layerOrder = Array.isArray(node.properties?.ui_config?.layer_order)
-    ? node.properties.ui_config.layer_order
-    : getLayerOrderList(node, nodeState);
-
-  const result = paths.map((path, idx) => {
-    const layerId = layerIdOf(node, idx);
-    const base = byLayerId.get(layerId) || nodeState.initialStates[idx] || {};
-    const incoming = incomingByLayerId.get(layerId)
-      || incomingList.find((s) => s.filename === path)
-      || incomingList[idx]
-      || {};
-    const orderFromLayerOrder = Array.isArray(layerOrder) ? layerOrder.indexOf(layerId) : -1;
-    const resolvedOrder = Number.isFinite(orderFromLayerOrder) && orderFromLayerOrder >= 0
-      ? orderFromLayerOrder
-      : (Number.isFinite(incoming.order) ? incoming.order : (Number.isFinite(base.order) ? base.order : idx));
-
-    // visible: incoming > persisted > default true
-    const visible =
-      typeof incoming.visible === 'boolean'
-        ? incoming.visible
-        : (typeof base.visible === 'boolean' ? base.visible : true);
-
-    const mergedState = normalizeLayerState(
-      {
-        ...base,
-        ...incoming,
-        order: resolvedOrder,
-        visible,
-      },
-      layerId,
-      path,
-      resolvedOrder,
-    );
-
-    // 调试日志：记录合并后的状态
-    if (nodeState.log && idx < 3) { // 只记录前3个图层避免日志过多
-      nodeState.log.debug(`mergeIncomingStates result layer ${idx}: opacity=${mergedState.opacity}, brightness=${mergedState.brightness}, contrast=${mergedState.contrast}, saturation=${mergedState.saturation}`);
+    
+    if (nodeState.log) {
+        nodeState.log.debug(`mergeIncomingStates: returning ${result.length} simplified merged states`);
     }
-
-    return mergedState;
-  });
-
-  // 调试日志：记录最终结果
-  if (nodeState.log) {
-    nodeState.log.debug(`mergeIncomingStates: returning ${result.length} states`);
-  }
-
-  return result;
+    
+    return result;
 };
 
 export const persistImageStates = (node, nodeState, imageStatesWidget, syncWidgetValues) => {
-  const filenames = Array.isArray(node.properties?.ui_config?.image_paths)
-    ? node.properties.ui_config.image_paths
-    : [];
-  ensureLayerIds(node, filenames);
-  const layerOrder = getLayerOrderList(node, nodeState); // bottom -> top (ids)
-  node.properties.image_states = nodeState.initialStates.map((s, idx) => ({
-    ...withAdjustmentDefaults(s),
-    layer_id: layerIdOf(node, idx),
-    order: layerOrder.indexOf(layerIdOf(node, idx)),
-    filename: s?.filename || filenames[idx],
-  }));
-
-  // 调试日志：记录保存的状态
-  if (nodeState.log) {
-    nodeState.log.debug(`persistImageStates: saving ${node.properties.image_states.length} states`);
-    node.properties.image_states.forEach((state, idx) => {
-      nodeState.log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, has image=${!!state.image}, has image_base64=${!!state.image_base64}, image length=${state.image?.length || 0}, image_base64 length=${state.image_base64?.length || 0}`);
+    const filenames = Array.isArray(node.properties?.ui_config?.image_paths)
+        ? node.properties.ui_config.image_paths
+        : [];
+    ensureLayerIds(node, filenames);
+    const layerOrder = getLayerOrderList(node, nodeState); // bottom -> top (ids)
+    
+    // Ensure all states have complete adjustment parameters
+    node.properties.image_states = nodeState.initialStates.map((s, idx) => {
+        // Ensure state is complete, including all adjustment parameters
+        const completeState = withAdjustmentDefaults({
+            ...s,
+            layer_id: layerIdOf(node, idx),
+            order: layerOrder.indexOf(layerIdOf(node, idx)),
+            filename: s?.filename || filenames[idx],
+            // Ensure all necessary adjustment parameters are present with reasonable defaults
+            brightness: s?.brightness ?? 0,
+            contrast: s?.contrast ?? 0,
+            saturation: s?.saturation ?? 0,
+            opacity: s?.opacity ?? 100,
+            visible: typeof s?.visible === 'boolean' ? s.visible : true,
+            locked: typeof s?.locked === 'boolean' ? s.locked : false
+        });
+        return completeState;
     });
-  }
-  node.properties.ui_config = {
-    ...(node.properties.ui_config || {}),
-    image_states: node.properties.image_states,
-    layer_order: layerOrder,
-    layer_ids: node.properties.ui_config.layer_ids,
-  };
-  if (imageStatesWidget) {
-    imageStatesWidget.value = JSON.stringify(node.properties.image_states);
-  }
-  node.setProperty?.('image_states', node.properties.image_states);
-  node.setProperty?.('ui_config', node.properties.ui_config);
-  if (typeof syncWidgetValues === 'function') {
-    syncWidgetValues();
-  }
+
+    // 调试日志：记录保存的状态
+    if (nodeState.log) {
+        nodeState.log.debug(`persistImageStates: saving ${node.properties.image_states.length} states`);
+        node.properties.image_states.forEach((state, idx) => {
+            nodeState.log.debug(`  layer ${idx}: opacity=${state.opacity}, brightness=${state.brightness}, contrast=${state.contrast}, saturation=${state.saturation}, visible=${state.visible}, locked=${state.locked}`);
+        });
+    }
+    node.properties.ui_config = {
+        ...(node.properties.ui_config || {}),
+        image_states: node.properties.image_states,
+        layer_order: layerOrder,
+        layer_ids: node.properties.ui_config.layer_ids,
+    };
+    if (imageStatesWidget) {
+        imageStatesWidget.value = JSON.stringify(node.properties.image_states);
+    }
+    node.setProperty?.('image_states', node.properties.image_states);
+    node.setProperty?.('ui_config', node.properties.ui_config);
+    if (typeof syncWidgetValues === 'function') {
+        syncWidgetValues();
+    }
 };
 
 export const applyLayerOrder = (node, nodeState) => {

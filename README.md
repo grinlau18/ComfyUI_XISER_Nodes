@@ -21,7 +21,8 @@
 
 ---
 
-Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality.
+Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. 
+This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows.
 
 ---
 
@@ -126,7 +127,10 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   ![XIS_MultiPointGradient Gradient Generation](img/XIS_MultiPointGradient.jpeg)
 - **XIS_ImageManager**: Browse, cache, and reorder uploads before emitting the preview-aware `pack_images` output.
   - Tracks enabled layers, upload order, thumbnails, deterministic IDs, and metadata so downstream nodes see consistent image packs.
-  ![XIS_ImageManager Interface](img/XIS_ImageManager.jpeg)
+  - **Image Editing**: Click on any preview image to open the built-in image editor for cropping and adjustments
+  - **Visual Cues**: Hover over preview images to see a scissors icon indicating editing capability
+  ![XIS_ImageManager Interface](img/XIS_ImageManager_1.jpeg)
+  ![XIS_ImageManager Interface](img/XIS_ImageManager_2.jpeg)
 - **XIS_ShapeAndText**: Produce shape or text masks with configurable fill/stroke, transparency, and batch `shape_data` inputs; it returns the shape image, mask, and background.
   - Supports circles, polygons, stars, hearts, flowers, spirals, sunbursts, and text (with local font loading), plus spacing, stroke, transform, and skew controls.
   ![XIS_ShapeAndText Shape Generation](img/XIS_ShapeAndText_1.jpeg)
@@ -141,6 +145,7 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   - **Real-time Preview**: Colors are applied immediately as you adjust them
   - **Persistent Storage**: Custom presets are saved to `web/xiser_color_presets.json`
   ![Node Color Customization](img/changeNodeColor_1.jpeg)
+  
 - **XIS_Label**: Double-click to open HTML/Markdown editors (CodeMirror with textarea fallback), toggle editors, adjust backgrounds and text scale, and enjoy consistent spacing, list handling, markdown conversion, and smart scrollbars across languages.
   - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
   ![Text Label Feature](img/XIS_Label_1.jpeg)

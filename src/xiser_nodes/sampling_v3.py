@@ -83,6 +83,7 @@ class XIS_DynamicKSamplerV3(io.ComfyNode):
                            default=0,
                            min=0,
                            max=0xffffffffffffffff,
+                           control_after_generate=True,
                            tooltip="种子"),
                 io.Custom("LIST").Input("denoise_list",
                                       optional=True,
