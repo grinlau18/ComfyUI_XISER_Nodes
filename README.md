@@ -21,7 +21,8 @@
 
 ---
 
-Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality.
+Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. 
+This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows.
 
 ---
 

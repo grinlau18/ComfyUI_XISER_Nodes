@@ -2,9 +2,20 @@ import { app } from "/scripts/app.js";
 
 function openKeyManager(node) {
     window.__XISER_ACTIVE_NODE_ID = node?.id ?? null;
+
+    // 获取节点的当前key_profile值
+    let currentProfile = "";
+    if (node) {
+        const keyWidget = node.widgets?.find(w => w.name === "key_profile");
+        if (keyWidget && keyWidget.value) {
+            currentProfile = keyWidget.value;
+        }
+    }
+
     const mgr = window.__XISER_KEY_MGR;
     if (mgr && typeof mgr.toggleModal === "function") {
-        mgr.restoreSelectionForActiveNode?.();
+        // 传递当前profile值给API Key管理面板
+        mgr.restoreSelectionForActiveNode?.(currentProfile);
         mgr.toggleModal(true);
     } else {
         alert("LLM key manager not ready. Please reload.");
@@ -68,7 +79,7 @@ app.registerExtension({
                 hasImageParams: true,
             },
             "wan2.6-image": {
-                sizes: ["", "1280*1280", "1024*1024", "512*512", "2048*2048"],
+                sizes: ["", "1280*1280", "1280*720", "720*1280", "1280*960", "960*1280", "1024*1024", "1152*896", "896*1152", "768*768"],
                 hasImageParams: true,
             },
             // 为其他提供者添加默认尺寸支持
@@ -152,13 +163,22 @@ app.registerExtension({
             if (keyWidget) {
                 keyWidget.hidden = true;
                 keyWidget.computeSize = () => [0, 0];
-                const raw = localStorage.getItem(storageKey);
-                const map = raw ? JSON.parse(raw) : {};
-                const stored = map[node.id];
-                if (stored) {
-                    keyWidget.value = stored;
-                } else if (node.properties?.provider) {
-                    keyWidget.value = node.properties.provider; // fallback to provider-named profile
+
+                // 检查节点是否已经有key_profile值（复制节点时可能已经设置了）
+                const existingValue = keyWidget.value;
+                if (existingValue && existingValue.trim() !== "") {
+                    // 节点已经有值，保留它（复制节点的情况）
+                    // 不需要从localStorage读取
+                } else {
+                    // 节点没有值，从localStorage读取
+                    const raw = localStorage.getItem(storageKey);
+                    const map = raw ? JSON.parse(raw) : {};
+                    const stored = map[node.id];
+                    if (stored) {
+                        keyWidget.value = stored;
+                    } else if (node.properties?.provider) {
+                        keyWidget.value = node.properties.provider; // fallback to provider-named profile
+                    }
                 }
             }
 

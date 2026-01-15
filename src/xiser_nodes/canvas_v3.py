@@ -416,14 +416,26 @@ class XISER_Canvas:
             self.created_files.add(final_fname)
             image_paths.append(final_fname)
 
-        # Normalize lengths
+        # Normalize lengths and ensure complete states
         if len(image_states) < len(image_paths):
             for i in range(len(image_states), len(image_paths)):
-                image_states.append(
-                    self._normalize_state(
-                        {"order": i, "filename": image_paths[i]}, border_width, board_width, board_height
-                    )
+                # Generate complete default state for new images
+                default_state = self._normalize_state(
+                    {"order": i, "filename": image_paths[i]}, 
+                    border_width, 
+                    board_width, 
+                    board_height
                 )
+                # Ensure all adjustment parameters are present with default values
+                default_state.update({
+                    "brightness": AdjustmentUtils.DEFAULT_BRIGHTNESS,
+                    "contrast": AdjustmentUtils.DEFAULT_CONTRAST,
+                    "saturation": AdjustmentUtils.DEFAULT_SATURATION,
+                    "opacity": AdjustmentUtils.DEFAULT_OPACITY,
+                    "visible": True,
+                    "locked": False
+                })
+                image_states.append(default_state)
         if len(image_states) > len(image_paths):
             image_states = image_states[: len(image_paths)]
 
@@ -603,7 +615,7 @@ class XISER_Canvas:
 
         return {
             "ui": {
-                "image_states": image_states,
+                "image_states": image_states,  # 返回完整的状态，包括所有调整参数
                 "image_base64_chunks": image_base64_chunks,
                 "image_paths": image_paths,
                 "board_width": [board_width],

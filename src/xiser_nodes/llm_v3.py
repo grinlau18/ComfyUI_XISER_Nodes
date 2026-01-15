@@ -169,10 +169,11 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     "seed",
                     default=42,
                     min=-2,
-                    max=2147483647,
+                    max=4294967295,
                     step=1,
+                    control_after_generate=True,
                     optional=True,
-                    tooltip="随机种子（生成模式）：-1每次随机，-2递增计数，≥0固定值。默认42为固定模式"
+                    tooltip="随机种子：≥0为固定模式，-1每次随机，-2递增计数"
                 ),
                 io.String.Input(
                     "negative_prompt",
@@ -183,7 +184,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "image_size",
-                    options=["", "512*512", "928*1664", "1024*1024", "1140*1472", "1280*1280", "1328*1328", "1472*1140", "1664*928", "2048*2048"],
+                    options=["", "512*512", "720*1280", "768*768", "896*1152", "928*1664", "960*1280", "1024*1024", "1104*1472", "1140*1472", "1152*896", "1280*720", "1280*960", "1280*1280", "1328*1328", "1472*1104", "1472*1140", "1664*928", "2048*2048"],
                     default="",
                     optional=True,
                     tooltip="图像尺寸（空值表示自动）。包含所有视觉模型支持的尺寸。注意：不同模型支持的尺寸不同，不支持的尺寸会被自动调整或报错"
@@ -247,7 +248,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         max_tokens: int = 512,
         enable_thinking: bool = False,
         thinking_budget: int = 0,
-        seed: int = -1,
+        seed: int = 42,
         negative_prompt: str = "",
         image_size: str = "",
         gen_image: int = 1,
@@ -299,7 +300,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 []                                                                                            # image_urls
             )
 
-        # 处理种子
+        # 处理种子：seed已经是整数
         resolved_seed = seed if (seed is not None and seed >= 0) else None
 
         # 进度：数据处理阶段

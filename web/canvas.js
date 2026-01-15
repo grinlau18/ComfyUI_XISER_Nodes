@@ -224,8 +224,45 @@ app.registerExtension({
         nodeState.applyLayerAdjustments = (index) => adjustments.applyStoredAdjustments(index);
       }
 
+      // Pre-generate complete initial states for new images
+      const pregenerateInitialStates = (imagePaths, boardWidth, boardHeight, borderWidth) => {
+        return imagePaths.map((path, index) => withAdjustmentDefaults({
+          x: borderWidth + boardWidth / 2,
+          y: borderWidth + boardHeight / 2,
+          scaleX: 1,
+          scaleY: 1,
+          rotation: 0,
+          skewX: 0,
+          skewY: 0,
+          brightness: 0,
+          contrast: 0,
+          saturation: 0,
+          opacity: 100,
+          visible: true,
+          locked: false,
+          order: index,
+          filename: path
+        }));
+      };
+
       // Initialize layer states
       nodeState.initialStates = normalizeStateArray(node.properties.image_states);
+      
+      // Pre-generate complete initial states if imagePaths exist but no states
+      if (imagePaths.length > 0 && (nodeState.initialStates.length === 0 || nodeState.initialStates.length < imagePaths.length)) {
+        const generatedStates = pregenerateInitialStates(imagePaths, boardWidth, boardHeight, borderWidth);
+        
+        // Merge with existing states if any
+        if (nodeState.initialStates.length > 0) {
+          // Keep existing states for matching indices
+          for (let i = 0; i < nodeState.initialStates.length && i < generatedStates.length; i++) {
+            generatedStates[i] = { ...generatedStates[i], ...nodeState.initialStates[i] };
+          }
+        }
+        
+        nodeState.initialStates = generatedStates;
+        log.info(`Pregenerated complete initial states for ${generatedStates.length} images`);
+      }
 
       // Create debounced loadImages function
       const debouncedLoadImages = debounce(loadImages, 500);
@@ -1038,20 +1075,25 @@ app.registerExtension({
           imagePaths = newImagePaths;
           nodeState.imageNodes = new Array(imagePaths.length).fill(null);
 
-          // Update ui_config only if changed
+          // Update ui_config image paths if changed
           if (!arraysEqual(node.properties.ui_config.image_paths, imagePaths)) {
             node.properties.ui_config.image_paths = imagePaths;
             node.setProperty('ui_config', node.properties.ui_config);
           }
-
-          applyStates(nodeState);
-          nodeState.imageLayer.batchDraw();
-
-          // Update image_states: merge incoming with filename/order to preserve stacking
+          
+          // Simplified: Merge incoming states with backend states
           const mergedStates = mergeIncomingStates(node, nodeState, states, imagePaths);
+          
+          // Update all state references
           node.properties.image_states = mergedStates;
           node.properties.ui_config = { ...(node.properties.ui_config || {}), image_states: mergedStates };
           nodeState.initialStates = mergedStates;
+          
+          // Apply states to UI and update properties
+          applyStates(nodeState);
+          nodeState.imageLayer.batchDraw();
+          
+          // Set properties and apply layer order
           node.setProperty('image_states', nodeState.initialStates);
           node.setProperty('ui_config', node.properties.ui_config);
           applyLayerOrderBound();
@@ -1059,6 +1101,7 @@ app.registerExtension({
           nodeState.lastImagePaths = imagePaths.slice();
 
           try {
+            // Load images and set up event listeners
             await loadImages(node, nodeState, imagePaths, nodeState.initialStates, statusText, uiElements, selectLayer, deselectLayer, updateSize, [], 0, 3, true);
             setupLayerEventListeners(node, nodeState);
             setupWheelEvents(node, nodeState);
@@ -1068,6 +1111,7 @@ app.registerExtension({
             return;
           }
 
+          // Update UI elements
           updateSize();
           uiElements.updateLayerPanel(selectLayer, deselectLayer, {
             onToggleVisibility: setLayerVisibility,
@@ -1075,9 +1119,10 @@ app.registerExtension({
             onToggleLock: setLayerLock,
           });
           updateHistory(nodeState);
-          // 确保本次渲染后的叠加顺序立即持久化，避免下一次执行回退
-          log.info(`onExecuted persist before setProperty, orders=${JSON.stringify(nodeState.initialStates.map(s=>s.order))}`);
+          
+          // Persist states to ensure widget values are updated
           persistImageStatesBound();
+          syncWidgetValues();
 
           const outputCanvas = nodeState.stage.toCanvas();
           const layers = nodeState.initialStates.map((state, index) => {

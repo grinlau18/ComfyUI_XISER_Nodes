@@ -233,6 +233,23 @@ function setupLabelNode() {
                 logger.error("Failed to load resources, node may be unavailable", e);
             }
         },
+
+        // ✅ NEW: Use the getNodeMenuItems hook instead of monkey-patching getExtraMenuOptions
+        getNodeMenuItems(node) {
+            const items = [];
+
+            // Add menu item only for XIS_Label nodes
+            if (node.type === "XIS_Label" || node.name === "XIS_Label") {
+                items.push({
+                    content: "编辑文本",
+                    callback: async () => {
+                        await openTextEditor(node);
+                    }
+                });
+            }
+
+            return items;
+        },
         async beforeRegisterNodeDef(nodeType, nodeData, app) {
             if (nodeData.name !== "XIS_Label") return;
 
@@ -372,17 +389,7 @@ function setupLabelNode() {
                 return data;
             };
 
-            /**
-             * Adds a right-click menu option to edit text with a modal editor.
-             */
-            nodeType.prototype.getExtraMenuOptions = function (graphCanvas, options) {
-                options.push({
-                    content: "编辑文本",
-                    callback: async () => {
-                        await openTextEditor(this);
-                    }
-                });
-            };
+            // Note: Menu options are now handled by the getNodeMenuItems hook in the extension
         },
     });
 }

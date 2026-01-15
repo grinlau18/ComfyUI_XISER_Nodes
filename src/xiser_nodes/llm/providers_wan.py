@@ -76,8 +76,41 @@ class WanImageProvider(BaseLLMProvider):
             })
 
         # Build parameters based on mode
+        size_raw = str(overrides.get("image_size", self.config.default_params.get("size", "1280*1280")))
+
+        # Validate image size for wan2.6 constraints
+        if size_raw and size_raw != "":
+            try:
+                # Parse width and height
+                if "*" in size_raw:
+                    width_str, height_str = size_raw.split("*")
+                    width = int(width_str.strip())
+                    height = int(height_str.strip())
+
+                    # Calculate total pixels
+                    total_pixels = width * height
+
+                    # Validate constraints
+                    min_pixels = 589824  # 768×768
+                    max_pixels = 1638400  # 1280×1280
+
+                    if total_pixels < min_pixels:
+                        raise ValueError(f"Image size {size_raw} has {total_pixels} pixels, which is below the minimum {min_pixels} (768×768)")
+                    if total_pixels > max_pixels:
+                        raise ValueError(f"Image size {size_raw} has {total_pixels} pixels, which exceeds the maximum {max_pixels} (1280×1280)")
+
+                    # Validate aspect ratio (1:4 to 4:1)
+                    aspect_ratio = width / height
+                    if aspect_ratio < 0.25 or aspect_ratio > 4.0:
+                        raise ValueError(f"Image size {size_raw} has aspect ratio {aspect_ratio:.2f}, which is outside the allowed range 0.25 to 4.0 (1:4 to 4:1)")
+
+            except (ValueError, AttributeError) as e:
+                # If validation fails, use default size
+                size_raw = "1280*1280"
+                print(f"[Wan2.6] Invalid image size, using default 1280*1280: {e}")
+
         params: Dict[str, Any] = {
-            "size": overrides.get("image_size", self.config.default_params.get("size", "1280*1280")),
+            "size": size_raw,
         }
 
         if mode == "image_edit":

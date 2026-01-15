@@ -228,11 +228,19 @@ class KeyManager {
         }
     }
 
-    restoreSelectionForActiveNode() {
+    restoreSelectionForActiveNode(currentProfile = null) {
         const activeNodeId = window.__XISER_ACTIVE_NODE_ID;
-        const raw = localStorage.getItem(this.storageKey);
-        const map = raw ? JSON.parse(raw) : {};
-        const profile = activeNodeId ? map[activeNodeId] : "";
+
+        // 优先使用传入的currentProfile参数（来自节点的实际值）
+        let profile = currentProfile;
+
+        // 如果没有传入currentProfile，从localStorage读取
+        if (!profile && activeNodeId) {
+            const raw = localStorage.getItem(this.storageKey);
+            const map = raw ? JSON.parse(raw) : {};
+            profile = map[activeNodeId] || "";
+        }
+
         if (profile && this.state.profiles.includes(profile)) {
             this.profileSelect.value = profile;
         } else {

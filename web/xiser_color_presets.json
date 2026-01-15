@@ -304,10 +304,17 @@
   },
   "customSets": [
     {
-      "id": "custom-1763803053657",
+      "id": "custom-1768452810383",
+      "name": "科技蓝调",
+      "title": "#144c94",
+      "content": "#2d2f34",
+      "theme": "dark"
+    },
+    {
+      "id": "custom-1768452896977",
       "name": "静怡青草",
-      "title": "#00695c",
-      "content": "#383839",
+      "title": "#00695d",
+      "content": "#31383a",
       "theme": "dark"
     }
   ]

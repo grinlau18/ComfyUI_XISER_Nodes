@@ -106,7 +106,7 @@ PROVIDER_SCHEMA: Dict[str, Dict[str, Any]] = {
         "capabilities": {"text": True, "vision": True, "image_out": True},
         "requirements": {"instruction": True, "image_requires_text": True},
         "enums": {
-            "image_size": ["", "1280*1280", "1024*1024", "512*512", "2048*2048"],
+            "image_size": ["", "1280*1280", "1280*720", "720*1280", "1280*960", "960*1280", "1024*1024", "1152*896", "896*1152", "768*768"],
             "mode": ["image_edit", "interleave"],
         },
         # Note: image_edit mode requires at least one image (validated in provider)
