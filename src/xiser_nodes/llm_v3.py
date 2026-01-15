@@ -66,7 +66,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
-        choices = REGISTRY.list_choices() or ["deepseek"]
+        choices = REGISTRY.list_grouped_choices() or ["deepseek"]
 
         return io.Schema(
             node_id="XIS_LLMOrchestrator",
@@ -286,7 +286,9 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             # 进度：准备阶段
             _update_progress("准备", 0.1, node_id=node_id)
 
-            provider_impl = REGISTRY.get(provider)
+            # 将分组名称转换为实际的提供者名称
+            actual_provider = REGISTRY.get_actual_provider_name(provider)
+            provider_impl = REGISTRY.get(actual_provider)
         except KeyError:
             return io.NodeOutput(
                 f"Error: unknown provider '{provider}'",  # response
@@ -460,8 +462,8 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             "mode": mode,
         }
 
-        # 验证输入
-        validation_error = _validate_inputs(provider, instruction, gathered, overrides)
+        # 验证输入（使用实际的提供者名称）
+        validation_error = _validate_inputs(actual_provider, instruction, gathered, overrides)
         if validation_error:
             return io.NodeOutput(
                 f"Error: {validation_error}",  # response
