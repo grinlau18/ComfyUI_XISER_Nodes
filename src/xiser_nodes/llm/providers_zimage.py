@@ -68,7 +68,8 @@ class ZImageProvider(BaseLLMProvider):
         """
         # Z-Image是纯文生图模型，不支持图像输入
         if image_payloads:
-            print(f"[Z-Image] Warning: Z-Image Turbo does not support image inputs, ignoring {len(image_payloads)} images")
+            # print(f"[Z-Image] Warning: Z-Image Turbo does not support image inputs, ignoring {len(image_payloads)} images")  # 调试日志已关闭
+            pass
 
         # 获取模型覆盖
         model = overrides.get("model", self.config.model)
@@ -116,12 +117,13 @@ class ZImageProvider(BaseLLMProvider):
                     recommended_max = 2359296  # 1536×1536
 
                     if total_pixels < recommended_min or total_pixels > recommended_max:
-                        print(f"[Z-Image] Warning: Image size {size_raw} ({total_pixels} pixels) is outside recommended range [{recommended_min}, {recommended_max}]")
+                        # print(f"[Z-Image] Warning: Image size {size_raw} ({total_pixels} pixels) is outside recommended range [{recommended_min}, {recommended_max}]")  # 调试日志已关闭
+                        pass
 
             except (ValueError, AttributeError) as e:
                 # 如果验证失败，使用默认尺寸
                 size_raw = "1024*1536"
-                print(f"[Z-Image] Invalid image size, using default 1024*1536: {e}")
+                # print(f"[Z-Image] Invalid image size, using default 1024*1536: {e}")  # 调试日志已关闭
 
         # 构建参数
         params: Dict[str, Any] = {

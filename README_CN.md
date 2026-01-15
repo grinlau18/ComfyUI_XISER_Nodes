@@ -153,7 +153,10 @@
 
 - **XIS_ImageManager**：管理并重排上传图像，最终输出带预览的 `pack_images`。
   - 记录启用状态、上传顺序、缩略图、确定性 ID 与元数据，确保下游节点看到一致的图像包。
-  ![XIS_ImageManager图像管理](img/XIS_ImageManager.jpeg)
+  - **图像编辑**：点击任意预览图可打开内置图像编辑器进行裁剪和调整
+  - **视觉提示**：鼠标悬停在预览图上会显示剪刀图标，提示可进行编辑操作
+  ![XIS_ImageManager Interface](img/XIS_ImageManager_1.jpeg)
+  ![XIS_ImageManager Interface](img/XIS_ImageManager_2.jpeg)
 
 - **XIS_ShapeAndText**：生成形状或文本蒙版，支持填充/描边、透明度以及 `shape_data` 批量输入；返回形状图、蒙版与背景。
   - 支持圆、多边形、星、心、花、螺旋、太阳爆发与文本（可加载本地字体），并可调节字距/行距、描边、变换与倾斜。

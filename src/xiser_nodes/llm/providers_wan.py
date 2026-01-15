@@ -107,7 +107,7 @@ class WanImageProvider(BaseLLMProvider):
             except (ValueError, AttributeError) as e:
                 # If validation fails, use default size
                 size_raw = "1280*1280"
-                print(f"[Wan2.6] Invalid image size, using default 1280*1280: {e}")
+                # print(f"[Wan2.6] Invalid image size, using default 1280*1280: {e}")  # 调试日志已关闭
 
         params: Dict[str, Any] = {
             "size": size_raw,
@@ -340,39 +340,10 @@ class WanImageProvider(BaseLLMProvider):
         if final_usage:
             merged_response["output"]["usage"] = final_usage
 
-        # 添加调试信息（可选）
-        merged_response["_debug"] = {
-            "total_events": event_count,
-            "content_events": content_event_count,
-            "content_items": len(all_content)
-        }
-
         return merged_response
 
     def extract_text(self, response: Dict[str, Any]) -> str:
         """Extract text from Wan 2.6 response."""
-        # 调试：记录响应结构
-        import sys
-        try:
-            print(f"[XISER LLM] [Wan2.6] extract_text 响应结构检查:", file=sys.stderr)
-            print(f"[XISER LLM]   response keys: {list(response.keys())}", file=sys.stderr)
-            if "output" in response:
-                output = response["output"]
-                print(f"[XISER LLM]   output keys: {list(output.keys())}", file=sys.stderr)
-                if "choices" in output:
-                    choices = output["choices"]
-                    print(f"[XISER LLM]   choices type: {type(choices)}, length: {len(choices) if isinstance(choices, list) else 'N/A'}", file=sys.stderr)
-                    if choices and isinstance(choices, list) and len(choices) > 0:
-                        first_choice = choices[0]
-                        print(f"[XISER LLM]   first_choice keys: {list(first_choice.keys())}", file=sys.stderr)
-                        if "message" in first_choice:
-                            message = first_choice["message"]
-                            print(f"[XISER LLM]   message keys: {list(message.keys())}", file=sys.stderr)
-                            if "content" in message:
-                                content = message["content"]
-                                print(f"[XISER LLM]   content type: {type(content)}, preview: {repr(str(content)[:100])}", file=sys.stderr)
-        except Exception as e:
-            print(f"[XISER LLM] [Wan2.6] extract_text 调试错误: {e}", file=sys.stderr)
 
         # Check for output in different response formats
         if "output" in response:

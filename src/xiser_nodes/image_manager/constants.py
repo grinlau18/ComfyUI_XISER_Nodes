@@ -2,7 +2,7 @@ import logging
 import os
 import folder_paths
 
-LOG_LEVEL = "debug"  # Set to warning to reduce logging noise
+LOG_LEVEL = "error"  # Set to error to reduce logging noise
 LOGGER_NAME = "XISER_ImageManager"
 
 logger = logging.getLogger(LOGGER_NAME)

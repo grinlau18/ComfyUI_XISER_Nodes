@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Tuple
 import torch
 import requests
 import time
-import sys  # 临时启用调试日志
+# import sys  # 调试日志已关闭
 from comfy_execution.utils import get_executing_context
 
 from .llm.base import _gather_images, _image_to_base64
@@ -196,7 +196,18 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 ),
                 io.Combo.Input(
                     "image_size",
-                    options=["", "512*512", "720*1280", "768*768", "896*1152", "928*1664", "960*1280", "1024*1024", "1104*1472", "1140*1472", "1152*896", "1280*720", "1280*960", "1280*1280", "1328*1328", "1472*1104", "1472*1140", "1664*928", "2048*2048"],
+                    options=[
+                        "",  # 自动选择
+                        "1024*1024", "1024*1536", "1104*1472", "1120*1440", "1140*1472",
+                        "1152*2048", "1152*864", "1152*896", "1248*1872", "1248*832",
+                        "1280*1280", "1280*720", "1280*960", "1296*1728", "1328*1328",
+                        "1344*1728", "1344*576", "1440*1120", "1472*1104", "1472*1140",
+                        "1536*1024", "1536*1536", "1536*864", "1664*928", "1680*720",
+                        "1728*1296", "1728*1344", "1872*1248", "2016*864", "2048*1152",
+                        "2048*2048", "512*512", "576*1344", "720*1280", "720*1680",
+                        "768*768", "832*1248", "864*1152", "864*1536", "864*2016",
+                        "896*1152", "928*1664", "960*1280"
+                    ],
                     default="",
                     optional=True,
                     tooltip="图像尺寸（空值表示自动）。包含所有视觉模型支持的尺寸。注意：不同模型支持的尺寸不同，不支持的尺寸会被自动调整或报错"
@@ -242,7 +253,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     "enable_cache",
                     default=True,
                     optional=True,
-                    tooltip="启用seed缓存（低频使用）：固定seed（≥0）的结果会自动缓存，相同参数直接返回缓存内容，避免重复调用API。缓存最大容量50个结果（LRU淘汰）。"
+                    tooltip="启用seed缓存：固定seed（≥0）的结果会自动缓存，相同参数直接返回缓存内容，避免重复调用API。缓存最大容量50个结果（LRU淘汰）。"
                 ),
             ],
             outputs=[
@@ -289,6 +300,10 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             # 将分组名称转换为实际的提供者名称
             actual_provider = REGISTRY.get_actual_provider_name(provider)
             provider_impl = REGISTRY.get(actual_provider)
+
+            # 统一使用实际的提供者名称，避免分组名称问题
+            # 这样后续代码就不需要区分 provider 和 actual_provider 了
+            provider = actual_provider
         except KeyError:
             return io.NodeOutput(
                 f"Error: unknown provider '{provider}'",  # response
@@ -365,6 +380,11 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 else:
                     corrected_image_size = ""  # 如果没有非空尺寸，保持空值
 
+        # 特殊处理：对于只允许空image_size的模型，强制设置为空
+        # 这可以防止用户从UI选择无效的尺寸
+        if allowed_sizes and len(allowed_sizes) == 1 and allowed_sizes[0] == "":
+            corrected_image_size = ""
+
         # 检查缓存（只对固定seed≥0且启用缓存的情况）
         if seed >= 0 and enable_cache:
             # 直接使用输入参数构建缓存参数，避免使用locals()的动态性
@@ -378,7 +398,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                 'enable_thinking': enable_thinking,
                 'thinking_budget': thinking_budget,
                 'negative_prompt': negative_prompt,
-                'image_size': image_size,  # 使用原始image_size，而不是corrected_image_size
+                'image_size': corrected_image_size,  # 使用修正后的image_size确保一致性
                 'gen_image': gen_image,
                 'max_images': max_images,
                 'watermark': watermark,
@@ -396,25 +416,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     cache_params['n_images'] = gen_image
                 # 对于interleave模式，使用max_images参数
 
-            # 调试信息：记录缓存检查（临时启用）
-            try:
-                debug_info = {
-                    'seed': seed,
-                    'provider': provider,
-                    'instruction_preview': instruction[:50] + '...' if len(instruction) > 50 else instruction,
-                    'image_count': len(gathered),
-                    'cache_params_keys': list(cache_params.keys()),
-                    'cache_enabled': enable_cache,
-                }
-                print(f"[XISER LLM] 缓存检查: {debug_info}", file=sys.stderr)
-
-                # 显示缓存参数值
-                print(f"[XISER LLM] 缓存参数值:", file=sys.stderr)
-                for key, value in cache_params.items():
-                    print(f"  {key}: {repr(value)}", file=sys.stderr)
-            except:
-                pass  # 调试信息不影响主要功能
-
+            # 缓存检查
             cached_result = SEED_CACHE.get(
                 seed=seed,
                 provider=provider,
@@ -425,23 +427,12 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             if cached_result:
                 # 进度：从缓存返回
                 _update_progress("完成", 1.0, node_id=node_id)
-                # 缓存命中调试信息（临时启用）
-                try:
-                    print(f"[XISER LLM] 缓存命中! seed={seed}, provider={provider}", file=sys.stderr)
-                except:
-                    pass
                 text, images_out, urls_out = cached_result
                 return io.NodeOutput(
                     text or "",      # response
                     images_out,      # images
                     urls_out         # image_urls
                 )
-            else:
-                # 缓存未命中调试信息（临时启用）
-                try:
-                    print(f"[XISER LLM] 缓存未命中，将调用API", file=sys.stderr)
-                except:
-                    pass
 
         # 构建覆盖参数
         overrides: Dict[str, Any] = {
@@ -462,8 +453,8 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             "mode": mode,
         }
 
-        # 验证输入（使用实际的提供者名称）
-        validation_error = _validate_inputs(actual_provider, instruction, gathered, overrides)
+        # 验证输入
+        validation_error = _validate_inputs(provider, instruction, gathered, overrides)
         if validation_error:
             return io.NodeOutput(
                 f"Error: {validation_error}",  # response
@@ -509,18 +500,6 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         urls_out = image_urls if image_urls else []
 
         # 缓存结果（只对固定seed≥0、启用缓存且成功的情况）
-        # 调试：检查缓存设置条件
-        try:
-            print(f"[XISER LLM] 缓存设置条件检查:", file=sys.stderr)
-            print(f"  seed >= 0: {seed >= 0}", file=sys.stderr)
-            print(f"  enable_cache: {enable_cache}", file=sys.stderr)
-            print(f"  text exists: {bool(text)}", file=sys.stderr)
-            if text:
-                print(f"  text starts with Error:: {text.startswith('Error:')}", file=sys.stderr)
-                print(f"  text starts with LLM request failed:: {text.startswith('LLM request failed:')}", file=sys.stderr)
-                print(f"  text preview: {repr(text[:100])}", file=sys.stderr)
-        except:
-            pass
 
         if seed >= 0 and enable_cache and text and not text.startswith("Error:") and not text.startswith("LLM request failed:"):
             try:
@@ -534,7 +513,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     'enable_thinking': enable_thinking,
                     'thinking_budget': thinking_budget,
                     'negative_prompt': negative_prompt,
-                    'image_size': image_size,  # 使用原始image_size，确保一致性
+                    'image_size': corrected_image_size,  # 使用修正后的image_size确保一致性
                     'gen_image': gen_image,
                     'max_images': max_images,
                     'watermark': watermark,
@@ -561,12 +540,8 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     # 生成缓存键
                     cache_key = SEED_CACHE._generate_cache_key(seed, provider, instruction, image_hash, params_hash)
 
-                    print(f"[XISER LLM] 缓存设置键信息:", file=sys.stderr)
-                    print(f"  图像哈希: {image_hash}", file=sys.stderr)
-                    print(f"  参数哈希: {params_hash}", file=sys.stderr)
-                    print(f"  完整缓存键: {cache_key[:80]}...", file=sys.stderr)
-                except Exception as e:
-                    print(f"[XISER LLM] 缓存设置键计算错误: {e}", file=sys.stderr)
+                except Exception:
+                    pass  # 缓存键计算错误不影响主要功能
 
                 SEED_CACHE.set(
                     seed=seed,
@@ -576,11 +551,11 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     result=(text, images_out, urls_out),
                     **cache_params
                 )
-                # 调试信息：记录缓存设置（临时启用）
-                try:
-                    print(f"[XISER LLM] 缓存设置成功，seed={seed}, provider={provider}, 当前缓存大小: {SEED_CACHE.size()}", file=sys.stderr)
-                except:
-                    pass
+                # 调试信息：记录缓存设置（已关闭）
+                # try:
+                #     print(f"[XISER LLM] 缓存设置成功，seed={seed}, provider={provider}, 当前缓存大小: {SEED_CACHE.size()}", file=sys.stderr)
+                # except:
+                #     pass
             except Exception:
                 # 缓存失败不影响主要功能
                 pass

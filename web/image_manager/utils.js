@@ -447,13 +447,45 @@ function injectStyles() {
       opacity: 0.6;
       box-shadow: none;
     }
-    .xiser-image-manager-preview {
+    .xiser-image-manager-preview-container {
+      position: relative;
       width: 64px;
       height: 64px;
-      object-fit: contain;
       margin-right: 12px;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .xiser-image-manager-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
       border-radius: 4px;
       border: 1px solid rgba(90, 90, 90, 0.6);
+    }
+    .xiser-image-manager-preview-container:hover::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 4px;
+      pointer-events: none;
+      z-index: 20;
+      box-sizing: border-box;
+    }
+    .xiser-image-manager-preview-container:hover::before {
+      content: '✂️';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #FFF;
+      font-size: 20px;
+      z-index: 21;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     }
     .xiser-image-manager-info {
       flex: 1;
