@@ -351,6 +351,29 @@ class WanImageProvider(BaseLLMProvider):
 
     def extract_text(self, response: Dict[str, Any]) -> str:
         """Extract text from Wan 2.6 response."""
+        # 调试：记录响应结构
+        import sys
+        try:
+            print(f"[XISER LLM] [Wan2.6] extract_text 响应结构检查:", file=sys.stderr)
+            print(f"[XISER LLM]   response keys: {list(response.keys())}", file=sys.stderr)
+            if "output" in response:
+                output = response["output"]
+                print(f"[XISER LLM]   output keys: {list(output.keys())}", file=sys.stderr)
+                if "choices" in output:
+                    choices = output["choices"]
+                    print(f"[XISER LLM]   choices type: {type(choices)}, length: {len(choices) if isinstance(choices, list) else 'N/A'}", file=sys.stderr)
+                    if choices and isinstance(choices, list) and len(choices) > 0:
+                        first_choice = choices[0]
+                        print(f"[XISER LLM]   first_choice keys: {list(first_choice.keys())}", file=sys.stderr)
+                        if "message" in first_choice:
+                            message = first_choice["message"]
+                            print(f"[XISER LLM]   message keys: {list(message.keys())}", file=sys.stderr)
+                            if "content" in message:
+                                content = message["content"]
+                                print(f"[XISER LLM]   content type: {type(content)}, preview: {repr(str(content)[:100])}", file=sys.stderr)
+        except Exception as e:
+            print(f"[XISER LLM] [Wan2.6] extract_text 调试错误: {e}", file=sys.stderr)
+
         # Check for output in different response formats
         if "output" in response:
             output = response["output"]
@@ -363,14 +386,24 @@ class WanImageProvider(BaseLLMProvider):
                     elif isinstance(content, list):
                         # Extract text from content list (for interleave mode)
                         texts = []
+                        image_count = 0
                         for item in content:
-                            if isinstance(item, dict) and item.get("type") == "text":
-                                text = item.get("text", "")
-                                if text:
-                                    texts.append(text)
+                            if isinstance(item, dict):
+                                if item.get("type") == "text":
+                                    text = item.get("text", "")
+                                    if text:
+                                        texts.append(text)
+                                elif item.get("type") == "image":
+                                    image_count += 1
+
+                        # 如果有文本，返回文本
                         if texts:
                             # 修复：对于逐字符的文本，直接拼接而不是用换行符
                             return "".join(texts)
+                        # 如果只有图像，返回描述性文本（类似Qwen图像编辑提供者）
+                        elif image_count > 0:
+                            request_id = response.get("request_id", "")
+                            return f"Wan2.6 image edit success: {image_count} image(s). request_id={request_id}".strip()
 
         # Fallback: try to find text in response
         if "choices" in response:
@@ -383,16 +416,32 @@ class WanImageProvider(BaseLLMProvider):
         # Check for direct content in response (for streaming)
         if "content" in response and isinstance(response["content"], list):
             texts = []
+            image_count = 0
             for item in response["content"]:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    text = item.get("text", "")
-                    if text:
-                        texts.append(text)
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        text = item.get("text", "")
+                        if text:
+                            texts.append(text)
+                    elif item.get("type") == "image":
+                        image_count += 1
+
             if texts:
                 # 修复：对于逐字符的文本，直接拼接而不是用换行符
                 return "".join(texts)
+            elif image_count > 0:
+                request_id = response.get("request_id", "")
+                return f"Wan2.6 image edit success: {image_count} image(s). request_id={request_id}".strip()
 
-        return ""
+        # 检查错误情况
+        if "error" in response:
+            err = response.get("error", {})
+            return f"Wan2.6 error: {err.get('code', '')} {err.get('message', '')}".strip()
+
+        if response.get("code") not in (None, 200):
+            return f"Wan2.6 code: {response.get('code')} {response.get('message', '')}".strip()
+
+        return "Wan2.6: no text content in response"
 
     def extract_images(self, response: Dict[str, Any]) -> List[torch.Tensor]:
         """Extract images from Wan 2.6 response."""

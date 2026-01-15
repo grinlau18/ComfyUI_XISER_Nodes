@@ -1,14 +1,16 @@
 """LLM Orchestrator Node - V3版本"""
 
-from comfy_api.v0_0_2 import io, ui, ComfyAPI, ComfyAPISync
-from typing import Dict, List, Optional, Any
+from comfy_api.v0_0_2 import io, ComfyAPI, ComfyAPISync
+from typing import Dict, List, Optional, Any, Tuple
 import torch
 import requests
 import time
+import sys  # 临时启用调试日志
 from comfy_execution.utils import get_executing_context
 
 from .llm.base import _gather_images, _image_to_base64
 from .llm.registry import _validate_inputs, build_default_registry
+from .llm import SEED_CACHE  # 从llm模块导入缓存
 from .key_store import KEY_STORE
 
 # 创建API实例用于进度更新
@@ -16,6 +18,9 @@ api = ComfyAPI()
 api_sync = ComfyAPISync()
 
 REGISTRY = build_default_registry()
+
+# Seed缓存功能已模块化到 llm.cache 模块
+# 通过 from .llm import SEED_CACHE 导入
 
 
 def _dummy_image_tensor():
@@ -75,6 +80,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 • 图文混排：wan2.6-image支持interleave模式，可生成图文混合内容
 • 多尺寸支持：提供所有视觉模型支持的图像尺寸预设
 • 固定种子：默认使用固定种子(42)确保可重复性
+• 智能缓存：seed≥0时自动缓存结果，相同参数直接返回缓存内容
 
 使用说明：
 1. 选择提供者：根据需求选择文本对话或图像生成模型
@@ -86,6 +92,12 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
 4. wan2.6-image特殊说明：
    - image_edit模式：需要输入图像，用于图像编辑
    - interleave模式：可无图像输入，生成图文混合内容
+5. 缓存机制：
+   - 固定seed（≥0）的结果会自动缓存
+   - 相同seed、提示词、图像和参数会直接返回缓存结果
+   - 缓存最大容量：50个结果（LRU淘汰）
+   - 随机seed（-1）和递增seed（-2）不缓存
+   - 缓存开关：通过enable_cache参数可启用/禁用缓存功能
 
 注意：不同模型对参数要求不同，请参考各模型文档。""",
             inputs=[
@@ -226,6 +238,12 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     optional=True,
                     tooltip="模式选择：wan2.6-image支持image_edit/interleave，DeepSeek支持chat/reasoner"
                 ),
+                io.Boolean.Input(
+                    "enable_cache",
+                    default=True,
+                    optional=True,
+                    tooltip="启用seed缓存（低频使用）：固定seed（≥0）的结果会自动缓存，相同参数直接返回缓存内容，避免重复调用API。缓存最大容量50个结果（LRU淘汰）。"
+                ),
             ],
             outputs=[
                 io.String.Output("response", display_name="文本响应"),
@@ -256,6 +274,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         watermark: bool = False,
         prompt_extend: bool = True,
         mode: str = "chat",
+        enable_cache: bool = True,
     ) -> io.NodeOutput:
         """执行LLM调用"""
         # 获取节点ID用于进度更新
@@ -318,7 +337,7 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 进度：数据处理完成
         _update_progress("处理", 0.5, node_id=node_id)
 
-        # 修正image_size值，确保对当前提供者有效
+        # 修正image_size值，确保对当前提供者有效（必须在缓存检查前计算）
         from .llm.registry import PROVIDER_SCHEMA
         schema = PROVIDER_SCHEMA.get(provider, {})
         enums = schema.get("enums", {})
@@ -343,6 +362,84 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
                     corrected_image_size = non_empty_sizes[0]  # 使用第一个非空尺寸
                 else:
                     corrected_image_size = ""  # 如果没有非空尺寸，保持空值
+
+        # 检查缓存（只对固定seed≥0且启用缓存的情况）
+        if seed >= 0 and enable_cache:
+            # 直接使用输入参数构建缓存参数，避免使用locals()的动态性
+            # 对于wan2.6模型，需要确保参数与提供者实际使用的参数一致
+            cache_params = {
+                'model_override': model_override,
+                'key_profile': key_profile,
+                'temperature': temperature,
+                'top_p': top_p,
+                'max_tokens': max_tokens,
+                'enable_thinking': enable_thinking,
+                'thinking_budget': thinking_budget,
+                'negative_prompt': negative_prompt,
+                'image_size': image_size,  # 使用原始image_size，而不是corrected_image_size
+                'gen_image': gen_image,
+                'max_images': max_images,
+                'watermark': watermark,
+                'prompt_extend': prompt_extend,
+                'mode': mode,
+                'profile_clean': profile_clean,
+                'resolved_seed': resolved_seed,
+            }
+
+            # 特殊处理：对于wan2.6-image提供者，需要调整参数名称以匹配实际使用
+            if provider == 'wan2.6-image':
+                # wan2.6在image_edit模式下使用'n_images'参数，而不是'gen_image'
+                # 确保缓存参数与提供者实际使用的参数一致
+                if mode == 'image_edit':
+                    cache_params['n_images'] = gen_image
+                # 对于interleave模式，使用max_images参数
+
+            # 调试信息：记录缓存检查（临时启用）
+            try:
+                debug_info = {
+                    'seed': seed,
+                    'provider': provider,
+                    'instruction_preview': instruction[:50] + '...' if len(instruction) > 50 else instruction,
+                    'image_count': len(gathered),
+                    'cache_params_keys': list(cache_params.keys()),
+                    'cache_enabled': enable_cache,
+                }
+                print(f"[XISER LLM] 缓存检查: {debug_info}", file=sys.stderr)
+
+                # 显示缓存参数值
+                print(f"[XISER LLM] 缓存参数值:", file=sys.stderr)
+                for key, value in cache_params.items():
+                    print(f"  {key}: {repr(value)}", file=sys.stderr)
+            except:
+                pass  # 调试信息不影响主要功能
+
+            cached_result = SEED_CACHE.get(
+                seed=seed,
+                provider=provider,
+                instruction=instruction,
+                images=gathered,
+                **cache_params
+            )
+            if cached_result:
+                # 进度：从缓存返回
+                _update_progress("完成", 1.0, node_id=node_id)
+                # 缓存命中调试信息（临时启用）
+                try:
+                    print(f"[XISER LLM] 缓存命中! seed={seed}, provider={provider}", file=sys.stderr)
+                except:
+                    pass
+                text, images_out, urls_out = cached_result
+                return io.NodeOutput(
+                    text or "",      # response
+                    images_out,      # images
+                    urls_out         # image_urls
+                )
+            else:
+                # 缓存未命中调试信息（临时启用）
+                try:
+                    print(f"[XISER LLM] 缓存未命中，将调用API", file=sys.stderr)
+                except:
+                    pass
 
         # 构建覆盖参数
         overrides: Dict[str, Any] = {
@@ -408,6 +505,83 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         # 确保至少返回一个虚拟图像
         images_out = images if images else [_dummy_image_tensor()]
         urls_out = image_urls if image_urls else []
+
+        # 缓存结果（只对固定seed≥0、启用缓存且成功的情况）
+        # 调试：检查缓存设置条件
+        try:
+            print(f"[XISER LLM] 缓存设置条件检查:", file=sys.stderr)
+            print(f"  seed >= 0: {seed >= 0}", file=sys.stderr)
+            print(f"  enable_cache: {enable_cache}", file=sys.stderr)
+            print(f"  text exists: {bool(text)}", file=sys.stderr)
+            if text:
+                print(f"  text starts with Error:: {text.startswith('Error:')}", file=sys.stderr)
+                print(f"  text starts with LLM request failed:: {text.startswith('LLM request failed:')}", file=sys.stderr)
+                print(f"  text preview: {repr(text[:100])}", file=sys.stderr)
+        except:
+            pass
+
+        if seed >= 0 and enable_cache and text and not text.startswith("Error:") and not text.startswith("LLM request failed:"):
+            try:
+                # 使用与缓存检查相同的参数构建方式
+                cache_params = {
+                    'model_override': model_override,
+                    'key_profile': key_profile,
+                    'temperature': temperature,
+                    'top_p': top_p,
+                    'max_tokens': max_tokens,
+                    'enable_thinking': enable_thinking,
+                    'thinking_budget': thinking_budget,
+                    'negative_prompt': negative_prompt,
+                    'image_size': image_size,  # 使用原始image_size，确保一致性
+                    'gen_image': gen_image,
+                    'max_images': max_images,
+                    'watermark': watermark,
+                    'prompt_extend': prompt_extend,
+                    'mode': mode,
+                    'profile_clean': profile_clean,
+                    'resolved_seed': resolved_seed,
+                }
+
+                # 特殊处理：对于wan2.6-image提供者，需要调整参数名称以匹配实际使用
+                if provider == 'wan2.6-image':
+                    # wan2.6在image_edit模式下使用'n_images'参数，而不是'gen_image'
+                    # 确保缓存参数与提供者实际使用的参数一致
+                    if mode == 'image_edit':
+                        cache_params['n_images'] = gen_image
+                    # 对于interleave模式，使用max_images参数
+
+                # 调试：计算并显示缓存键信息（临时启用）
+                try:
+                    # 计算图像哈希
+                    image_hash = SEED_CACHE._hash_images(gathered)
+                    # 计算参数哈希
+                    params_hash = SEED_CACHE._hash_params(**cache_params)
+                    # 生成缓存键
+                    cache_key = SEED_CACHE._generate_cache_key(seed, provider, instruction, image_hash, params_hash)
+
+                    print(f"[XISER LLM] 缓存设置键信息:", file=sys.stderr)
+                    print(f"  图像哈希: {image_hash}", file=sys.stderr)
+                    print(f"  参数哈希: {params_hash}", file=sys.stderr)
+                    print(f"  完整缓存键: {cache_key[:80]}...", file=sys.stderr)
+                except Exception as e:
+                    print(f"[XISER LLM] 缓存设置键计算错误: {e}", file=sys.stderr)
+
+                SEED_CACHE.set(
+                    seed=seed,
+                    provider=provider,
+                    instruction=instruction,
+                    images=gathered,
+                    result=(text, images_out, urls_out),
+                    **cache_params
+                )
+                # 调试信息：记录缓存设置（临时启用）
+                try:
+                    print(f"[XISER LLM] 缓存设置成功，seed={seed}, provider={provider}, 当前缓存大小: {SEED_CACHE.size()}", file=sys.stderr)
+                except:
+                    pass
+            except Exception:
+                # 缓存失败不影响主要功能
+                pass
 
         # 进度：完成阶段
         _update_progress("完成", 1.0, node_id=node_id)
