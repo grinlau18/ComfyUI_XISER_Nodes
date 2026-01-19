@@ -72,8 +72,8 @@ class BaseVideoProvider(ABC):
         pass
 
     @abstractmethod
-    def extract_usage_info(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """从结果中提取使用信息"""
+    def extract_usage_info(self, result: Dict[str, Any], payload: Dict[str, Any] = None) -> Dict[str, Any]:
+        """从结果中提取使用信息，包括API请求代码"""
         pass
 
     def validate_inputs(self,

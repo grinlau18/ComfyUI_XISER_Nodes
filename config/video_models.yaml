@@ -1,0 +1,417 @@
+# VGM Orchestrator 统一配置文件
+# 版本: 1.0.0
+# 描述: 视频生成模型统一配置，前后端共享
+
+# 全局配置
+global:
+  # API端点模板（支持地区变量）
+  endpoint_templates:
+    china: "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+    singapore: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+    virginia: "https://dashscope-us.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+
+  # 首尾帧模型专用端点
+  kf2v_endpoint_templates:
+    china: "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis"
+    singapore: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis"
+    virginia: "https://dashscope-us.aliyuncs.com/api/v1/services/aigc/image2video/video-synthesis"
+
+  # 默认配置
+  defaults:
+    max_negative_prompt_length: 500
+    seed_range: [0, 2147483647]
+    polling_interval_range: [1, 60]
+    max_polling_time_range: [30, 1800]
+
+# 模型配置
+models:
+  # ==================== 参考生视频模型 (r2v) ====================
+  wan2.6-r2v:
+    # 基本信息
+    name: "wan2.6-r2v"
+    label: "万相2.6参考生视频"
+    provider_type: "r2v"
+    group: "alibaba"
+
+    # API配置
+    endpoint: "{{china}}"  # 使用模板变量
+
+    # 输入限制
+    max_prompt_length: 1500
+    max_reference_videos: 3
+
+    # 输出配置
+    supported_durations: [5, 10]
+    supported_sizes:
+      - "1280*720"
+      - "720*1280"
+      - "960*960"
+      - "1088*832"
+      - "832*1088"
+      - "1920*1080"
+      - "1080*1920"
+      - "1440*1440"
+      - "1632*1248"
+      - "1248*1632"
+
+    # 功能支持
+    supports_audio: false
+    supports_multi_shot: true
+    supports_prompt_extend: false
+    supports_template: false
+
+    # 前端控件配置
+    ui:
+      has_image_input: false
+      has_video_url_input: true
+      has_resolution: false
+      has_audio: false
+      has_prompt_extend: false
+      has_template: false
+      has_shot_type: true
+      has_size: true
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_size: "1280*720"
+      default_duration: 5
+      default_shot_type: "multi"
+      default_watermark: false
+      default_seed: 42
+
+  # ==================== 图生视频模型 (i2v) ====================
+  wan2.6-i2v:
+    name: "wan2.6-i2v"
+    label: "万相2.6图生视频"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 1500
+    max_reference_videos: 0
+    supported_durations: [5, 10, 15]
+    supported_sizes: []  # 图生视频使用resolution参数
+    supported_resolutions: ["720P", "1080P"]
+    supports_audio: true
+    supports_multi_shot: true
+    supports_prompt_extend: true
+    supports_template: true
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: true
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: true
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_shot_type: "multi"
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wan2.5-i2v-preview:
+    name: "wan2.5-i2v-preview"
+    label: "万相2.5图生视频预览版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 1500
+    max_reference_videos: 0
+    supported_durations: [5, 10]
+    supported_sizes: []
+    supported_resolutions: ["480P", "720P", "1080P"]
+    supports_audio: true
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: false
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: true
+      has_prompt_extend: true
+      has_template: false
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wan2.2-i2v-flash:
+    name: "wan2.2-i2v-flash"
+    label: "万相2.2图生视频极速版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 800  # 2.2及以下版本限制800字符
+    max_reference_videos: 0
+    supported_durations: [5]
+    supported_sizes: []
+    supported_resolutions: ["480P", "720P", "1080P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: false
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: false
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wan2.2-i2v-plus:
+    name: "wan2.2-i2v-plus"
+    label: "万相2.2图生视频专业版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 800
+    max_reference_videos: 0
+    supported_durations: [5]
+    supported_sizes: []
+    supported_resolutions: ["480P", "1080P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: false
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: false
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wanx2.1-i2v-plus:
+    name: "wanx2.1-i2v-plus"
+    label: "万相2.1图生视频专业版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 800
+    max_reference_videos: 0
+    supported_durations: [5]
+    supported_sizes: []
+    supported_resolutions: ["720P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: true
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wanx2.1-i2v-turbo:
+    name: "wanx2.1-i2v-turbo"
+    label: "万相2.1图生视频极速版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 800
+    max_reference_videos: 0
+    supported_durations: [3, 4, 5]
+    supported_sizes: []
+    supported_resolutions: ["480P", "720P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: true
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  # ==================== 首尾帧生视频模型 (kf2v) ====================
+  wan2.2-kf2v-flash:
+    name: "wan2.2-kf2v-flash"
+    label: "万相2.2首尾帧生视频极速版"
+    provider_type: "kf2v"
+    group: "alibaba"
+    endpoint: "{{kf2v_china}}"  # 使用首尾帧专用端点
+    max_prompt_length: 800
+    max_reference_videos: 0
+    supported_durations: [5]
+    supported_sizes: []
+    supported_resolutions: ["480P", "720P", "1080P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: true
+    requires_first_frame: true
+    requires_last_frame: false  # 尾帧可选
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore"]  # 首尾帧不支持virginia
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+  wanx2.1-kf2v-plus:
+    name: "wanx2.1-kf2v-plus"
+    label: "万相2.1首尾帧生视频专业版"
+    provider_type: "kf2v"
+    group: "alibaba"
+    endpoint: "{{kf2v_china}}"
+    max_prompt_length: 800
+    max_reference_videos: 0
+    supported_durations: [5]
+    supported_sizes: []
+    supported_resolutions: ["720P"]
+    supports_audio: false
+    supports_multi_shot: false
+    supports_prompt_extend: true
+    supports_template: true
+    requires_first_frame: true
+    requires_last_frame: false
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: false
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: false
+      has_size: false
+      supported_regions: ["china", "singapore"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
+# 模型分组（用于UI下拉框）
+groups:
+  alibaba:
+    name: "阿里云万相"
+    description: "阿里云通义万相视频生成模型"
+    models:
+      - "wan2.6-r2v"
+      - "wan2.6-i2v"
+      - "wan2.5-i2v-preview"
+      - "wan2.2-i2v-flash"
+      - "wan2.2-i2v-plus"
+      - "wanx2.1-i2v-plus"
+      - "wanx2.1-i2v-turbo"
+      - "wan2.2-kf2v-flash"
+      - "wanx2.1-kf2v-plus"
+
+# 提供者类型定义
+provider_types:
+  r2v:
+    name: "参考生视频"
+    description: "基于参考视频生成新视频，保留角色形象和音色"
+    icon: "🎬"
+    color: "#1890ff"
+  i2v:
+    name: "图生视频"
+    description: "基于首帧图像生成视频，支持音频输入和智能改写"
+    icon: "🖼️"
+    color: "#52c41a"
+  kf2v:
+    name: "首尾帧生视频"
+    description: "基于首尾帧图像生成视频，支持特效模板"
+    icon: "📸"
+    color: "#722ed1"
+
+# 验证规则
+validation:
+  # 通用规则
+  common:
+    prompt:
+      min_length: 1
+      max_length_variable: "max_prompt_length"  # 引用模型配置
+    negative_prompt:
+      min_length: 0
+      max_length: 500
+    seed:
+      min: 0
+      max: 2147483647
+    duration:
+      must_be_in: "supported_durations"  # 引用模型配置
+
+  # 类型特定规则
+  r2v:
+    reference_videos:
+      max_count: "max_reference_videos"  # 引用模型配置
+    size:
+      must_be_in: "supported_sizes"  # 引用模型配置
+
+  i2v:
+    resolution:
+      must_be_in: "supported_resolutions"  # 引用模型配置
+    audio_url:
+      required: false
+      pattern: "^https?://.*\\.(mp3|wav|aac|ogg)$"
+    template:
+      required: false
+      pattern: "^[a-zA-Z0-9_-]+$"
+
+  kf2v:
+    resolution:
+      must_be_in: "supported_resolutions"
+    first_frame:
+      required: true
+    last_frame:
+      required: false

@@ -88,12 +88,21 @@ def build_default_registry() -> VideoProviderRegistry:
     """构建默认注册表"""
     # 导入并注册所有提供者
     try:
-        from .providers_wan import register_wan_provider
-        register_wan_provider(_REGISTRY)
+        # 首先尝试使用新的配置系统
+        from .providers_config import register_config_based_providers
+        register_config_based_providers(_REGISTRY)
+        print("[VGM] 使用统一配置系统注册提供者")
     except ImportError as e:
-        print(f"警告：无法导入万相视频提供者: {e}")
+        print(f"[VGM] 警告：无法导入配置提供者: {e}")
+        # 回退到旧的提供者系统
+        try:
+            from .providers_wan import register_wan_provider
+            register_wan_provider(_REGISTRY)
+            print("[VGM] 使用旧的万相提供者系统")
+        except ImportError as e2:
+            print(f"[VGM] 警告：无法导入万相视频提供者: {e2}")
     except Exception as e:
-        print(f"警告：注册万相视频提供者时出错: {e}")
+        print(f"[VGM] 警告：注册提供者时出错: {e}")
 
     return _REGISTRY
 

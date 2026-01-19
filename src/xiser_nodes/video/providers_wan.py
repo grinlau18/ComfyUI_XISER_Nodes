@@ -363,18 +363,29 @@ class WanVideoProvider(BaseVideoProvider):
         parameters = {}
         if resolution:
             parameters["resolution"] = resolution
-        if duration:
-            parameters["duration"] = duration
-        if prompt_extend is not None:
-            parameters["prompt_extend"] = prompt_extend
-        if shot_type and self.config.supports_multi_shot:
-            parameters["shot_type"] = shot_type
-        if watermark is not None:
-            parameters["watermark"] = watermark
-        if seed is not None:
-            parameters["seed"] = seed
-        if negative_prompt:
-            parameters["negative_prompt"] = negative_prompt
+
+        # 检查是否使用特效模式
+        is_template_mode = template and self.config.supports_template
+
+        if not is_template_mode:
+            # 非特效模式：传递所有参数
+            if duration:
+                parameters["duration"] = duration
+            if prompt_extend is not None:
+                parameters["prompt_extend"] = prompt_extend
+            if shot_type and self.config.supports_multi_shot:
+                parameters["shot_type"] = shot_type
+            if watermark is not None:
+                parameters["watermark"] = watermark
+            if seed is not None:
+                parameters["seed"] = seed
+            if negative_prompt:
+                parameters["negative_prompt"] = negative_prompt
+        else:
+            # 特效模式：根据文档示例，只传递必要的参数
+            # 文档示例中只有resolution参数，不传递其他参数
+            # 注意：特效模式下watermark、duration等参数可能无效或干扰特效生成
+            pass
 
         if parameters:
             payload["parameters"] = parameters
@@ -406,21 +417,27 @@ class WanVideoProvider(BaseVideoProvider):
             f"模型 {self.config.model} 不支持特效模板"
         )
 
+        # 检查是否使用特效模式
+        is_template_mode = template and self.config.supports_template
+
         # 构建输入部分
         input_data = {
             "first_frame_url": first_frame_url
         }
 
         # 添加可选输入参数
-        if prompt:
+        if prompt and not is_template_mode:  # 特效模式下不使用prompt
             input_data["prompt"] = prompt
-        if last_frame_url:
+        if last_frame_url and not is_template_mode:  # 特效模式下不需要尾帧
             input_data["last_frame_url"] = last_frame_url
-        if template and self.config.supports_template:
+        if is_template_mode:
             input_data["template"] = template
-            # 使用模板时，prompt参数无效
+            # 使用模板时，确保没有prompt参数
             if "prompt" in input_data:
                 del input_data["prompt"]
+            # 特效模式下不需要尾帧（根据文档）
+            if "last_frame_url" in input_data:
+                del input_data["last_frame_url"]
 
         payload = {
             "model": self.config.model,
@@ -431,16 +448,24 @@ class WanVideoProvider(BaseVideoProvider):
         parameters = {}
         if resolution:
             parameters["resolution"] = resolution
-        if duration:
-            parameters["duration"] = duration
-        if prompt_extend is not None:
-            parameters["prompt_extend"] = prompt_extend
-        if watermark is not None:
-            parameters["watermark"] = watermark
-        if seed is not None:
-            parameters["seed"] = seed
-        if negative_prompt:
-            parameters["negative_prompt"] = negative_prompt
+
+        if not is_template_mode:
+            # 非特效模式：传递所有参数
+            if duration:
+                parameters["duration"] = duration
+            if prompt_extend is not None:
+                parameters["prompt_extend"] = prompt_extend
+            if watermark is not None:
+                parameters["watermark"] = watermark
+            if seed is not None:
+                parameters["seed"] = seed
+            if negative_prompt:
+                parameters["negative_prompt"] = negative_prompt
+        else:
+            # 特效模式：根据文档示例，只传递必要的参数
+            # 首尾帧特效文档示例中只有resolution参数，不传递其他参数
+            # 注意：特效模式下watermark、duration等参数可能无效或干扰特效生成
+            pass
 
         if parameters:
             payload["parameters"] = parameters
@@ -567,22 +592,37 @@ class WanVideoProvider(BaseVideoProvider):
 
         return None
 
-    def extract_usage_info(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """从结果中提取使用信息"""
+    def extract_usage_info(self, result: Dict[str, Any], payload: Dict[str, Any] = None) -> Dict[str, Any]:
+        """从结果中提取使用信息，包括API请求代码"""
         usage = result.get("usage", {})
         output = result.get("output", {})
 
-        return {
-            "duration": usage.get("duration"),
-            "size": usage.get("size"),
-            "input_video_duration": usage.get("input_video_duration"),
-            "output_video_duration": usage.get("output_video_duration"),
-            "video_count": usage.get("video_count"),
-            "SR": usage.get("SR"),
-            "task_status": output.get("task_status"),
-            "task_id": output.get("task_id"),
-            "orig_prompt": output.get("orig_prompt")
+        # 构建API请求代码信息
+        api_request_info = {
+            "task_id": output.get("task_id", ""),
+            "api_request": {
+                "method": "POST",
+                "endpoint": self.config.endpoint,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer YOUR_API_KEY",
+                    "X-DashScope-Async": "enable"
+                },
+                "payload": payload if payload else {}
+            },
+            "usage_stats": {
+                "duration": usage.get("duration"),
+                "size": usage.get("size"),
+                "input_video_duration": usage.get("input_video_duration"),
+                "output_video_duration": usage.get("output_video_duration"),
+                "video_count": usage.get("video_count"),
+                "SR": usage.get("SR"),
+                "task_status": output.get("task_status"),
+                "orig_prompt": output.get("orig_prompt")
+            }
         }
+
+        return api_request_info
 
 
 # 创建并注册提供者

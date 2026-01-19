@@ -529,6 +529,15 @@ task_id查询有效期为 24 小时，超时后将无法查询，返回以下报
 <td style="text-align: left;"><strong>输出视频规格</strong></td>
 </tr>
 <tr>
+<td style="text-align: left;">wan2.6-i2v-flash <strong>推荐</strong></td>
+<td style="text-align: left;"><p>万相2.6<strong>（有声视频 & 无声视频）</strong></p>
+<p><strong>新增多镜头叙事能力</strong></p>
+<p>支持<strong>音频</strong>能力：支持自动配音，或传入自定义音频文件</p></td>
+<td style="text-align: left;"><p>分辨率档位：720P、1080P</p>
+<p>视频时长：5秒、10秒、15秒</p>
+<p>固定规格：30fps、MP4 (H.264编码) </p></td>
+</tr>
+<tr>
 <td style="text-align: left;">wan2.6-i2v <strong>推荐</strong></td>
 <td style="text-align: left;"><p>万相2.6<strong>（有声视频）</strong></p>
 <p><strong>新增多镜头叙事能力</strong></p>

@@ -16,6 +16,7 @@ from comfy_execution.utils import get_executing_context
 
 from .video import _gather_videos, build_default_registry, _validate_inputs
 from .key_store import KEY_STORE
+from .config import get_config_loader
 
 # 创建API实例用于进度更新
 api = ComfyAPI()
@@ -178,7 +179,6 @@ class VideoGenerationCache:
 
         self.cache[cache_key] = cache_entry
         self._save_cache(self.cache)
-        print(f"[VGM Cache] 缓存已保存，键: {cache_key[:16]}..., task_id: {task_id}")
 
     def clear_expired(self):
         """清理过期缓存（超过24小时）"""
@@ -238,7 +238,17 @@ def _update_progress(stage: str, progress: float, total_stages: int = 6, node_id
         pass
 
 
-def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
+def _log_dynamic(message: str, end: str = "\n"):
+    """动态日志输出，支持行内更新
+
+    Args:
+        message: 日志消息
+        end: 结束字符，默认为换行符，使用\r可实现行内更新
+    """
+    print(f"[VGM] {message}", end=end, flush=True)
+
+
+def _download_video(video_url: str, progress_callback=None) -> Tuple[torch.Tensor, Dict[str, Any], int, int, float, float, int]:
     """下载视频并转换为张量
 
     从URL下载视频文件，读取视频帧，转换为ComfyUI图像批次格式
@@ -248,7 +258,9 @@ def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
         progress_callback: 进度回调函数
 
     Returns:
-        视频张量，形状为 [frames, height, width, channels]，数值范围0-1
+        Tuple[视频张量, 视频信息字典]
+        视频张量形状为 [frames, height, width, channels]，数值范围0-1
+        视频信息包含: width, height, fps, frame_count, shape
     """
     import cv2
     import numpy as np
@@ -268,9 +280,7 @@ def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
         if progress_callback:
             progress_callback("下载视频", 0.3)
 
-        print(f"[VGM] 开始下载视频: {video_url}")
         urllib.request.urlretrieve(video_url, tmp_path)
-        print(f"[VGM] 视频下载完成，保存到: {tmp_path}")
 
         # 2. 使用OpenCV读取视频
         if progress_callback:
@@ -286,7 +296,7 @@ def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        print(f"[VGM] 视频信息: {width}x{height}, {fps}fps, {frame_count}帧")
+        # 视频信息现在在最终成功提示中显示
 
         # 3. 读取所有帧
         frames = []
@@ -323,12 +333,22 @@ def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
         video_array = np.stack(frames, axis=0)
         video_tensor = torch.from_numpy(video_array)
 
-        print(f"[VGM] 视频张量形状: {video_tensor.shape}")
+        # 收集视频信息
+        duration_seconds = frame_count / fps if fps > 0 else 0
+        video_info = {
+            "width": width,
+            "height": height,
+            "fps": fps,
+            "frame_count": frame_count,
+            "shape": video_tensor.shape,
+            "duration": duration_seconds
+        }
 
+        # 返回视频信息和张量，不在函数内输出日志
         if progress_callback:
             progress_callback("完成", 1.0)
 
-        return video_tensor
+        return video_tensor, video_info, width, height, duration_seconds, fps, frame_count
 
     except Exception as e:
         print(f"[VGM] 视频下载/转换错误: {e}")
@@ -338,7 +358,16 @@ def _download_video(video_url: str, progress_callback=None) -> torch.Tensor:
 
         # 返回虚拟视频张量作为后备
         # VideoCombine节点期望 [frames, height, width, channels] 格式
-        return torch.rand((30, 720, 1280, 3), dtype=torch.float32)
+        dummy_tensor = torch.rand((30, 720, 1280, 3), dtype=torch.float32)
+        dummy_info = {
+            "width": 1280,
+            "height": 720,
+            "fps": 30.0,
+            "frame_count": 30,
+            "shape": dummy_tensor.shape,
+            "duration": 1.0
+        }
+        return dummy_tensor, dummy_info
 
     finally:
         # 清理临时文件
@@ -386,15 +415,12 @@ def _process_input_image(image_tensor: torch.Tensor) -> str:
         if image_tensor.is_cuda:
             image_tensor = image_tensor.cpu()
 
-        print(f"[VGM] 处理输入图像，形状: {image_tensor.shape}, 维度: {image_tensor.ndim}")
-
-        # 处理不同的张量形状
+        # 简化日志
         if image_tensor.ndim == 4:
             # [batch, channels, height, width] - 取第一张
             if image_tensor.shape[0] > 1:
-                print(f"[VGM] 警告：输入图像有 {image_tensor.shape[0]} 个批次，只使用第一个")
+                _log_dynamic(f"⚠ 输入图像有 {image_tensor.shape[0]} 个批次，只使用第一个")
             image_tensor = image_tensor[0]
-            print(f"[VGM] 提取批次后形状: {image_tensor.shape}")
         elif image_tensor.ndim == 3:
             # [channels, height, width] 或 [height, width, channels] - 直接使用
             pass
@@ -410,7 +436,7 @@ def _process_input_image(image_tensor: torch.Tensor) -> str:
             image_np = image_tensor.numpy()
         elif image_tensor.shape[0] == 4:
             # [channels, height, width] 格式的RGBA图像 -> 转换为RGB
-            print("[VGM] 检测到RGBA图像（[C,H,W]格式），正在转换为RGB...")
+            _log_dynamic("↻ 检测到RGBA图像，正在转换为RGB...")
             # 提取RGB通道并去除透明度
             rgb_tensor = image_tensor[:3]  # 取前3个通道（R,G,B）
             image_np = rgb_tensor.permute(1, 2, 0).numpy()
@@ -474,7 +500,12 @@ def _parse_pack_images(pack_images: Optional[torch.Tensor]) -> List[torch.Tensor
     if pack_images is None:
         return []
 
-    print(f"[VGM] 解析pack_images输入，类型: {type(pack_images)}, 形状: {getattr(pack_images, 'shape', 'N/A')}")
+    # 简化日志，只记录基本信息
+    if hasattr(pack_images, 'shape'):
+        shape_str = str(pack_images.shape)
+    else:
+        shape_str = "unknown"
+    _log_dynamic(f"↻ 解析pack_images输入，形状: {shape_str}")
 
     # 处理列表或元组输入（来自DynamicPackImages节点）
     if isinstance(pack_images, (list, tuple)):
@@ -490,14 +521,14 @@ def _parse_pack_images(pack_images: Optional[torch.Tensor]) -> List[torch.Tensor
                     images.append(img)
                 else:
                     # 无法确定格式，尝试猜测
-                    print(f"[VGM] 警告：无法确定图像格式，形状: {img.shape}")
+                    _log_dynamic(f"⚠ 警告：无法确定图像格式，形状: {img.shape}")
                     images.append(img)
             elif len(img.shape) == 4:  # [1, H, W, C] 或 [1, C, H, W]
                 images.append(img[0])
             else:
                 raise ValueError(f"不支持的图像维度: {img.shape}")
 
-        print(f"[VGM] 从pack_images列表中提取了 {len(images)} 张图像")
+        _log_dynamic(f"↻ 从pack_images列表中提取了 {len(images)} 张图像")
         return images
 
     # 处理单个张量输入
@@ -544,11 +575,8 @@ def _allocate_images_for_model(
     if not images:
         return result
 
-    print(f"[VGM] 为模型 {model_name} ({provider_type}) 分配图像，可用图像数: {len(images)}")
-
     if provider_type == "r2v":
         # 参考生视频模式不需要图像
-        print("[VGM] 参考生视频模式不需要图像输入")
         return result
 
     elif provider_type == "i2v":
@@ -556,7 +584,6 @@ def _allocate_images_for_model(
         if len(images) >= 1:
             img_url = _process_input_image(images[0])
             result["img_url"] = img_url
-            print("[VGM] 分配第1张图像作为图生视频首帧")
         else:
             raise ValueError("图生视频模式需要至少1张图像，但pack_images为空")
 
@@ -565,14 +592,12 @@ def _allocate_images_for_model(
         if len(images) >= 1:
             first_frame_url = _process_input_image(images[0])
             result["first_frame_url"] = first_frame_url
-            print("[VGM] 分配第1张图像作为首尾帧生视频的首帧")
 
             if len(images) >= 2:
                 last_frame_url = _process_input_image(images[1])
                 result["last_frame_url"] = last_frame_url
-                print("[VGM] 分配第2张图像作为首尾帧生视频的尾帧")
             else:
-                print("[VGM] 未提供尾帧图像，将仅使用首帧生成视频")
+                pass  # 未提供尾帧图像是允许的
         else:
             raise ValueError("首尾帧生视频模式需要至少1张图像作为首帧，但pack_images为空")
 
@@ -695,22 +720,36 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
-        raw_choices = REGISTRY.list_grouped_choices()
+        # 使用新的配置系统获取模型选项
+        config_loader = get_config_loader()
 
-        # 处理选项格式
-        if not raw_choices:
-            # 如果registry返回空，使用默认选项
-            print("[VGM] 警告：注册表为空，使用默认选项")
-            choices = ["wan2.6-r2v"]
-            default_choice = "wan2.6-r2v"
-        elif isinstance(raw_choices[0], dict):
-            # registry返回的是字典列表，需要提取value作为选项
-            choices = [choice["value"] for choice in raw_choices]
-            default_choice = choices[0] if choices else "wan2.6-r2v"
-        else:
-            # registry返回的是字符串列表
-            choices = raw_choices
-            default_choice = choices[0] if choices else "wan2.6-r2v"
+        try:
+            # 获取UI下拉框选项
+            raw_choices = config_loader.get_model_choices_for_ui()
+
+            if not raw_choices:
+                print("[VGM] 警告：配置系统返回空选项，使用默认选项")
+                choices = ["wan2.6-r2v"]
+                default_choice = "wan2.6-r2v"
+            else:
+                # 提取选项值
+                choices = [choice["value"] for choice in raw_choices]
+                default_choice = choices[0] if choices else "wan2.6-r2v"
+
+        except Exception as e:
+            print(f"[VGM] 警告：配置系统加载失败，使用注册表选项: {e}")
+            # 回退到旧的注册表系统
+            raw_choices = REGISTRY.list_grouped_choices()
+
+            if not raw_choices:
+                choices = ["wan2.6-r2v"]
+                default_choice = "wan2.6-r2v"
+            elif isinstance(raw_choices[0], dict):
+                choices = [choice["value"] for choice in raw_choices]
+                default_choice = choices[0] if choices else "wan2.6-r2v"
+            else:
+                choices = raw_choices
+                default_choice = choices[0] if choices else "wan2.6-r2v"
 
         # 获取尺寸选项和时长选项
         size_options = []
@@ -721,19 +760,27 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
         default_durations = [5, 10]
 
         for choice in choices:
-            if isinstance(choice, dict):
-                provider_name = choice["value"]
-            else:
-                provider_name = choice
+            provider_name = choice
 
-            provider = REGISTRY.get(provider_name)
-            if provider and hasattr(provider, 'config'):
-                # 收集尺寸选项（参考生视频）
-                if hasattr(provider.config, 'supported_sizes'):
-                    size_options.extend(provider.config.supported_sizes)
-                # 收集时长选项
-                if hasattr(provider.config, 'supported_durations'):
-                    duration_options.extend(provider.config.supported_durations)
+            try:
+                # 使用配置系统获取模型配置
+                model_config = config_loader.get_model(provider_name)
+                if model_config:
+                    # 收集尺寸选项（参考生视频）
+                    if model_config.supported_sizes:
+                        size_options.extend(model_config.supported_sizes)
+                    # 收集时长选项
+                    if model_config.supported_durations:
+                        duration_options.extend(model_config.supported_durations)
+            except Exception as e:
+                print(f"[VGM] 警告：获取模型 {provider_name} 配置失败: {e}")
+                # 回退到注册表
+                provider = REGISTRY.get(provider_name)
+                if provider and hasattr(provider, 'config'):
+                    if hasattr(provider.config, 'supported_sizes'):
+                        size_options.extend(provider.config.supported_sizes)
+                    if hasattr(provider.config, 'supported_durations'):
+                        duration_options.extend(provider.config.supported_durations)
 
         # 如果选项为空，使用默认值
         if not size_options:
@@ -769,8 +816,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
 输出结果：
 • images: 视频转换的图像批次，可直接连接VideoCombine节点
 • video_url: 生成视频的原始URL
-• task_id: 任务跟踪ID
-• usage_info: API使用信息
+• task_info: 任务信息（包含任务ID和API请求代码）
 
 提示：详细参数说明请查看各控件的tooltip提示。""",
             inputs=[
@@ -909,8 +955,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
             outputs=[
                 io.Image.Output("images", display_name="images"),
                 io.String.Output("video_url", display_name="视频URL"),
-                io.String.Output("task_id", display_name="任务ID"),
-                io.String.Output("usage_info", display_name="使用信息"),
+                io.String.Output("task_info", display_name="任务信息"),
             ]
         )
 
@@ -968,7 +1013,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
 
             cache_entry = VIDEO_CACHE.get(cache_key)
             if cache_entry:
-                print(f"[VGM Cache] 缓存命中！使用缓存的视频URL，task_id: {cache_entry['task_id']}")
+                _log_dynamic(f"✓ 缓存命中，使用缓存的视频，task_id: {cache_entry['task_id'][:16]}...")
                 _update_progress("缓存命中", 0.5, node_id=node_id)
 
                 # 直接使用缓存的视频URL
@@ -977,24 +1022,45 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
 
                 # 下载视频
                 _update_progress("下载", 0.1, node_id=node_id)
-                video_tensor = _download_video(
+                video_tensor, video_info, width, height, duration_seconds, fps, frame_count = _download_video(
                     video_url,
                     progress_callback=lambda stage, progress: _update_progress(
                         "下载", progress, node_id=node_id
                     )
                 )
 
+                # 输出合并的完成日志（缓存命中）
+                print(" " * 80, end="\r")  # 清除当前行
+                seed_display = f"seed值：{seed}" if seed else "seed值：未设置"
+                _log_dynamic(f"✓ 任务完成（缓存命中），耗时: 0.0秒 | 尺寸: {width}x{height} | 时长: {duration_seconds:.1f}s | 帧率: {fps:.0f}fps | 使用缓存,{seed_display}")
+
                 # 进度：完成
                 _update_progress("完成", 1.0, node_id=node_id)
+
+                # 为缓存命中构建任务信息
+                cache_task_info = {
+                    "task_id": task_id,
+                    "api_request": {
+                        "note": "使用缓存视频，无API请求"
+                    },
+                    "usage_stats": {
+                        "total_tokens": 0,
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "image_tokens": 0,
+                        "video_tokens": 0,
+                        "audio_tokens": 0,
+                    }
+                }
+                cache_task_info_json = json.dumps(cache_task_info, ensure_ascii=False, indent=2)
 
                 return io.NodeOutput(
                     video_tensor,      # 第一个输出：video (图像)
                     video_url,         # 第二个输出：video_url (字符串)
-                    task_id,           # 第三个输出：task_id (字符串)
-                    "使用缓存视频"      # 第四个输出：usage_info (字符串)
+                    cache_task_info_json  # 第三个输出：task_info (字符串)
                 )
 
-            print(f"[VGM Cache] 缓存未命中，生成新任务，缓存键: {cache_key[:16]}...")
+            _log_dynamic(f"↻ 缓存未命中，生成新任务...")
 
             # 1. 获取提供者
             video_provider = REGISTRY.get(provider)
@@ -1015,7 +1081,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
             # 4. 根据提供者类型处理不同输入
             if video_provider.config.provider_type == "r2v":
                 # 参考生视频模式
-                print(f"[VGM] 使用参考生视频模式：{provider}")
+                _log_dynamic(f"↻ 使用参考生视频模式：{provider}")
 
                 # 处理视频URL输入
                 video_urls = _parse_video_urls(reference_video_url)
@@ -1024,7 +1090,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
 
                 # 创建虚拟视频张量列表（仅用于验证）
                 reference_videos = _create_dummy_videos_for_urls(video_urls)
-                print(f"[VGM] 使用 {len(video_urls)} 个参考视频URL")
+                _log_dynamic(f"↻ 使用 {len(video_urls)} 个参考视频URL")
 
                 # 验证输入参数
                 _update_progress("验证", 0.3, node_id=node_id)
@@ -1052,12 +1118,13 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                     watermark=watermark,
                     seed=seed,
                     negative_prompt=negative_prompt,
-                    video_urls=video_urls  # 传递视频URL
+                    video_urls=video_urls,  # 传递视频URL
+                    region=region  # 传递地区参数
                 )
+
 
             elif video_provider.config.provider_type == "i2v":
                 # 图生视频模式
-                print(f"[VGM] 使用图生视频模式：{provider}")
 
                 # 检查图像输入
                 img_url = allocated_images.get("img_url")
@@ -1092,16 +1159,18 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                     seed=seed,
                     negative_prompt=negative_prompt,
                     # 图生视频特有参数
-                    img_url=img_url,
+                    img_url=img_url,  # 传递单个Base64字符串
                     audio_url=audio_url,
                     resolution=resolution,
                     prompt_extend=prompt_extend,
-                    template=template
+                    template=template,
+                    region=region  # 传递地区参数
                 )
+
+                # 图生视频模式日志已简化
 
             elif video_provider.config.provider_type == "kf2v":
                 # 首尾帧生视频模式
-                print(f"[VGM] 使用首尾帧生视频模式：{provider}")
 
                 # 检查图像输入
                 first_frame_url = allocated_images.get("first_frame_url")
@@ -1142,8 +1211,10 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                     last_frame_url=last_frame_url,
                     resolution=resolution,
                     prompt_extend=prompt_extend,
-                    template=template
+                    template=template,
+                    region=region  # 传递地区参数
                 )
+
 
             else:
                 raise ValueError(f"不支持的提供者类型：{video_provider.config.provider_type}")
@@ -1161,14 +1232,16 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                 payload=payload,
                 progress_callback=lambda stage, progress: _update_progress(
                     "创建任务", progress, node_id=node_id
-                ),
-                region=region
+                )
             )
 
             # 5. 轮询任务状态
             start_time = time.time()
             polling_count = 0
             last_result = None  # 保存最后一次查询结果
+
+            # 初始化动态日志 - 使用更简洁的格式
+            _log_dynamic("↻ 开始轮询任务状态...", end="\r")
 
             while time.time() - start_time < max_polling_time:
                 polling_count += 1
@@ -1186,24 +1259,26 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                 last_result = result  # 保存最后一次结果
 
                 task_status = result.get("output", {}).get("task_status", "")
-
-                # 添加调试日志
                 elapsed_time = time.time() - start_time
-                print(f"[VGM] 轮询第{polling_count}次，任务状态: {task_status}，已耗时: {elapsed_time:.1f}秒")
 
+                # 动态更新日志 - 更简洁的格式
                 if task_status == "SUCCEEDED":
+                    # 先清除动态行
+                    print(" " * 80, end="\r")  # 清除当前行
+                    _log_dynamic(f"✓ 任务完成，耗时: {elapsed_time:.1f}秒")
                     _update_progress("轮询", 1.0, node_id=node_id)
-                    print(f"[VGM] 任务成功完成，总耗时: {elapsed_time:.1f}秒")
                     break
                 elif task_status in ["FAILED", "CANCELED"]:
                     error_code = result.get("output", {}).get("code", "")
                     error_message = result.get("output", {}).get("message", "")
+                    print(" " * 80, end="\r")  # 清除当前行
+                    _log_dynamic(f"✗ 任务失败: {task_status}")
                     raise Exception(f"任务失败，状态：{task_status}，错误代码：{error_code}，错误信息：{error_message}")
-                # PENDING 或 RUNNING 状态继续轮询
-                elif task_status in ["PENDING", "RUNNING"]:
-                    print(f"[VGM] 任务仍在处理中，状态: {task_status}，继续轮询...")
                 else:
-                    print(f"[VGM] 未知任务状态: {task_status}，继续轮询...")
+                    # PENDING 或 RUNNING 状态，动态更新同一行
+                    # 使用更简洁的格式，避免过长
+                    status_display = "处理中" if task_status == "RUNNING" else "排队中"
+                    _log_dynamic(f"↻ {status_display} ({elapsed_time:.0f}s)", end="\r")
 
                 time.sleep(polling_interval)
 
@@ -1229,19 +1304,24 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
 
             # 7. 下载视频
             _update_progress("下载", 0.1, node_id=node_id)
-            video_tensor = _download_video(
+            video_tensor, video_info, width, height, duration_seconds, fps, frame_count = _download_video(
                 video_url,
                 progress_callback=lambda stage, progress: _update_progress(
                     "下载", progress, node_id=node_id
                 )
             )
 
-            # 8. 提取使用信息
-            usage_info = video_provider.extract_usage_info(result)
+            # 8. 提取使用信息（包含API请求代码）
+            usage_info = video_provider.extract_usage_info(result, payload)
             usage_json = json.dumps(usage_info, ensure_ascii=False, indent=2)
 
             # 9. 保存到缓存（24小时有效）
             VIDEO_CACHE.set(cache_key, task_id, video_url)
+
+            # 10. 输出合并的完成日志
+            print(" " * 80, end="\r")  # 清除当前行
+            seed_display = f"seed值：{seed}" if seed else "seed值：未设置"
+            _log_dynamic(f"✓ 任务完成，耗时: {elapsed_time:.1f}秒 | 尺寸: {width}x{height} | 时长: {duration_seconds:.1f}s | 帧率: {fps:.0f}fps | 缓存已保存,{seed_display}")
 
             # 进度：完成
             _update_progress("完成", 1.0, node_id=node_id)
@@ -1249,8 +1329,7 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
             return io.NodeOutput(
                 video_tensor,      # 第一个输出：video (图像)
                 video_url,         # 第二个输出：video_url (字符串)
-                task_id,           # 第三个输出：task_id (字符串)
-                usage_json         # 第四个输出：usage_info (字符串)
+                usage_json         # 第三个输出：task_info (字符串，包含任务ID和API请求信息)
             )
 
         except Exception as e:
