@@ -436,13 +436,11 @@ def _process_input_image(image_tensor: torch.Tensor) -> str:
             image_np = image_tensor.numpy()
         elif image_tensor.shape[0] == 4:
             # [channels, height, width] 格式的RGBA图像 -> 转换为RGB
-            _log_dynamic("↻ 检测到RGBA图像，正在转换为RGB...")
             # 提取RGB通道并去除透明度
             rgb_tensor = image_tensor[:3]  # 取前3个通道（R,G,B）
             image_np = rgb_tensor.permute(1, 2, 0).numpy()
         elif image_tensor.shape[2] == 4:
             # [height, width, channels] 格式的RGBA图像 -> 转换为RGB
-            print("[VGM] 检测到RGBA图像（[H,W,C]格式），正在转换为RGB...")
             # 提取RGB通道并去除透明度
             image_np = image_tensor[:, :, :3].numpy()  # 取前3个通道（R,G,B）
         elif image_tensor.shape[0] == 1:
@@ -500,12 +498,7 @@ def _parse_pack_images(pack_images: Optional[torch.Tensor]) -> List[torch.Tensor
     if pack_images is None:
         return []
 
-    # 简化日志，只记录基本信息
-    if hasattr(pack_images, 'shape'):
-        shape_str = str(pack_images.shape)
-    else:
-        shape_str = "unknown"
-    _log_dynamic(f"↻ 解析pack_images输入，形状: {shape_str}")
+    # 简化日志，不在这里输出，将在后续统一输出
 
     # 处理列表或元组输入（来自DynamicPackImages节点）
     if isinstance(pack_images, (list, tuple)):
@@ -521,14 +514,12 @@ def _parse_pack_images(pack_images: Optional[torch.Tensor]) -> List[torch.Tensor
                     images.append(img)
                 else:
                     # 无法确定格式，尝试猜测
-                    _log_dynamic(f"⚠ 警告：无法确定图像格式，形状: {img.shape}")
                     images.append(img)
             elif len(img.shape) == 4:  # [1, H, W, C] 或 [1, C, H, W]
                 images.append(img[0])
             else:
                 raise ValueError(f"不支持的图像维度: {img.shape}")
 
-        _log_dynamic(f"↻ 从pack_images列表中提取了 {len(images)} 张图像")
         return images
 
     # 处理单个张量输入
@@ -542,14 +533,12 @@ def _parse_pack_images(pack_images: Optional[torch.Tensor]) -> List[torch.Tensor
             return [pack_images]
         else:
             # 无法确定格式，尝试猜测
-            print(f"[VGM] 警告：无法确定图像格式，形状: {pack_images.shape}")
             return [pack_images]
     elif len(pack_images.shape) == 4:  # [N, H, W, C] 或 [N, C, H, W]
         # 提取批次中的每个图像
         images = []
         for i in range(pack_images.shape[0]):
             images.append(pack_images[i])
-        print(f"[VGM] 从批次张量中提取了 {len(images)} 张图像")
         return images
     else:
         raise ValueError(f"不支持的pack_images维度: {pack_images.shape}")
@@ -1071,6 +1060,27 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
             _update_progress("准备", 0.2, node_id=node_id)
             images = _parse_pack_images(pack_images)
 
+            # 输出简洁的pack_images信息
+            if images:
+                # 根据模型类型确定使用的图像
+                if video_provider.config.provider_type == "i2v":
+                    # 图生视频模式：使用第1张图片
+                    used_image_info = "模型有效使用第1张图片"
+                elif video_provider.config.provider_type == "kf2v":
+                    # 首尾帧生视频模式：使用第1张作为首帧，第2张作为尾帧（如果有）
+                    if len(images) >= 2:
+                        used_image_info = "模型有效使用第1张图片作为首帧，第2张图片作为尾帧"
+                    else:
+                        used_image_info = "模型有效使用第1张图片作为首帧"
+                else:
+                    # 参考生视频模式：不需要图片
+                    used_image_info = "模型不需要图片输入"
+
+                _log_dynamic(f"↻ pack_images输入了{len(images)}张图片，{used_image_info}")
+            elif pack_images is not None:
+                # 有pack_images输入但没有解析出图像
+                _log_dynamic(f"↻ pack_images输入了0张有效图片")
+
             # 3. 根据模型类型分配图像
             allocated_images = _allocate_images_for_model(
                 images=images,
@@ -1141,7 +1151,8 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
                     shot_type=shot_type,
                     seed=seed,
                     negative_prompt=negative_prompt,
-                    resolution=resolution  # 传递分辨率参数
+                    resolution=resolution,  # 传递分辨率参数
+                    template=template  # 传递template参数用于验证
                 )
                 if not is_valid:
                     raise ValueError(error_msg)

@@ -213,7 +213,7 @@ if HAS_PROMPT_SERVER:
         from .src.xiser_nodes.image_manager.api import register_routes
         register_routes()
 
-        print("[XISER] 成功注册VGM配置路由: /xiser/vgm/config, /xiser/vgm/config/{model_name}")
+        # 静默注册VGM配置路由
     except Exception as e:
         print("[XISER] Failed to register routes:", str(e))
 else:
@@ -298,7 +298,7 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(VGM_NODES)
 
             # print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")  # 简化日志，不显示此信息
-            print("[XISER V3] 成功全部节点")
+            # 静默加载节点
 
             return v3_nodes
 

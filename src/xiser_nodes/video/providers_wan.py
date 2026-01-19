@@ -250,12 +250,19 @@ class WanVideoProvider(BaseVideoProvider):
         if len(reference_video_urls) > 3:
             raise ValueError(f"视频URL数量超过限制：{len(reference_video_urls)}个，最多支持3个")
 
+        # 构建输入部分
+        input_data = {
+            "prompt": prompt,
+            "reference_video_urls": reference_video_urls
+        }
+
+        # 添加可选输入参数
+        if negative_prompt:
+            input_data["negative_prompt"] = negative_prompt
+
         payload = {
             "model": self.config.model,
-            "input": {
-                "prompt": prompt,
-                "reference_video_urls": reference_video_urls
-            }
+            "input": input_data
         }
 
         # 添加可选参数
@@ -270,8 +277,6 @@ class WanVideoProvider(BaseVideoProvider):
             parameters["watermark"] = watermark
         if seed is not None:
             parameters["seed"] = seed
-        if negative_prompt:
-            parameters["negative_prompt"] = negative_prompt
 
         if parameters:
             payload["parameters"] = parameters
@@ -346,6 +351,8 @@ class WanVideoProvider(BaseVideoProvider):
         # 添加可选输入参数
         if prompt:
             input_data["prompt"] = prompt
+        if negative_prompt:
+            input_data["negative_prompt"] = negative_prompt
         if audio_url and self.config.supports_audio:
             input_data["audio_url"] = audio_url
         if template and self.config.supports_template:
@@ -353,6 +360,9 @@ class WanVideoProvider(BaseVideoProvider):
             # 使用模板时，prompt参数无效
             if "prompt" in input_data:
                 del input_data["prompt"]
+            # 使用模板时，negative_prompt参数也无效
+            if "negative_prompt" in input_data:
+                del input_data["negative_prompt"]
 
         payload = {
             "model": self.config.model,
@@ -379,8 +389,6 @@ class WanVideoProvider(BaseVideoProvider):
                 parameters["watermark"] = watermark
             if seed is not None:
                 parameters["seed"] = seed
-            if negative_prompt:
-                parameters["negative_prompt"] = negative_prompt
         else:
             # 特效模式：根据文档示例，只传递必要的参数
             # 文档示例中只有resolution参数，不传递其他参数
@@ -428,6 +436,8 @@ class WanVideoProvider(BaseVideoProvider):
         # 添加可选输入参数
         if prompt and not is_template_mode:  # 特效模式下不使用prompt
             input_data["prompt"] = prompt
+        if negative_prompt and not is_template_mode:  # 特效模式下不使用negative_prompt
+            input_data["negative_prompt"] = negative_prompt
         if last_frame_url and not is_template_mode:  # 特效模式下不需要尾帧
             input_data["last_frame_url"] = last_frame_url
         if is_template_mode:
@@ -435,6 +445,9 @@ class WanVideoProvider(BaseVideoProvider):
             # 使用模板时，确保没有prompt参数
             if "prompt" in input_data:
                 del input_data["prompt"]
+            # 使用模板时，确保没有negative_prompt参数
+            if "negative_prompt" in input_data:
+                del input_data["negative_prompt"]
             # 特效模式下不需要尾帧（根据文档）
             if "last_frame_url" in input_data:
                 del input_data["last_frame_url"]
@@ -459,8 +472,6 @@ class WanVideoProvider(BaseVideoProvider):
                 parameters["watermark"] = watermark
             if seed is not None:
                 parameters["seed"] = seed
-            if negative_prompt:
-                parameters["negative_prompt"] = negative_prompt
         else:
             # 特效模式：根据文档示例，只传递必要的参数
             # 首尾帧特效文档示例中只有resolution参数，不传递其他参数
@@ -592,10 +603,68 @@ class WanVideoProvider(BaseVideoProvider):
 
         return None
 
+    def _truncate_base64_data(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """缩略显示Base64数据，避免任务信息过于冗长
+
+        Args:
+            payload: 原始API请求载荷
+
+        Returns:
+            处理后的载荷，Base64数据被缩略显示
+        """
+        if not payload:
+            return payload
+
+        # 创建payload的深拷贝，避免修改原始数据
+        import copy
+        truncated_payload = copy.deepcopy(payload)
+
+        # 需要检查的Base64字段
+        base64_fields = ["img_url", "first_frame_url", "last_frame_url"]
+
+        def truncate_field(value):
+            """缩略显示Base64数据"""
+            if not isinstance(value, str):
+                return value
+
+            # 检查是否是Base64数据
+            if value.startswith("data:image/"):
+                # 提取MIME类型和Base64数据
+                parts = value.split(",", 1)
+                if len(parts) == 2:
+                    mime_type = parts[0]
+                    base64_data = parts[1]
+
+                    # 计算Base64数据长度
+                    data_length = len(base64_data)
+
+                    # 缩略显示：显示前50个字符和后50个字符
+                    if data_length > 100:
+                        truncated_data = f"{base64_data[:50]}...{base64_data[-50:]}"
+                        return f"{mime_type},{truncated_data} [长度: {data_length} 字符]"
+                    else:
+                        return value
+                else:
+                    return value
+            else:
+                return value
+
+        # 处理input中的Base64字段
+        if "input" in truncated_payload:
+            input_data = truncated_payload["input"]
+            for field in base64_fields:
+                if field in input_data:
+                    input_data[field] = truncate_field(input_data[field])
+
+        return truncated_payload
+
     def extract_usage_info(self, result: Dict[str, Any], payload: Dict[str, Any] = None) -> Dict[str, Any]:
         """从结果中提取使用信息，包括API请求代码"""
         usage = result.get("usage", {})
         output = result.get("output", {})
+
+        # 处理payload，缩略显示Base64数据
+        truncated_payload = self._truncate_base64_data(payload) if payload else {}
 
         # 构建API请求代码信息
         api_request_info = {
@@ -608,7 +677,7 @@ class WanVideoProvider(BaseVideoProvider):
                     "Authorization": "Bearer YOUR_API_KEY",
                     "X-DashScope-Async": "enable"
                 },
-                "payload": payload if payload else {}
+                "payload": truncated_payload
             },
             "usage_stats": {
                 "duration": usage.get("duration"),
@@ -648,6 +717,6 @@ def register_wan_provider(registry):
         try:
             provider = WanVideoProvider(model_name)
             registry.register(provider, group="alibaba")
-            print(f"[VGM] 已注册模型：{model_name} ({provider.config.label})")
+            # 静默注册模型
         except Exception as e:
             print(f"[VGM] 警告：注册模型 {model_name} 失败：{e}")

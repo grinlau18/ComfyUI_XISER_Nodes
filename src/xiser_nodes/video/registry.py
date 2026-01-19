@@ -91,7 +91,7 @@ def build_default_registry() -> VideoProviderRegistry:
         # 首先尝试使用新的配置系统
         from .providers_config import register_config_based_providers
         register_config_based_providers(_REGISTRY)
-        print("[VGM] 使用统一配置系统注册提供者")
+        # 静默使用统一配置系统注册提供者
     except ImportError as e:
         print(f"[VGM] 警告：无法导入配置提供者: {e}")
         # 回退到旧的提供者系统

@@ -269,9 +269,7 @@ class ConfigLoader:
                 )
                 self._provider_types[type_name] = provider_type_config
 
-            logger.info(f"成功加载配置文件: {self.config_path}")
-            logger.info(f"加载了 {len(self._models)} 个模型配置")
-            logger.info(f"加载了 {len(self._groups)} 个分组配置")
+            # 静默加载配置文件
 
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")

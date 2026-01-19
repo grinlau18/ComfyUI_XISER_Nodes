@@ -176,7 +176,13 @@ class ConfigBasedVideoProvider(BaseVideoProvider):
         # 添加模板（如果支持）
         template = kwargs.get("template")
         if template and self.config.supports_template:
-            payload["parameters"]["template"] = template
+            payload["input"]["template"] = template
+            # 使用模板时，prompt参数无效
+            if "prompt" in payload["input"]:
+                del payload["input"]["prompt"]
+            # 使用模板时，negative_prompt参数也无效
+            if "negative_prompt" in payload["input"]:
+                del payload["input"]["negative_prompt"]
 
         # 添加镜头类型（如果支持）
         if shot_type and self.config.supports_multi_shot:
@@ -242,7 +248,13 @@ class ConfigBasedVideoProvider(BaseVideoProvider):
         # 添加模板
         template = kwargs.get("template")
         if template and self.config.supports_template:
-            payload["parameters"]["template"] = template
+            payload["input"]["template"] = template
+            # 使用模板时，prompt参数无效
+            if "prompt" in payload["input"]:
+                del payload["input"]["prompt"]
+            # 使用模板时，negative_prompt参数也无效
+            if "negative_prompt" in payload["input"]:
+                del payload["input"]["negative_prompt"]
 
         return payload
 
@@ -508,9 +520,67 @@ class ConfigBasedVideoProvider(BaseVideoProvider):
 
         return None
 
+    def _truncate_base64_data(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """缩略显示Base64数据，避免任务信息过于冗长
+
+        Args:
+            payload: 原始API请求载荷
+
+        Returns:
+            处理后的载荷，Base64数据被缩略显示
+        """
+        if not payload:
+            return payload
+
+        # 创建payload的深拷贝，避免修改原始数据
+        import copy
+        truncated_payload = copy.deepcopy(payload)
+
+        # 需要检查的Base64字段
+        base64_fields = ["img_url", "first_frame_url", "last_frame_url"]
+
+        def truncate_field(value):
+            """缩略显示Base64数据"""
+            if not isinstance(value, str):
+                return value
+
+            # 检查是否是Base64数据
+            if value.startswith("data:image/"):
+                # 提取MIME类型和Base64数据
+                parts = value.split(",", 1)
+                if len(parts) == 2:
+                    mime_type = parts[0]
+                    base64_data = parts[1]
+
+                    # 计算Base64数据长度
+                    data_length = len(base64_data)
+
+                    # 缩略显示：显示前50个字符和后50个字符
+                    if data_length > 100:
+                        truncated_data = f"{base64_data[:50]}...{base64_data[-50:]}"
+                        return f"{mime_type},{truncated_data} [长度: {data_length} 字符]"
+                    else:
+                        return value
+                else:
+                    return value
+            else:
+                return value
+
+        # 处理input中的Base64字段
+        if "input" in truncated_payload:
+            input_data = truncated_payload["input"]
+            for field in base64_fields:
+                if field in input_data:
+                    input_data[field] = truncate_field(input_data[field])
+
+        return truncated_payload
+
     def extract_usage_info(self, result: Dict[str, Any], payload: Dict[str, Any] = None) -> Dict[str, Any]:
         """从结果中提取使用信息，包括API请求代码"""
         usage = result.get("usage", {})
+
+        # 处理payload，缩略显示Base64数据
+        truncated_payload = self._truncate_base64_data(payload) if payload else {}
 
         # 构建API请求代码信息
         api_request_info = {
@@ -523,7 +593,7 @@ class ConfigBasedVideoProvider(BaseVideoProvider):
                     "Authorization": "Bearer YOUR_API_KEY",
                     "X-DashScope-Async": "enable"
                 },
-                "payload": payload if payload else {}
+                "payload": truncated_payload
             },
             "usage_stats": {
                 "total_tokens": usage.get("total_tokens", 0),
@@ -554,7 +624,7 @@ def register_config_based_providers(registry) -> None:
             # 注册到注册表
             registry.register(provider, group=model_config.group)
 
-            logger.info(f"注册模型提供者: {model_name} ({model_config.label})")
+            # 静默注册模型提供者
 
         except Exception as e:
             logger.error(f"注册模型提供者失败 {model_name}: {e}")
