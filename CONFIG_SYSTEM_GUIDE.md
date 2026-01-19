@@ -281,25 +281,18 @@ async function getModelConfig(modelName) {
 ### 从旧系统迁移
 
 1. **前端迁移**：
-   - 旧的 `web/vgm_node_ui.js` 已弃用
+   - 旧的 `web/vgm_node_ui.js` 已删除
    - 新的 `web/vgm_node_ui_config.js` 使用动态配置
-   - 更新 `web/index.js` 导入新文件
+   - `web/index.js` 已更新为导入新文件
 
 2. **后端迁移**：
-   - 旧的 `providers_wan.py` 仍然可用作为回退
+   - 旧的 `providers_wan.py` 已删除
    - 新的 `providers_config.py` 使用统一配置
-   - 注册表自动选择新系统
+   - 注册表仅使用新系统
 
 3. **配置迁移**：
-   - 将硬编码的模型配置移动到 `config/video_models.yaml`
-   - 确保前后端配置一致
-
-### 兼容性
-
-新系统设计为向后兼容：
-- 如果配置系统失败，自动回退到旧的提供者系统
-- 前端有默认配置作为回退
-- API端点保持稳定
+   - 所有模型配置已移动到 `config/video_models.yaml`
+   - 前后端使用相同的配置源
 
 ## 测试
 
@@ -334,9 +327,9 @@ python test_config.py
 
 配置系统会输出以下日志：
 - `[VGM] 使用统一配置系统注册提供者` - 配置系统成功加载
-- `[VGM] 警告：配置系统加载失败` - 配置系统失败，使用回退
+- `[VGM] 错误：注册配置提供者失败` - 配置系统加载失败
 - `[VGM UI] 配置加载成功` - 前端配置加载成功
-- `[VGM UI] 配置加载失败` - 前端配置加载失败，使用默认配置
+- `[VGM UI] 配置加载失败` - 前端配置加载失败
 
 ## 性能考虑
 

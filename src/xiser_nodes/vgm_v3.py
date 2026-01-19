@@ -712,33 +712,15 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
         # 使用新的配置系统获取模型选项
         config_loader = get_config_loader()
 
-        try:
-            # 获取UI下拉框选项
-            raw_choices = config_loader.get_model_choices_for_ui()
+        # 获取UI下拉框选项
+        raw_choices = config_loader.get_model_choices_for_ui()
 
-            if not raw_choices:
-                print("[VGM] 警告：配置系统返回空选项，使用默认选项")
-                choices = ["wan2.6-r2v"]
-                default_choice = "wan2.6-r2v"
-            else:
-                # 提取选项值
-                choices = [choice["value"] for choice in raw_choices]
-                default_choice = choices[0] if choices else "wan2.6-r2v"
+        if not raw_choices:
+            raise ValueError("配置系统返回空选项，请检查配置文件")
 
-        except Exception as e:
-            print(f"[VGM] 警告：配置系统加载失败，使用注册表选项: {e}")
-            # 回退到旧的注册表系统
-            raw_choices = REGISTRY.list_grouped_choices()
-
-            if not raw_choices:
-                choices = ["wan2.6-r2v"]
-                default_choice = "wan2.6-r2v"
-            elif isinstance(raw_choices[0], dict):
-                choices = [choice["value"] for choice in raw_choices]
-                default_choice = choices[0] if choices else "wan2.6-r2v"
-            else:
-                choices = raw_choices
-                default_choice = choices[0] if choices else "wan2.6-r2v"
+        # 提取选项值
+        choices = [choice["value"] for choice in raw_choices]
+        default_choice = choices[0] if choices else "wan2.6-r2v"
 
         # 获取尺寸选项和时长选项
         size_options = []
@@ -751,25 +733,15 @@ class XIS_VGMOrchestratorV3(io.ComfyNode):
         for choice in choices:
             provider_name = choice
 
-            try:
-                # 使用配置系统获取模型配置
-                model_config = config_loader.get_model(provider_name)
-                if model_config:
-                    # 收集尺寸选项（参考生视频）
-                    if model_config.supported_sizes:
-                        size_options.extend(model_config.supported_sizes)
-                    # 收集时长选项
-                    if model_config.supported_durations:
-                        duration_options.extend(model_config.supported_durations)
-            except Exception as e:
-                print(f"[VGM] 警告：获取模型 {provider_name} 配置失败: {e}")
-                # 回退到注册表
-                provider = REGISTRY.get(provider_name)
-                if provider and hasattr(provider, 'config'):
-                    if hasattr(provider.config, 'supported_sizes'):
-                        size_options.extend(provider.config.supported_sizes)
-                    if hasattr(provider.config, 'supported_durations'):
-                        duration_options.extend(provider.config.supported_durations)
+            # 使用配置系统获取模型配置
+            model_config = config_loader.get_model(provider_name)
+            if model_config:
+                # 收集尺寸选项（参考生视频）
+                if model_config.supported_sizes:
+                    size_options.extend(model_config.supported_sizes)
+                # 收集时长选项
+                if model_config.supported_durations:
+                    duration_options.extend(model_config.supported_durations)
 
         # 如果选项为空，使用默认值
         if not size_options:

@@ -112,6 +112,39 @@ models:
       default_watermark: false
       default_seed: 42
 
+  wan2.6-i2v-flash:
+    name: "wan2.6-i2v-flash"
+    label: "万相2.6图生视频极速版"
+    provider_type: "i2v"
+    group: "alibaba"
+    endpoint: "{{china}}"
+    max_prompt_length: 1500
+    max_reference_videos: 0
+    supported_durations: [5, 10, 15]
+    supported_sizes: []  # 图生视频使用resolution参数
+    supported_resolutions: ["720P", "1080P"]
+    supports_audio: true
+    supports_multi_shot: true
+    supports_prompt_extend: true
+    supports_template: true
+    ui:
+      has_image_input: true
+      has_video_url_input: false
+      has_resolution: true
+      has_audio: true
+      has_prompt_extend: true
+      has_template: true
+      has_shot_type: true
+      has_size: false
+      supported_regions: ["china", "singapore", "virginia"]
+      default_region: "china"
+      default_resolution: "720P"
+      default_duration: 5
+      default_shot_type: "multi"
+      default_prompt_extend: true
+      default_watermark: false
+      default_seed: 42
+
   wan2.5-i2v-preview:
     name: "wan2.5-i2v-preview"
     label: "万相2.5图生视频预览版"
@@ -349,6 +382,7 @@ groups:
     models:
       - "wan2.6-r2v"
       - "wan2.6-i2v"
+      - "wan2.6-i2v-flash"
       - "wan2.5-i2v-preview"
       - "wan2.2-i2v-flash"
       - "wan2.2-i2v-plus"
