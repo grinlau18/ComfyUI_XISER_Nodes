@@ -20,6 +20,7 @@ class XIS_CanvasMaskProcessorV3(io.ComfyNode):
             optional_inputs.append(
                 io.Boolean.Input(f"Layer_Mask_{i}",
                                default=False,
+                               optional=True,
                                tooltip=f"启用第 {i} 层蒙版")
             )
 
@@ -31,6 +32,7 @@ class XIS_CanvasMaskProcessorV3(io.ComfyNode):
             inputs=[
                 io.Boolean.Input("invert_output",
                                default=True,
+                               optional=True,
                                tooltip="是否反转输出蒙版"),
                 io.Mask.Input("masks",
                             tooltip="输入蒙版列表"),

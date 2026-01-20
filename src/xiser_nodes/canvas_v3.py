@@ -292,12 +292,134 @@ class XISER_Canvas:
         if not images_list:
             raise ValueError("At least one image must be provided")
 
+        logger.info(f"Instance {self.instance_id} - Normalized {len(images_list)} images from pack_images")
 
-        # parse image_states/layer_data
+
+        # parse image_states/layer_data/file_data
         image_paths = []
         image_base64_chunks = []
 
+        # 首先处理file_data（PSD图层数据）
+        if file_data and isinstance(file_data, dict):
+            logger.info(f"Instance {self.instance_id} - Processing file_data from PSD")
+            logger.debug(f"Instance {self.instance_id} - file_data keys: {list(file_data.keys())}")
+
+            # 提取PSD画布尺寸
+            psd_canvas = file_data.get("canvas", {})
+            psd_width = psd_canvas.get("width", board_width)
+            psd_height = psd_canvas.get("height", board_height)
+            logger.debug(f"Instance {self.instance_id} - PSD canvas size: {psd_width}x{psd_height}")
+
+            # 如果auto_size为on，使用PSD画布尺寸
+            if auto_size == "on":
+                board_width = min(max(psd_width, 256), 8192)
+                board_height = min(max(psd_height, 256), 8192)
+                logger.info(f"Instance {self.instance_id} - Auto-sized canvas to PSD dimensions: {board_width}x{board_height}")
+            else:
+                # 如果auto_size为off，但PSD画布尺寸与当前画布尺寸不同
+                # 需要缩放图层坐标
+                if psd_width != board_width or psd_height != board_height:
+                    scale_x = board_width / psd_width if psd_width > 0 else 1.0
+                    scale_y = board_height / psd_height if psd_height > 0 else 1.0
+                    logger.debug(f"Instance {self.instance_id} - Scaling PSD coordinates: scale_x={scale_x}, scale_y={scale_y}")
+                    # 在图层处理时会应用这个缩放
+
+            # 转换PSD图层数据为Canvas格式
+            psd_layers = file_data.get("layers", [])
+            logger.debug(f"Instance {self.instance_id} - Found {len(psd_layers)} PSD layers")
+            logger.debug(f"Instance {self.instance_id} - Images list has {len(images_list)} images")
+
+            # 调试：打印所有图层信息
+            for i, layer in enumerate(psd_layers):
+                if isinstance(layer, dict):
+                    logger.debug(f"Instance {self.instance_id} - PSD layer {i}: name={layer.get('name')}, "
+                               f"size={layer.get('width')}x{layer.get('height')}, "
+                               f"offset=({layer.get('offset_x')},{layer.get('offset_y')}), "
+                               f"is_canvas_background={layer.get('is_canvas_background', False)}")
+
+            converted_layers = []
+
+            for idx, psd_layer in enumerate(psd_layers):
+                if not isinstance(psd_layer, dict):
+                    continue
+
+                # 提取PSD图层信息（包括背景图）
+                layer_name = psd_layer.get("name", f"Layer_{idx}")
+                layer_width = psd_layer.get("width", 0)
+                layer_height = psd_layer.get("height", 0)
+                offset_x = psd_layer.get("offset_x", 0)
+                offset_y = psd_layer.get("offset_y", 0)
+                rotation = psd_layer.get("rotation", 0.0)
+                scale_x = psd_layer.get("scale_x", 1.0)
+                scale_y = psd_layer.get("scale_y", 1.0)
+
+                logger.debug(f"Instance {self.instance_id} - Processing PSD layer {idx} '{layer_name}': "
+                           f"size={layer_width}x{layer_height}, offset=({offset_x},{offset_y}), "
+                           f"rotation={rotation}, scale=({scale_x},{scale_y})")
+
+                # 简单转换：直接使用PSD的偏移和缩放
+                # PSD坐标系统：左上角为原点
+                # Canvas坐标系统：中心点坐标
+
+                # 如果auto_size为off且画布尺寸不同，需要缩放坐标
+                if auto_size == "off" and (psd_width != board_width or psd_height != board_height):
+                    scale_factor_x = board_width / psd_width if psd_width > 0 else 1.0
+                    scale_factor_y = board_height / psd_height if psd_height > 0 else 1.0
+                    # 缩放偏移和尺寸
+                    offset_x = offset_x * scale_factor_x
+                    offset_y = offset_y * scale_factor_y
+                    layer_width = layer_width * scale_factor_x
+                    layer_height = layer_height * scale_factor_y
+                    # 缩放比例也需要调整
+                    scale_x = scale_x * scale_factor_x
+                    scale_y = scale_y * scale_factor_y
+
+                # 计算图层中心点（相对于PSD画布）
+                layer_center_x = offset_x + layer_width / 2
+                layer_center_y = offset_y + layer_height / 2
+
+                # 转换为Canvas坐标（加上边框偏移）
+                x = border_width + layer_center_x
+                y = border_width + layer_center_y
+
+                # 构建Canvas兼容的图层数据
+                canvas_layer = {
+                    "name": layer_name,
+                    "x": float(x),
+                    "y": float(y),
+                    "scaleX": float(scale_x),
+                    "scaleY": float(scale_y),
+                    "rotation": float(rotation),
+                    "skewX": 0.0,
+                    "skewY": 0.0,
+                    "brightness": 0.0,
+                    "contrast": 0.0,
+                    "saturation": 0.0,
+                    "opacity": 100.0,
+                    "visible": True,
+                    "order": idx,  # 保持原始顺序
+                    "filename": None,
+                }
+
+                converted_layers.append(canvas_layer)
+                logger.debug(f"Instance {self.instance_id} - Converted PSD layer {layer_name}: "
+                          f"offset({offset_x},{offset_y}) -> pos({x},{y})")
+
+            # 使用转换后的图层数据作为layer_data
+            if converted_layers:
+                layer_data = {
+                    "layers": converted_layers,
+                    "source": "psd_file_data"
+                }
+                logger.info(f"Instance {self.instance_id} - Converted {len(converted_layers)} PSD layers to Canvas format")
+
+        # 然后处理layer_data（如果存在）
+        logger.debug(f"Instance {self.instance_id} - Checking layer_data: exists={layer_data is not None}, "
+                   f"type={type(layer_data) if layer_data else 'None'}")
+
         if layer_data and isinstance(layer_data, dict) and layer_data.get("layers"):
+            logger.info(f"Instance {self.instance_id} - Processing {len(layer_data['layers'])} layers from layer_data")
+            logger.debug(f"Instance {self.instance_id} - layer_data source: {layer_data.get('source', 'unknown')}")
             states_raw = []
             for idx, layer in enumerate(layer_data["layers"]):
                 # decode inline cutout to file, update filename with layer index
