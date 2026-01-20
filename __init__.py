@@ -7,7 +7,7 @@ __all__ = [
 
 __author__ = """XISER"""
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.3.9"
+__version__ = "1.4.0"
 
 # V3 API imports
 from comfy_api.v0_0_2 import ComfyExtension, io, ui
@@ -16,6 +16,7 @@ from comfy_api.v0_0_2 import ComfyExtension, io, ui
 import json
 import aiohttp.web
 import traceback
+import time
 
 # Try to import PromptServer, but don't fail if not in ComfyUI environment
 try:
@@ -120,6 +121,76 @@ async def handle_color_change(request):
         traceback.print_exc()
         return aiohttp.web.json_response({"error": f"Server error: {str(e)}"}, status=500)
 
+# VGM配置API端点
+async def get_vgm_config(request):
+    """获取VGM配置"""
+    try:
+        from .src.xiser_nodes.config import get_config_loader
+
+        config_loader = get_config_loader()
+
+        # 获取所有UI配置
+        ui_configs = config_loader.get_all_ui_configs()
+
+        # 获取模型选项
+        model_choices = config_loader.get_model_choices_for_ui()
+
+        # 获取提供者类型配置
+        provider_types = config_loader.get_all_provider_types()
+        # 转换为字典以便JSON序列化
+        provider_types_dict = {
+            name: config.to_dict()
+            for name, config in provider_types.items()
+        }
+
+        return aiohttp.web.json_response({
+            "success": True,
+            "data": {
+                "models": ui_configs,
+                "choices": model_choices,
+                "provider_types": provider_types_dict,
+                "timestamp": time.time()
+            }
+        })
+    except Exception as e:
+        print(f"[VGM] 获取配置失败: {e}")
+        return aiohttp.web.json_response({
+            "success": False,
+            "error": str(e)
+        }, status=500)
+
+async def get_vgm_model_config(request):
+    """获取特定模型的配置"""
+    try:
+        from .src.xiser_nodes.config import get_config_loader
+
+        model_name = request.match_info.get('model_name')
+        if not model_name:
+            return aiohttp.web.json_response({
+                "success": False,
+                "error": "缺少模型名称参数"
+            }, status=400)
+
+        config_loader = get_config_loader()
+        ui_config = config_loader.get_ui_config_for_model(model_name)
+
+        if not ui_config:
+            return aiohttp.web.json_response({
+                "success": False,
+                "error": f"未找到模型配置: {model_name}"
+            }, status=404)
+
+        return aiohttp.web.json_response({
+            "success": True,
+            "data": ui_config
+        })
+    except Exception as e:
+        print(f"[VGM] 获取模型配置失败: {e}")
+        return aiohttp.web.json_response({
+            "success": False,
+            "error": str(e)
+        }, status=500)
+
 # 注册路由
 if HAS_PROMPT_SERVER:
     try:
@@ -134,11 +205,15 @@ if HAS_PROMPT_SERVER:
         # default key route retained for compatibility but returns 400
         PromptServer.instance.app.router.add_post("/xiser/keys/default", set_default_key)
 
+        # VGM配置路由
+        PromptServer.instance.app.router.add_get("/xiser/vgm/config", get_vgm_config)
+        PromptServer.instance.app.router.add_get("/xiser/vgm/config/{model_name}", get_vgm_model_config)
+
         # Register XIS_ImageManager V3 API routes
         from .src.xiser_nodes.image_manager.api import register_routes
         register_routes()
 
-        # print("[XISER] Successfully registered routes: /xiser_color, /xiser/cutout, /custom/list_psd_files, /xiser/fonts, /upload/xis_image_manager, /delete/xis_image_manager")  # 简化日志，不显示此信息
+        # 静默注册VGM配置路由
     except Exception as e:
         print("[XISER] Failed to register routes:", str(e))
 else:
@@ -191,6 +266,8 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.image_preview_v3 import V3_NODE_CLASSES as IMAGE_PREVIEW_NODES
             # 新增节点 - LLM
             from .src.xiser_nodes.llm_v3 import V3_NODE_CLASSES as LLM_NODES
+            # 新增节点 - VGM
+            from .src.xiser_nodes.vgm_v3 import V3_NODE_CLASSES as VGM_NODES
 
             # 合并所有V3节点
             v3_nodes = []
@@ -218,9 +295,10 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(IMAGE_MANAGER_NODES)
             v3_nodes.extend(IMAGE_PREVIEW_NODES)
             v3_nodes.extend(LLM_NODES)
+            v3_nodes.extend(VGM_NODES)
 
             # print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")  # 简化日志，不显示此信息
-            print("[XISER V3] 成功全部节点")
+            # 静默加载节点
 
             return v3_nodes
 

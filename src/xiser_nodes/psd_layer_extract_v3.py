@@ -11,7 +11,7 @@ import math
 from comfy_api.v0_0_2 import io
 
 # 设置日志
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class XIS_PSDLayerExtractorV3(io.ComfyNode):
@@ -119,7 +119,7 @@ class XIS_PSDLayerExtractorV3(io.ComfyNode):
             blank_image_tensor = torch.zeros((canvas_height, canvas_width, 4), dtype=torch.float32)
             normalized_images.append(blank_image_tensor)
 
-            # 在file_data中添加空白画布图层信息
+            # 在file_data中添加空白画布图层信息（作为第一个图层）
             canvas_layer_info = {
                 "name": "Canvas Background",
                 "width": canvas_width,
@@ -128,8 +128,7 @@ class XIS_PSDLayerExtractorV3(io.ComfyNode):
                 "offset_y": 0,
                 "rotation": 0.0,
                 "scale_x": 1.0,
-                "scale_y": 1.0,
-                "is_canvas_background": True  # 标记为画布背景
+                "scale_y": 1.0
             }
             file_data["layers"].insert(0, canvas_layer_info)
             logger.info(f"Generated blank canvas image and layer info: {canvas_width}x{canvas_height}")

@@ -1,0 +1,502 @@
+{
+  "id": "e2b4360d-42a8-4264-a113-d057205b6a6a",
+  "revision": 0,
+  "last_node_id": 210,
+  "last_link_id": 293,
+  "nodes": [
+    {
+      "id": 201,
+      "type": "XIS_DynamicPackImages",
+      "pos": [
+        -5560,
+        3750
+      ],
+      "size": [
+        281.1875,
+        202
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 281
+        },
+        {
+          "name": "mask_1",
+          "shape": 7,
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image_2",
+          "type": "IMAGE",
+          "link": 282
+        },
+        {
+          "name": "mask_2",
+          "type": "MASK",
+          "link": null
+        },
+        {
+          "name": "image_3",
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "name": "mask_3",
+          "type": "MASK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pack_images",
+          "type": "IMAGE",
+          "links": [
+            288
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "23224e3d6e720333588e6d423d42e2f59d77da9f",
+        "Node name for S&R": "XIS_DynamicPackImages",
+        "imageInputCount": 3,
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        false,
+        false
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 190,
+      "type": "easy showAnything",
+      "pos": [
+        -4820,
+        3750
+      ],
+      "size": [
+        370,
+        150
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "anything",
+          "shape": 7,
+          "type": "*",
+          "link": 290
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-easy-use",
+        "ver": "1.3.0",
+        "Node name for S&R": "easy showAnything",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        "https://dashscope-result-sh.oss-cn-shanghai.aliyuncs.com/1d/8a/20260119/161b96d2/9a31580e-aaff-4297-ad41-bae4c01af05f.mp4?Expires=1768921009&OSSAccessKeyId=LTAI5tKPD3TMqf2Lna1fASuh&Signature=dGM2C5mN1gwlzO%2FjmNAOUfWyQlo%3D"
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 191,
+      "type": "easy showAnything",
+      "pos": [
+        -4820,
+        3950
+      ],
+      "size": [
+        370,
+        470
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "anything",
+          "shape": 7,
+          "type": "*",
+          "link": 291
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-easy-use",
+        "ver": "1.3.0",
+        "Node name for S&R": "easy showAnything",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        "{\n  \"task_id\": \"9a31580e-aaff-4297-ad41-bae4c01af05f\",\n  \"api_request\": {\n    \"note\": \"使用缓存视频，无API请求\"\n  },\n  \"usage_stats\": {\n    \"total_tokens\": 0,\n    \"input_tokens\": 0,\n    \"output_tokens\": 0,\n    \"image_tokens\": 0,\n    \"video_tokens\": 0,\n    \"audio_tokens\": 0\n  }\n}"
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 178,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        -4420,
+        3750
+      ],
+      "size": [
+        440,
+        916.2352941176471
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 289
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "meta_batch",
+          "shape": 7,
+          "type": "VHS_BatchManager",
+          "link": null
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "dabda5423a9df2d17940e619ba9bd6a6344453c7",
+        "Node name for S&R": "VHS_VideoCombine",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": {
+        "frame_rate": 30,
+        "loop_count": 0,
+        "filename_prefix": "AnimateDiff",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {
+            "filename": "AnimateDiff_00004.mp4",
+            "subfolder": "",
+            "type": "temp",
+            "format": "video/h264-mp4",
+            "frame_rate": 30,
+            "workflow": "AnimateDiff_00004.png",
+            "fullpath": "/Users/grin/Documents/comfy/ComfyUI/temp/AnimateDiff_00004.mp4"
+          }
+        }
+      },
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 196,
+      "type": "LoadImage",
+      "pos": [
+        -5860,
+        3750
+      ],
+      "size": [
+        270,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            281
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.8.2",
+        "Node name for S&R": "LoadImage",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        "将 Word 文件转换为 Markdown 的方法及工具.png",
+        "image"
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 202,
+      "type": "LoadImage",
+      "pos": [
+        -5860,
+        4140
+      ],
+      "size": [
+        270,
+        314
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            282
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.8.2",
+        "Node name for S&R": "LoadImage",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        "将 Word 文件转换为 Markdown 的方法及工具 (1).png",
+        "image"
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    },
+    {
+      "id": 208,
+      "type": "XIS_VGMOrchestrator",
+      "pos": [
+        -5250,
+        3750
+      ],
+      "size": [
+        400,
+        664
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pack_images",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 288
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            289
+          ]
+        },
+        {
+          "name": "视频URL",
+          "type": "STRING",
+          "links": [
+            290
+          ]
+        },
+        {
+          "name": "任务信息",
+          "type": "STRING",
+          "links": [
+            291
+          ]
+        },
+        {
+          "name": "使用信息",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "ComfyUI_XISER_Nodes",
+        "ver": "8f8c21f11fcb99732397e2f25fc0f4faf6d161cb",
+        "Node name for S&R": "XIS_VGMOrchestrator",
+        "xiser_title_color": "#144c94",
+        "xiser_content_color": "#2d2f34"
+      },
+      "widgets_values": [
+        "wan2.2-kf2v-flash",
+        "一位年轻的黑发美女托着下巴对着镜头微笑，她放下手站了起来，镜头慢慢转动，她侧着身子回眸一笑。",
+        "",
+        "1280*720",
+        5,
+        "single",
+        false,
+        2657,
+        "fixed",
+        "低分辨率、错误、最差质量",
+        "wan",
+        "china",
+        "",
+        5,
+        600,
+        "",
+        "720P",
+        true,
+        "",
+        "Show Advanced Settings",
+        "open"
+      ],
+      "color": "#144c94",
+      "bgcolor": "#2d2f34"
+    }
+  ],
+  "links": [
+    [
+      281,
+      196,
+      0,
+      201,
+      1,
+      "IMAGE"
+    ],
+    [
+      282,
+      202,
+      0,
+      201,
+      3,
+      "IMAGE"
+    ],
+    [
+      288,
+      201,
+      0,
+      208,
+      0,
+      "IMAGE"
+    ],
+    [
+      289,
+      208,
+      0,
+      178,
+      0,
+      "IMAGE"
+    ],
+    [
+      290,
+      208,
+      1,
+      190,
+      0,
+      "STRING"
+    ],
+    [
+      291,
+      208,
+      2,
+      191,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Group",
+      "bounding": [
+        -5900,
+        3646.4,
+        1960,
+        1059.8352941176468
+      ],
+      "color": "#444",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8140274938684203,
+      "offset": [
+        6506.539906819583,
+        -3369.9491799531957
+      ]
+    },
+    "frontendVersion": "1.36.14",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true,
+    "workflowRendererVersion": "LG"
+  },
+  "version": 0.4
+}

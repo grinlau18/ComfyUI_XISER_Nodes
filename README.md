@@ -17,12 +17,13 @@
 ✅ **3 New Core Nodes** - `image preview`, `dynamic pack images`, `dynamic image inputs`
 ✅ **Redundant Node Removal** - Removed `reorder images` node overlapping with `image manager` functionality
 ✅ **LLM Orchestrator Enhancement** - Added Wan 2.6 model support with image editing and interleave mode
+✅ **VGM Orchestrator Introduction** - New video generation orchestrator node supporting reference-based video, image-to-video, and keyframe-to-video modes
 ✅ **Performance Optimization** - Improved node interaction and system performance
 
 ---
 
-Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**. 
-This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing, professional-grade image processing toolchains, and visual data tools, providing end-to-end support for AI image generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows.
+Welcome to **ComfyUI_XISER_Nodes**, a comprehensive custom node package built on the **ComfyUI V3 architecture**.
+This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing (supporting mainstream models like DeepSeek, Qwen, Kimi, Wan), professional-grade image processing toolchains, video generation orchestration systems (supporting Wansiang series reference-based video, image-to-video, and keyframe-to-video generation), and visual data tools, providing end-to-end support for AI image and video generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, unified configuration-based video generation orchestration, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows.
 
 ---
 
@@ -63,6 +64,7 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - Image/mask/file utilities for color adjustment, cropping, resizing, reordering, mirroring, and PSD layer handling.
 - Data and workflow support including shape summaries, signal detection, shorthand serialization, list extraction, and divisible size correction.
 - LLM automation powered by DeepSeek with an extensible provider interface ready for future models.
+- Video generation orchestration supporting reference-based video, image-to-video, and keyframe-to-video modes with unified configuration system.
 
 ### 🖼️ Multi-layer Canvas Hub (XIS_Canvas)
 - **Essence**: The central canvas integrating BiRefNet cutouts, PSD import, layer transformations, mask generation, transparency adjustment, and 20-step history.
@@ -113,6 +115,63 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   ![XIS_LLMOrchestrator Node Interface](img/XIS_LLMOrchestrator_1.jpeg)
   ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_2.jpeg)
   ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_3.jpeg)
+
+### 🎬 Video Generation Orchestrator (XIS_VGMOrchestrator)
+- **Purpose**: Orchestrate video generation tasks across multiple providers and models, supporting reference-based video generation (r2v), image-to-video (i2v), and keyframe-to-video (kf2v) modes. Outputs video frames as image batches for seamless integration with ComfyUI's video processing pipeline.
+- **Core Features**:
+  - **Unified Configuration System**: All model configurations centralized in `config/video_models.yaml`, shared between frontend and backend
+  - **Multiple Generation Modes**:
+    - **Reference-based Video (r2v)**: Generate videos based on reference videos, preserving character appearance and voice characteristics
+    - **Image-to-Video (i2v)**: Generate videos from first-frame images with audio input and intelligent prompt rewriting
+    - **Keyframe-to-Video (kf2v)**: Generate videos from first and last frame images with special effects templates
+  - **Dynamic UI**: Interface adapts based on selected model, showing/hiding relevant controls automatically
+  - **Built-in Cache**: Intelligent caching system reduces redundant API calls and improves performance
+  - **Progress Tracking**: Real-time progress updates during video generation tasks
+- **Supported Models**:
+  - **Reference-based Video (r2v)**:
+    - `wan2.6-r2v`: Wansiang 2.6 reference-based video generation with audio support
+  - **Image-to-Video (i2v)**:
+    - `wan2.6-i2v`: Wansiang 2.6 image-to-video with multi-shot narrative capability
+    - `wan2.6-i2v-flash`: Wansiang 2.6 image-to-video flash version (fast generation)
+    - `wan2.5-i2v-preview`: Wansiang 2.5 image-to-video preview with audio support
+    - `wan2.2-i2v-flash`: Wansiang 2.2 image-to-video flash version
+    - `wan2.2-i2v-plus`: Wansiang 2.2 image-to-video professional version
+    - `wanx2.1-i2v-plus`: Wansiang 2.1 image-to-video professional version
+    - `wanx2.1-i2v-turbo`: Wansiang 2.1 image-to-video turbo version
+  - **Keyframe-to-Video (kf2v)**:
+    - `wan2.2-kf2v-flash`: Wansiang 2.2 keyframe-to-video flash version
+    - `wanx2.1-kf2v-plus`: Wansiang 2.1 keyframe-to-video professional version
+- **Inputs**:
+  - **Core Parameters**: Model selection, prompt text, reference video URLs (for r2v), image inputs (for i2v/kf2v)
+  - **Video Parameters**: Resolution (720P/1080P), duration (5/10/15 seconds), shot type (single/multi), watermark control
+  - **Advanced Parameters**: Negative prompt, seed, prompt extension, template selection (for kf2v)
+- **Outputs**:
+  - **images**: Video frames converted to image batches, ready for direct connection to VideoCombine nodes
+  - **video_url**: Original video URL from the generation service
+  - **task_info**: Task information including task ID and API request details
+- **API Key Management**:
+  - **Secure Storage**: API Keys encrypted and stored in `ComfyUI/user/API_keys/` directory
+  - **Key Manager**: Accessible via "API key management" button on the node
+  - **Profile Support**: Multiple API Key profiles, each node can independently select a profile
+  - **Usage Flow**:
+    1. Click "API key management" button to open key manager
+    2. Enter API name and API Key
+    3. Click "Save" to store encrypted API Key
+    4. Select desired profile from dropdown
+    5. Configuration automatically applied to current node
+- **Usage Example**:
+  1. Select video generation model from dropdown (e.g., `wan2.6-i2v`)
+  2. Configure API key via "API key management" button
+  3. Input prompt describing desired video content
+  4. For image-to-video: connect image input; for reference-based video: input reference video URLs
+  5. Set resolution, duration, and other parameters
+  6. Execute node to generate video
+  7. Connect output `images` to VideoCombine node for video creation
+  8. Use `video_url` for direct video download if needed
+- **Note**: Detailed parameter descriptions available in tooltips for each control. The node automatically adapts its interface based on selected model type.
+- **Screenshots**:
+  ![XIS_VGMOrchestrator Node Interface](img/XIS_VGMOrchestrator_1.jpeg) *(Screenshot placeholder - add actual screenshot file)*
+  ![XIS_VGMOrchestrator Workflow Example](img/XIS_VGMOrchestrator_2.jpeg) *(Screenshot placeholder - add actual screenshot file)*
 
 ### ✨ Visual Node Toolkit
 - **XIS_CurveEditor**: Sculpt distribution curves for INT/FLOAT/HEX outputs, with a widget that exposes Bézier grips and HSV/RGB/LAB color interpolation.
