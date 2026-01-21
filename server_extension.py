@@ -15,6 +15,9 @@ from PIL import Image
 from torchvision import transforms
 from server import PromptServer
 
+# Import the new LLM configuration system
+from .src.xiser_nodes.config import get_llm_config_loader
+
 # 清理函数将在需要时延迟导入
 HAS_CLEANUP_FUNCTIONS = None  # 初始化为None，在需要时检测
 
@@ -425,6 +428,87 @@ try:
 
     # 注册启动处理函数（某些ComfyUI版本可能不支持）
     # PromptServer.instance.add_startup_handler(startup_cache_cleanup)
+
+    # 添加LLM配置API端点
+    async def handle_llm_config(request):
+        """获取所有LLM配置"""
+        try:
+            config_loader = get_llm_config_loader()
+            all_models = config_loader.get_all_models()
+            all_groups = config_loader.get_all_groups()
+            all_provider_types = config_loader.get_all_provider_types()
+
+            # 转换模型配置为字典格式
+            models_dict = {}
+            for name, model in all_models.items():
+                models_dict[name] = model.to_dict()
+
+            # 转换分组配置为字典格式
+            groups_dict = {}
+            for name, group in all_groups.items():
+                groups_dict[name] = {
+                    "name": group.name,
+                    "description": group.description,
+                    "models": group.models,
+                }
+
+            # 转换提供者类型配置为字典格式
+            provider_types_dict = {}
+            for name, provider_type in all_provider_types.items():
+                provider_types_dict[name] = provider_type.to_dict()
+
+            # 生成UI选项
+            choices = config_loader.get_model_choices_for_ui()
+
+            return web.json_response({
+                "success": True,
+                "data": {
+                    "models": models_dict,
+                    "choices": choices,
+                    "provider_types": provider_types_dict,
+                    "timestamp": int(time.time()),
+                }
+            })
+        except Exception as e:
+            logger.error(f"LLM配置加载失败: {e}")
+            return web.json_response({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+
+    async def handle_llm_config_model(request):
+        """获取特定LLM模型配置"""
+        try:
+            model_name = request.match_info.get('model_name')
+            if not model_name:
+                return web.json_response({
+                    "success": False,
+                    "error": "Missing model name"
+                }, status=400)
+
+            config_loader = get_llm_config_loader()
+            model_config = config_loader.get_model(model_name)
+
+            if not model_config:
+                return web.json_response({
+                    "success": False,
+                    "error": f"Model {model_name} not found"
+                }, status=404)
+
+            return web.json_response({
+                "success": True,
+                "data": model_config.to_dict()
+            })
+        except Exception as e:
+            logger.error(f"LLM模型配置加载失败: {e}")
+            return web.json_response({
+                "success": False,
+                "error": str(e)
+            }, status=500)
+
+    # 注册LLM配置API端点
+    PromptServer.instance.app.router.add_get("/xiser/llm/config", handle_llm_config)
+    PromptServer.instance.app.router.add_get("/xiser/llm/config/{model_name}", handle_llm_config_model)
 
 except Exception as exc:
     logger.warning("Failed to register routes: %s", exc)

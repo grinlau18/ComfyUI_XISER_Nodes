@@ -1,5 +1,5 @@
 import "./llm_key_manager.js";
-import "./llm_node_ui.js";
+import "./llm_node_ui_config.js";  // Use the new configuration-driven UI
 import "./prompts_with_switches.js";
 import "./adjust_image_reset.js";
 import "./image_preview.js";
