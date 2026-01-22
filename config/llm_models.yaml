@@ -1,0 +1,786 @@
+# LLM Orchestrator 统一配置文件
+# 版本: 1.0.0
+# 描述: LLM模型统一配置，前后端共享
+
+# 全局配置
+global:
+  # API端点模板（支持地区变量）
+  endpoint_templates:
+    default: "https://api.openai.com/v1/chat/completions"
+    deepseek: "https://api.deepseek.com/chat/completions"
+    alibaba: "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+    moonshot: "https://api.moonshot.cn/v1/chat/completions"
+
+  # 默认配置
+  defaults:
+    timeout: 120.0
+    max_images: 4
+    max_tokens_default: 512
+    max_tokens_range: [16, 4096]
+    temperature_range: [0.0, 1.0]
+    top_p_range: [0.0, 1.0]
+    seed_range: [0, 4294967295]
+
+# 模型配置
+models:
+  # ==================== DeepSeek 模型 ====================
+  deepseek:
+    # 基本信息
+    name: "deepseek"
+    label: "DeepSeek Chat"
+    provider_type: "chat"
+    group: "deepseek"
+
+    # API配置
+    endpoint: "{{deepseek}}"
+    model: "deepseek-chat"
+    timeout: 120.0
+    max_images: 4
+
+    # 功能支持
+    supports_vision: false
+    supports_image_generation: false
+    supports_thinking: true
+    supports_streaming: true
+    supports_custom_params: true
+
+    # 参数范围
+    max_tokens_min: 16
+    max_tokens_max: 4096
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+
+    # 前端控件配置
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: true
+      has_thinking_budget: true
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.35
+      default_top_p: 0.9
+      default_max_tokens: 512
+      default_enable_thinking: false
+      default_thinking_budget: 0
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== 阿里云通义千问 文本模型 ====================
+  qwen:
+    name: "qwen"
+    label: "通义千问"
+    provider_type: "chat"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen-max"
+    timeout: 120.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: false
+    supports_thinking: true
+    supports_streaming: true
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 8192
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: true
+      has_thinking_budget: true
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 2048
+      default_enable_thinking: false
+      default_thinking_budget: 0
+      default_seed: 42
+      default_enable_cache: true
+
+  qwen-flash:
+    name: "qwen-flash"
+    label: "通义千问Flash"
+    provider_type: "chat"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen-flash"
+    timeout: 60.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: false
+    supports_thinking: true
+    supports_streaming: true
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 8192
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: true
+      has_thinking_budget: true
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 2048
+      default_enable_thinking: false
+      default_thinking_budget: 0
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== 阿里云通义千问 视觉模型 ====================
+  qwen_vl:
+    name: "qwen_vl"
+    label: "通义千问VL"
+    provider_type: "vision"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen-vl-v1"
+    timeout: 120.0
+    max_images: 10
+    supports_vision: true
+    supports_image_generation: false
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: false
+      has_image_size: false  # 视觉语言模型不需要图像尺寸
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 1024
+      default_seed: 42
+      default_enable_cache: true
+
+  qwen-vl-plus:
+    name: "qwen-vl-plus"
+    label: "通义千问VL Plus"
+    provider_type: "vision"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen-vl-plus"
+    timeout: 120.0
+    max_images: 10
+    supports_vision: true
+    supports_image_generation: false
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 1024
+      default_seed: 42
+      default_enable_cache: true
+
+  qwen3-vl-flash:
+    name: "qwen3-vl-flash"
+    label: "通义千问3-VL Flash"
+    provider_type: "vision"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen3-vl-flash"
+    timeout: 60.0
+    max_images: 10
+    supports_vision: true
+    supports_image_generation: false
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 1024
+      default_seed: 42
+      default_enable_cache: true
+
+  qwen3-max:
+    name: "qwen3-max"
+    label: "通义千问3-Max"
+    provider_type: "chat"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "qwen3-max"
+    timeout: 120.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: false
+    supports_thinking: true
+    supports_streaming: true
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 8192
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: true
+      has_thinking_budget: true
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.7
+      default_top_p: 0.8
+      default_max_tokens: 2048
+      default_enable_thinking: false
+      default_thinking_budget: 0
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== 阿里云通义千问 图像生成模型 ====================
+  qwen-image-edit-plus:
+    name: "qwen-image-edit-plus"
+    label: "通义万相图像编辑Plus"
+    provider_type: "image_generation"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "wanx-imageedit-plus-v2"
+    timeout: 300.0
+    max_images: 1
+    supports_vision: true
+    supports_image_generation: true
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    # 支持的图像尺寸
+    supported_image_sizes:
+      - ""
+      - "1664*928"
+      - "1472*1140"
+      - "1328*1328"
+      - "1140*1472"
+      - "928*1664"
+      - "1024*1024"
+      - "512*512"
+      - "2048*2048"
+    ui:
+      has_temperature: false
+      has_top_p: false
+      has_max_tokens: false
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: true
+      has_image_size: true
+      has_gen_image: true
+      has_max_images: false
+      has_watermark: true
+      has_prompt_extend: true
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_negative_prompt: ""
+      default_image_size: "1024*1024"
+      default_gen_image: 1
+      default_watermark: false
+      default_prompt_extend: true
+      default_seed: 42
+      default_enable_cache: true
+
+  qwen-image-max:
+    name: "qwen-image-max"
+    label: "通义万相图像生成Max"
+    provider_type: "image_generation"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "wanx-imagegeneration-max-v2"
+    timeout: 300.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: true
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    supported_image_sizes:
+      - ""
+      - "1664*928"
+      - "1472*1104"
+      - "1328*1328"
+      - "1104*1472"
+      - "928*1664"
+    ui:
+      has_temperature: false
+      has_top_p: false
+      has_max_tokens: false
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: true
+      has_image_size: true
+      has_gen_image: true
+      has_max_images: false
+      has_watermark: true
+      has_prompt_extend: true
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_negative_prompt: ""
+      default_image_size: "1024*1024"
+      default_gen_image: 1
+      default_watermark: false
+      default_prompt_extend: true
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== 阿里云万相 图像模型 ====================
+  wan2.6-image:
+    name: "wan2.6-image"
+    label: "万相2.6图像生成"
+    provider_type: "image_generation"
+    group: "alibaba"
+    endpoint: "{{alibaba}}"
+    model: "wanx-image-generation"
+    timeout: 300.0
+    max_images: 10
+    supports_vision: true
+    supports_image_generation: true
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    supported_image_sizes:
+      - ""
+      - "1280*1280"
+      - "1280*720"
+      - "720*1280"
+      - "1280*960"
+      - "960*1280"
+      - "1024*1024"
+      - "1152*896"
+      - "896*1152"
+      - "768*768"
+    supported_modes:
+      - "image_edit"
+      - "interleave"
+    ui:
+      has_temperature: false
+      has_top_p: false
+      has_max_tokens: false
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: true
+      has_image_size: true
+      has_gen_image: true
+      has_max_images: true
+      has_watermark: true
+      has_prompt_extend: true
+      has_mode: true
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_negative_prompt: ""
+      default_image_size: "1024*1024"
+      default_gen_image: 1
+      default_max_images: 3
+      default_watermark: false
+      default_prompt_extend: true
+      default_mode: "image_edit"
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== Z-Image Turbo 模型 ====================
+  z-image-turbo:
+    name: "z-image-turbo"
+    label: "Z-Image Turbo"
+    provider_type: "image_generation"
+    group: "other"
+    endpoint: "{{alibaba}}"
+    model: "z-image-turbo"
+    timeout: 300.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: true
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    supported_image_sizes:
+      - ""
+      # 总像素1024*1024的推荐分辨率
+      - "1024*1024"
+      - "832*1248"
+      - "1248*832"
+      - "864*1152"
+      - "1152*864"
+      - "896*1152"
+      - "1152*896"
+      - "720*1280"
+      - "576*1344"
+      - "1280*720"
+      - "1344*576"
+      # 总像素1280*1280的推荐分辨率
+      - "1280*1280"
+      - "1024*1536"
+      - "1536*1024"
+      - "1104*1472"
+      - "1472*1104"
+      - "1120*1440"
+      - "1440*1120"
+      - "864*1536"
+      - "720*1680"
+      - "1536*864"
+      - "1680*720"
+      # 总像素1536*1536的推荐分辨率
+      - "1536*1536"
+      - "1248*1872"
+      - "1872*1248"
+      - "1296*1728"
+      - "1728*1296"
+      - "1344*1728"
+      - "1728*1344"
+      - "1152*2048"
+      - "864*2016"
+      - "2048*1152"
+      - "2016*864"
+      # 其他常用分辨率
+      - "512*512"
+      - "768*768"
+      - "1024*1536"
+      - "1536*1024"
+      - "2048*2048"
+    ui:
+      has_temperature: false
+      has_top_p: false
+      has_max_tokens: false
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: true
+      has_image_size: true
+      has_gen_image: true
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_negative_prompt: ""
+      default_image_size: "1024*1024"
+      default_gen_image: 1
+      default_watermark: false
+      default_prompt_extend: false
+      default_seed: 42
+      default_enable_cache: true
+
+  # ==================== Moonshot 模型 ====================
+  moonshot:
+    name: "moonshot"
+    label: "月之暗面"
+    provider_type: "chat"
+    group: "moonshot"
+    endpoint: "{{moonshot}}"
+    model: "moonshot-v1-8k"
+    timeout: 120.0
+    max_images: 0
+    supports_vision: false
+    supports_image_generation: false
+    supports_thinking: false
+    supports_streaming: true
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 8192
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.3
+      default_top_p: 0.8
+      default_max_tokens: 2048
+      default_seed: 42
+      default_enable_cache: true
+
+  moonshot_vision:
+    name: "moonshot_vision"
+    label: "月之暗面视觉"
+    provider_type: "vision"
+    group: "moonshot"
+    endpoint: "{{moonshot}}"
+    model: "moonshot-v1-vision-32k"
+    timeout: 120.0
+    max_images: 10
+    supports_vision: true
+    supports_image_generation: false
+    supports_thinking: false
+    supports_streaming: false
+    supports_custom_params: true
+    max_tokens_min: 16
+    max_tokens_max: 2048
+    temperature_min: 0.0
+    temperature_max: 1.0
+    top_p_min: 0.0
+    top_p_max: 1.0
+    ui:
+      has_temperature: true
+      has_top_p: true
+      has_max_tokens: true
+      has_enable_thinking: false
+      has_thinking_budget: false
+      has_negative_prompt: false
+      has_image_size: false
+      has_gen_image: false
+      has_max_images: false
+      has_watermark: false
+      has_prompt_extend: false
+      has_mode: false
+      has_model_override: true
+      has_key_profile: true
+      has_seed: true
+      has_enable_cache: true
+      default_temperature: 0.3
+      default_top_p: 0.8
+      default_max_tokens: 1024
+      default_seed: 42
+      default_enable_cache: true
+
+# 模型分组（用于UI下拉框）
+groups:
+  alibaba:
+    name: "阿里云通义"
+    description: "阿里云通义系列大语言模型"
+    models:
+      - "qwen"
+      - "qwen-flash"
+      - "qwen_vl"
+      - "qwen-vl-plus"
+      - "qwen3-vl-flash"
+      - "qwen3-max"
+      - "qwen-image-edit-plus"
+      - "qwen-image-max"
+      - "wan2.6-image"
+      - "z-image-turbo"
+  deepseek:
+    name: "DeepSeek"
+    description: "DeepSeek大语言模型"
+    models:
+      - "deepseek"
+  moonshot:
+    name: "月之暗面"
+    description: "月之暗面大语言模型"
+    models:
+      - "moonshot"
+      - "moonshot_vision"
+  other:
+    name: "其他"
+    description: "其他大语言模型"
+    models:
+      # No models currently in this category
+
+# 提供者类型定义
+provider_types:
+  chat:
+    name: "文本对话"
+    description: "纯文本对话模型，支持各种文本生成任务"
+    icon: "💬"
+    color: "#1890ff"
+  vision:
+    name: "视觉理解"
+    description: "支持图像输入的视觉语言模型，可进行图像理解和分析"
+    icon: "👁️"
+    color: "#52c41a"
+  image_generation:
+    name: "图像生成"
+    description: "支持文本到图像或图像编辑的生成模型"
+    icon: "🎨"
+    color: "#722ed1"
+
+# 验证规则
+validation:
+  # 通用规则
+  common:
+    instruction:
+      min_length: 1
+      max_length: 10000
+    negative_prompt:
+      min_length: 0
+      max_length: 1000
+    seed:
+      min: -2
+      max: 4294967295
+    max_tokens:
+      min: 16
+      max: 4096
+    temperature:
+      min: 0.0
+      max: 1.0
+    top_p:
+      min: 0.0
+      max: 1.0
+    gen_image:
+      min: 1
+      max: 4
+    max_images:
+      min: 1
+      max: 10
+
+  # 类型特定规则
+  chat:
+    supports_vision: false
+    supports_image_generation: false
+
+  vision:
+    supports_vision: true
+    supports_image_generation: false
+
+  image_generation:
+    supports_vision: true
+    supports_image_generation: true

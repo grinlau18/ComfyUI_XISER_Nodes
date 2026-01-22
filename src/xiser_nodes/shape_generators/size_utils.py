@@ -92,8 +92,12 @@ class SizeUtils:
         # 螺旋和太阳光芒形状现在使用与前端一致的基础尺寸计算
         # 不再需要额外的0.5缩放因子，因为基础尺寸计算已经与前端对齐
         if shape_type in ["sunburst", "spiral"]:
-            logger.info(f"{shape_type} size calculation: base={base_size}, final={base_size}")
-            return base_size
+            # 为螺旋添加尺寸补偿因子，使其与前端视觉效果匹配
+            # 测试发现后端输出的螺旋比前端画板显示偏小，因此增加补偿
+            size_multiplier = 1.3  # 50%放大，使螺旋更接近前端显示尺寸（原为1.2）
+            adjusted_size = base_size * size_multiplier
+            logger.info(f"{shape_type} size calculation: base={base_size}, multiplier={size_multiplier}, final={adjusted_size}")
+            return adjusted_size
 
         return base_size
 

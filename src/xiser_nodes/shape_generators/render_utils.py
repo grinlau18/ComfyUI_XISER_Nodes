@@ -116,6 +116,15 @@ class RenderUtils:
             x_t = x_k + image_center_x + pos_x
             y_t = y_k + image_center_y + pos_y
 
+            # 5. 添加微小确定性偏移避免网格对齐问题
+            # 使用基于坐标值的微小正弦偏移，避免精确网格对齐导致的渲染异常
+            # 偏移量非常小（~0.0001像素），不会影响视觉效果
+            offset_scale = 0.0001  # 0.0001像素偏移
+            offset_x = math.sin(x_t * 1000.0) * offset_scale
+            offset_y = math.cos(y_t * 1000.0) * offset_scale
+            x_t += offset_x
+            y_t += offset_y
+
             transformed_coords.append((x_t, y_t))
 
         logger.info(f"Simple transformed coordinates range: x=[{min(x for x, _ in transformed_coords):.2f}, {max(x for x, _ in transformed_coords):.2f}], y=[{min(y for _, y in transformed_coords):.2f}, {max(y for _, y in transformed_coords):.2f}]")
@@ -309,15 +318,16 @@ class RenderUtils:
                                  stroke_width: float, join_style: int = 1, stroke_only: bool = False) -> None:
         """
         使用Shapely渲染形状和描边
+        现在使用统一的描边补偿机制
 
         Args:
-            draw: ImageDraw对象
+            image: PIL图像对象
             coords: 形状坐标
             shape_color: 填充颜色
             stroke_color: 描边颜色
             stroke_width: 描边宽度
             join_style: 连接样式 (1=圆角, 2=斜角, 3=平角)
-            cap_style: 端点样式 (1=圆形, 2=扁平, 3=方形)
+            stroke_only: 是否仅描边模式
         """
         if not coords or (not stroke_only and len(coords) < 3):
             return
@@ -333,11 +343,14 @@ class RenderUtils:
                         segments.append((start_pt, end_pt))
                 if not segments:
                     return
+                from shapely.geometry import MultiLineString
                 geometry = MultiLineString(segments)
             else:
+                from shapely.geometry import Polygon
                 polygon = Polygon(coords)
                 geometry = polygon
 
+            # 使用统一的渲染方法，确保描边补偿一致性
             RenderUtils.render_geometry_with_shapely(image, geometry, shape_color, stroke_color, stroke_width, join_style)
 
         except Exception as e:

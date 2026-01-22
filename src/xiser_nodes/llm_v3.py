@@ -10,6 +10,7 @@ from comfy_execution.utils import get_executing_context
 
 from .llm.base import _gather_images, _image_to_base64
 from .llm.registry import _validate_inputs, build_default_registry
+from .config import get_llm_config_loader
 from .llm import SEED_CACHE  # 从llm模块导入缓存
 from .key_store import KEY_STORE
 
@@ -66,7 +67,21 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
     @classmethod
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
-        choices = REGISTRY.list_grouped_choices() or ["deepseek"]
+        # 使用新的配置系统获取选项
+        config_loader = get_llm_config_loader()
+        choices = config_loader.get_model_choices_for_ui()
+
+        # 如果配置加载失败，回退到原来的选项
+        if not choices:
+            choices = REGISTRY.list_grouped_choices() or ["deepseek"]
+            # Format choices for schema
+            formatted_choices = [{"value": c, "label": c} for c in choices]
+        else:
+            formatted_choices = choices
+
+        # Extract values for schema
+        option_values = [choice["value"] for choice in formatted_choices]
+        default_choice = option_values[0] if option_values else "deepseek"
 
         return io.Schema(
             node_id="XIS_LLMOrchestrator",
@@ -103,8 +118,8 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
             inputs=[
                 io.Combo.Input(
                     "provider",
-                    options=choices,
-                    default=choices[0],
+                    options=option_values,
+                    default=default_choice,
                     tooltip="选择LLM提供者"
                 ),
                 io.String.Input(
@@ -355,10 +370,9 @@ class XIS_LLMOrchestratorV3(io.ComfyNode):
         _update_progress("处理", 0.5, node_id=node_id)
 
         # 修正image_size值，确保对当前提供者有效（必须在缓存检查前计算）
-        from .llm.registry import PROVIDER_SCHEMA
-        schema = PROVIDER_SCHEMA.get(provider, {})
-        enums = schema.get("enums", {})
-        allowed_sizes = enums.get("image_size", [])
+        config_loader = get_llm_config_loader()
+        model_config = config_loader.get_model(provider)
+        allowed_sizes = model_config.supported_image_sizes if model_config else []
 
         # 如果提供者有image_size枚举，确保使用有效的尺寸
         # 对于视觉模型，优先使用非空的尺寸值

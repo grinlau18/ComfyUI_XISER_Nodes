@@ -68,9 +68,19 @@ export class SpiralGenerator {
                 // 切线方向（使用前后点向量）
                 const tangentAngle = Math.atan2(nextY - prevY, nextX - prevX);
 
+                // 应用渐进式处理 - 在螺旋起始部分逐渐应用宽度
+                const originalWidth = startWidth + (endWidth - startWidth) * progress;
+                let effectiveWidth = originalWidth;
+                if (progress < 0.15) {  // 在前15%部分应用渐进式处理
+                    // 使用余弦过渡函数
+                    const adjustedFactor = 0.5 * (1 - Math.cos(progress * Math.PI / 0.15));
+                    effectiveWidth = originalWidth * adjustedFactor;
+                }
+
                 points.push({
                     x, y,
-                    width: startWidth + (endWidth - startWidth) * progress,
+                    width: originalWidth,  // 保持原始宽度用于其他计算
+                    effectiveWidth: effectiveWidth,  // 使用渐进式处理后的有效宽度
                     tangentAngle: tangentAngle,
                     progress: progress
                 });
@@ -88,9 +98,20 @@ export class SpiralGenerator {
                 return transition;
             }
 
+            // 使用与边界点计算一致的渐进式处理
+            const actualStartHalfWidth = firstPoint.width / 2;
+            const effectiveStartHalfWidth = firstPoint.effectiveWidth / 2;
+
+            // 根据渐进式处理计算控制点
+            let controlOffset = actualStartHalfWidth * 0.3;
+            if (firstPoint.progress < 0.15) {
+                const adjustedFactor = 0.5 * (1 - Math.cos(firstPoint.progress * Math.PI / 0.15));
+                controlOffset = actualStartHalfWidth * adjustedFactor * 0.3;
+            }
+
             // 简单可靠的贝塞尔过渡
-            const controlX = firstPoint.x - Math.cos(firstPoint.tangentAngle) * firstPoint.width * 0.3;
-            const controlY = firstPoint.y - Math.sin(firstPoint.tangentAngle) * firstPoint.width * 0.3;
+            const controlX = firstPoint.x - Math.cos(firstPoint.tangentAngle) * controlOffset * 2;
+            const controlY = firstPoint.y - Math.sin(firstPoint.tangentAngle) * controlOffset * 2;
 
             // 减少计算点但保持平滑
             for (let t = 0; t <= 1; t += 0.02) {
@@ -187,7 +208,7 @@ export class SpiralGenerator {
         const outerPoints = [];
         const innerPoints = [];
         points.forEach(p => {
-            const halfWidth = p.width / 2;
+            const halfWidth = p.effectiveWidth / 2;  // 使用有效宽度而不是原始宽度
             outerPoints.push({
                 x: p.x + Math.cos(p.tangentAngle + Math.PI/2) * halfWidth,
                 y: p.y + Math.sin(p.tangentAngle + Math.PI/2) * halfWidth

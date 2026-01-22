@@ -1,12 +1,21 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing (supporting mainstream models like DeepSeek, Qwen, Kimi, Wan), professional-grade image processing toolchains, video generation orchestration systems (supporting Wansiang series reference-based video, image-to-video, and keyframe-to-video generation), and visual data tools, providing end-to-end support for AI image and video generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, unified configuration-based video generation orchestration, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows."
-version = "1.4.0"
+version = "1.4.1"
 license = {file = "LICENSE"}
+dependencies = [
+  "opencv-python>=4.8.0",
+  "psd-tools>=1.9.26",
+  "shapely>=2.0.1",
+  "fonttools>=4.43.0",
+  "kornia==0.7.2",
+  "timm>=0.9.16",
+  "cryptography>=41.0.7",
+  "requests>=2.31.0"
+]
 
 [project.urls]
 Repository = "https://github.com/grinlau18/ComfyUI_XISER_Nodes"
-#  Used by Comfy Registry https://comfyregistry.org
 
 [tool.comfy]
 PublisherId = "xiser"
