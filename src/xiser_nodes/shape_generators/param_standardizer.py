@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
+logger.setLevel(logging.INFO)  # 启用INFO级别日志以便调试
 
 
 class ParamStandardizer:
@@ -59,7 +59,11 @@ class ParamStandardizer:
         Returns:
             标准化后的参数字典
         """
-        standardized = params.copy()
+        # 只保留文字相关字段，过滤掉其他形状的参数
+        text_keys = {"content", "font_file", "font_size", "letter_spacing", "line_spacing",
+                    "font_weight", "font_style", "underline", "uppercase", "text_align"}
+
+        standardized = {}
 
         # 标准化文本内容
         content = params.get("content", "A")

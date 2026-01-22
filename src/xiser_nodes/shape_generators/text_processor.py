@@ -39,13 +39,18 @@ class TextProcessor:
     def __init__(self):
         self._text_geometry_cache = OrderedDict()
         self._max_text_geometry_cache = 32
+        logger.setLevel(logging.INFO)  # 启用INFO级别日志以便调试
 
     def _resolve_font_path(self, font_file: str) -> str:
         """根据文件名解析字体路径"""
+        logger.info(f"_resolve_font_path called with font_file='{font_file}'")
         if not font_file:
+            logger.info("font_file is empty, returning None")
             return None
         candidate = os.path.join(FONTS_DIR, font_file)
+        logger.info(f"Checking font candidate: {candidate}")
         if os.path.isfile(candidate):
+            logger.info(f"Font found: {candidate}")
             return candidate
         logger.warning(f"Font file not found in fonts directory: {font_file}")
         return None
@@ -140,6 +145,7 @@ class TextProcessor:
         Returns:
             (font, is_scalable) - is_scalable 表示字体是否支持自定义字号
         """
+        logger.info(f"_load_font called: font_file='{font_file}', font_size={font_size}")
         search_paths = []
         font_path = self._resolve_font_path(font_file)
         if font_path:
@@ -150,13 +156,17 @@ class TextProcessor:
         search_paths.append("Arial.ttf")
         search_paths.append("Arial Unicode.ttf")
 
+        logger.info(f"Search paths: {search_paths}")
         for path in search_paths:
             if not path:
                 continue
             try:
+                logger.info(f"Trying to load font: {path}")
                 font = ImageFont.truetype(path, font_size)
+                logger.info(f"Successfully loaded font: {path}")
                 return font, True
-            except OSError:
+            except OSError as e:
+                logger.info(f"Failed to load font {path}: {e}")
                 continue
 
         system_font_dirs = [
@@ -327,7 +337,8 @@ class TextProcessor:
         mask = Image.fromarray(mask_array)
 
         if font_style == "italic":
-            shear_factor = 0.3
+            shear_factor = -0.3  # 修改倾斜方向以匹配前端
+            logger.info(f"Applying italic shear with factor={shear_factor} for font_style={font_style}")
             offset = int(abs(shear_factor) * mask.height)
             new_width = mask.width + offset
             mask = mask.transform(
@@ -487,12 +498,17 @@ class TextProcessor:
             return polygons[0]
 
     def _build_text_geometry_with_fonttools(self, text_params: Dict[str, Any], scale_factor: float):
+        logger.info(f"_build_text_geometry_with_fonttools called: text_params keys={list(text_params.keys())}, scale_factor={scale_factor}")
         font_path = self._resolve_font_path(text_params.get("font_file"))
+        logger.info(f"Resolved font path: {font_path}")
         if not font_path:
+            logger.info("No font path found, returning None")
             return None
 
         try:
+            logger.info(f"Loading TTFont from path: {font_path}")
             ttfont = self._load_ttfont(font_path)
+            logger.info(f"Successfully loaded TTFont")
         except Exception as e:
             logger.warning(f"fontTools failed to load font {font_path}: {e}")
             return None
@@ -646,11 +662,13 @@ class TextProcessor:
             geometry = geometry.buffer(bold_strength)
 
         if font_style == "italic":
-            geometry = affinity.skew(geometry, xs=12, origin=(0, 0))
+            logger.info(f"Applying italic skew with xs=-12 for font_style={font_style}")
+            geometry = affinity.skew(geometry, xs=-12, origin=(0, 0))  # 修改倾斜方向以匹配前端
 
         minx, miny, maxx, maxy = geometry.bounds
         geometry = affinity.translate(geometry, xoff=-(minx + maxx) / 2, yoff=-(miny + maxy) / 2)
 
+        logger.info(f"Generated text geometry bounds: ({minx:.1f}, {miny:.1f}, {maxx:.1f}, {maxy:.1f}), size: {maxx-minx:.1f}x{maxy-miny:.1f}")
         return geometry
 
     def _normalize_text_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -707,7 +725,9 @@ class TextProcessor:
 
     def build_text_geometry(self, text_params: Dict[str, Any], scale_factor: float):
         """构建文本几何体"""
+        logger.info(f"build_text_geometry called: text_params={text_params}, scale_factor={scale_factor}")
         normalized_params = self._normalize_text_params(text_params)
+        logger.info(f"normalized_params: {normalized_params}")
         cache_key = self._text_geometry_cache_key(normalized_params, scale_factor)
         cached_geometry = self._text_geometry_cache.get(cache_key)
         if cached_geometry is not None:

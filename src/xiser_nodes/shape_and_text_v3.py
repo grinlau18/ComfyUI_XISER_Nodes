@@ -40,10 +40,10 @@ except ImportError:
     from .shape_generators.param_standardizer import ParamStandardizer
     from .shape_generators.renderer_interface import UnifiedRenderer
 
-# 设置日志 - 关闭INFO级别日志，只保留WARNING和ERROR
-logging.basicConfig(level=logging.WARNING)
+# 设置日志 - 启用INFO级别日志以便调试
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 
 
 @dataclass
