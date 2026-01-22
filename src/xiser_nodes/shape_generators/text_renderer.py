@@ -11,6 +11,7 @@ from shapely import affinity
 
 from .text_processor import TextProcessor
 from .render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
+from .param_standardizer import ParamStandardizer
 
 
 class TextRenderer:
@@ -73,6 +74,7 @@ class TextRenderer:
                               canvas_scale_factor: float = 1.0) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         将文字渲染为张量
+        现在使用标准化参数处理
 
         Args:
             width: 输出图像宽度
@@ -103,7 +105,10 @@ class TextRenderer:
         render_width = width * supersample_factor
         render_height = height * supersample_factor
 
-        geometry = self.text_processor.build_text_geometry(text_params, supersample_factor)
+        # 标准化文字参数
+        standardized_params = ParamStandardizer.standardize_text_params(text_params)
+
+        geometry = self.text_processor.build_text_geometry(standardized_params, supersample_factor)
         if geometry is None or geometry.is_empty:
             raise ValueError("Text geometry is empty, please check text parameters or font file.")
 
@@ -116,17 +121,19 @@ class TextRenderer:
         shape_rgb = self.render_utils.hex_to_rgb(shape_color) + (255,)
         stroke_rgb = self.render_utils.hex_to_rgb(stroke_color) + (255,) if stroke_width > 0 else None
 
-        # 描边宽度补偿计算（与图形渲染保持一致）
-        avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
-        frontend_scale_comp = 1.0 / 0.75 if 0.75 not in (0, None) else 1.0  # FRONTEND_CANVAS_SCALE
-        compensated_stroke_width = stroke_width * supersample_factor * avg_scale * frontend_scale_comp * 0.9 if stroke_width > 0 else 0  # FRONTEND_STROKE_COMPENSATION
+        # 使用统一的描边宽度补偿计算（与图形渲染保持一致）
+        # 使用参数标准化器进行描边宽度处理
+        from .param_standardizer import ParamStandardizer
+        compensated_stroke_width = ParamStandardizer.standardize_stroke_params(
+            stroke_width, scale, "text"
+        ) * supersample_factor  # 应用超采样因子
 
         fill_mask_img = self.render_utils._geometry_to_mask(transformed_geometry, render_width, render_height)
         fill_mask = np.array(fill_mask_img, dtype=np.uint8)
 
-        font_weight_value = str(text_params.get("font_weight", "normal")).lower()
+        font_weight_value = str(standardized_params.get("font_weight", "normal")).lower()
         if font_weight_value == "bold" and fill_mask.max() > 0:
-            font_size_param = text_params.get("font_size", 128)
+            font_size_param = standardized_params.get("font_size", 128)
             try:
                 font_size_value = float(font_size_param)
             except (TypeError, ValueError):

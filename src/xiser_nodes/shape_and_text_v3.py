@@ -28,6 +28,8 @@ try:
     from shape_generators.text_renderer import TextRenderer
     from shape_generators.batch_processor import BatchProcessor
     from shape_generators.transform_utils import TransformUtils
+    from shape_generators.param_standardizer import ParamStandardizer
+    from shape_generators.renderer_interface import UnifiedRenderer
 except ImportError:
     # 如果直接导入失败，尝试相对导入
     from .shape_generators.shape_coordinator import ShapeCoordinator
@@ -35,6 +37,8 @@ except ImportError:
     from .shape_generators.text_renderer import TextRenderer
     from .shape_generators.batch_processor import BatchProcessor
     from .shape_generators.transform_utils import TransformUtils
+    from .shape_generators.param_standardizer import ParamStandardizer
+    from .shape_generators.renderer_interface import UnifiedRenderer
 
 # 设置日志 - 关闭INFO级别日志，只保留WARNING和ERROR
 logging.basicConfig(level=logging.WARNING)
@@ -279,7 +283,7 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
     def _execute_single(cls, request: ShapeRequest, shape_coordinator: ShapeCoordinator,
                        render_utils: RenderUtils, text_renderer: TextRenderer) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
         """
-        执行单次形状生成（原始功能）。
+        执行单次形状生成（使用改进的架构）。
         """
         width = request.width
         height = request.height
@@ -350,10 +354,11 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
         skew = transform.skew
         canvas_scale_factor = transform.canvas_scale
 
-        params = request.shape_params
+        # 标准化参数
+        standardized_params = ParamStandardizer.validate_params(request.shape_params, shape_type)
 
         if shape_type == "text":
-            text_params = params if isinstance(params, dict) else {}
+            text_params = standardized_params if isinstance(standardized_params, dict) else {}
 
             # 文字渲染前的日志
             logger.info("=== 文字渲染参数 ===")
@@ -394,18 +399,18 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             return ([image_tensor], [mask_tensor], [bg_tensor])
 
         # 对于多边形，需要缩放圆角半径以匹配前端视觉效果
-        if shape_type == "polygon" and "corner_radius" in params:
+        if shape_type == "polygon" and "corner_radius" in standardized_params:
             max_frontend_radius = 50
             max_backend_radius = 258
 
             # 缩放圆角半径：前端值(0-50) -> 后端值(0到max_backend_radius)
-            frontend_radius = params["corner_radius"]
+            frontend_radius = standardized_params["corner_radius"]
             scaled_radius = (frontend_radius / max_frontend_radius) * max_backend_radius
-            params["corner_radius"] = scaled_radius
+            standardized_params["corner_radius"] = scaled_radius
             logger.info(f"Scaled corner radius: frontend={frontend_radius} -> backend={scaled_radius:.2f}, max_backend_radius={max_backend_radius:.2f}")
 
         # 生成初始形状坐标（以形状中心为原点）
-        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size_for_generation, params)
+        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size_for_generation, standardized_params)
 
         # 详细日志：形状尺寸信息
         logger.info("=== 形状尺寸信息 ===")
@@ -458,10 +463,10 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             transformed_coords = render_utils.apply_simple_transform(shape_coords, scale, rotation_angle, skew, position, render_width, render_height, scale_factor)
 
         # 使用Shapely渲染形状和描边
-        # 描边宽度补偿计算（与批量处理保持一致）
-        avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
-        frontend_scale_comp = 1.0 / 0.75 if 0.75 not in (0, None) else 1.0  # FRONTEND_CANVAS_SCALE
-        compensated_stroke_width = request.stroke_width * scale_factor * avg_scale * frontend_scale_comp * 0.9 if request.stroke_width > 0 else 0  # FRONTEND_STROKE_COMPENSATION
+        # 描边宽度补偿计算（使用参数标准化器进行统一处理）
+        compensated_stroke_width = ParamStandardizer.standardize_stroke_params(
+            request.stroke_width, scale, shape_type
+        ) * scale_factor  # 应用超采样因子
 
         join_style = 1  # round
 

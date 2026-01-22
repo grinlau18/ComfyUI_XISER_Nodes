@@ -1,0 +1,13 @@
+{
+  "name": "ComfyUI_XISER_Nodes",
+  "display_name": "XISER Custom Nodes",
+  "author": "grinlau18",
+  "description": "Custom nodes for ComfyUI, providing XISER-related functionalities",
+  "category": "custom",
+  "repo_url": "https://github.com/grinlau18/ComfyUI_XISER_Nodes.git",
+  "version": "1.0.0",
+  "stars": 0,
+  "last_commit": "", // 留空，Manager会自动同步
+  "tags": ["custom nodes", "XISER", "ComfyUI"],
+  "license": "MIT"
+}

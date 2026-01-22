@@ -309,15 +309,16 @@ class RenderUtils:
                                  stroke_width: float, join_style: int = 1, stroke_only: bool = False) -> None:
         """
         使用Shapely渲染形状和描边
+        现在使用统一的描边补偿机制
 
         Args:
-            draw: ImageDraw对象
+            image: PIL图像对象
             coords: 形状坐标
             shape_color: 填充颜色
             stroke_color: 描边颜色
             stroke_width: 描边宽度
             join_style: 连接样式 (1=圆角, 2=斜角, 3=平角)
-            cap_style: 端点样式 (1=圆形, 2=扁平, 3=方形)
+            stroke_only: 是否仅描边模式
         """
         if not coords or (not stroke_only and len(coords) < 3):
             return
@@ -333,11 +334,14 @@ class RenderUtils:
                         segments.append((start_pt, end_pt))
                 if not segments:
                     return
+                from shapely.geometry import MultiLineString
                 geometry = MultiLineString(segments)
             else:
+                from shapely.geometry import Polygon
                 polygon = Polygon(coords)
                 geometry = polygon
 
+            # 使用统一的渲染方法，确保描边补偿一致性
             RenderUtils.render_geometry_with_shapely(image, geometry, shape_color, stroke_color, stroke_width, join_style)
 
         except Exception as e:

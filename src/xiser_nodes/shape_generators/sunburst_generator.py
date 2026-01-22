@@ -19,6 +19,7 @@ class SunburstGenerator:
         """
         生成太阳光芒/射线坐标，使用梯形射线匹配前端逻辑。
         返回多个独立的梯形多边形列表。
+        修复：增加射线粗度以匹配前端视觉效果
 
         Args:
             cx: 中心点x坐标
@@ -39,21 +40,22 @@ class SunburstGenerator:
         start_width = max(-100, min(100, start_width))  # 前端UI范围：-100到100
         end_width = max(1, min(200, end_width))        # 前端UI范围：1到200
 
+        # 修复：为了匹配前端视觉效果，增加宽度参数
+        # 前端和后端渲染引擎的差异导致视觉效果不同，需要补偿
+        amplified_start_width = start_width * 4  # 放大4倍以匹配前端粗度
+        amplified_end_width = end_width * 4     # 放大4倍以匹配前端粗度
+
         # 计算射线长度（与前端一致）
         # 前端：outerRadius = lengthFactor * maxRadius，其中maxRadius = baseSize
         # 后端：size已经是经过超采样和缩放计算后的尺寸，需要调整
         length_factor = min(ray_length, 5.0)  # 限制防止重叠
         outer_radius = length_factor * size  # 射线长度，使用完整size
 
-        # 移除宽度缩放因子，与前端保持一致
-        # 前端没有使用宽度缩放，后端也不应该使用
-        scaled_start_width = start_width
-        scaled_end_width = end_width
-
-        logger.info(f"Width scaling removed: using original widths start={start_width}, end={end_width}")
+        logger.info(f"Width amplification applied: original start={start_width}->{amplified_start_width:.2f}, "
+                   f"end={end_width}->{amplified_end_width:.2f}")
 
         logger.info(f"Sunburst parameters: center=({cx},{cy}), outerRadius={outer_radius:.2f}, "
-                   f"startWidth={start_width}->{scaled_start_width:.2f}, endWidth={end_width}->{scaled_end_width:.2f}")
+                   f"original startWidth={start_width}, endWidth={end_width}")
 
         # 生成每个梯形射线（与前端完全一致的算法）
         for i in range(ray_count):
@@ -69,15 +71,15 @@ class SunburstGenerator:
 
             # 计算梯形四个顶点（与前端完全一致的算法）
             # 直接从中心点开始，使用与前端相同的公式
-            # 使用缩放后的宽度，确保射线有足够的宽度，看起来像明显的射线而不是分割线
-            inner_left_x = cx + px * (scaled_start_width / 2)
-            inner_left_y = cy + py * (scaled_start_width / 2)
-            inner_right_x = cx - px * (scaled_start_width / 2)
-            inner_right_y = cy - py * (scaled_start_width / 2)
-            outer_left_x = end_x - px * (scaled_end_width / 2)
-            outer_left_y = end_y - py * (scaled_end_width / 2)
-            outer_right_x = end_x + px * (scaled_end_width / 2)
-            outer_right_y = end_y + py * (scaled_end_width / 2)
+            # 使用放大后的宽度，确保射线有足够的宽度，看起来像明显的射线而不是分割线
+            inner_left_x = cx + px * (amplified_start_width / 2)
+            inner_left_y = cy + py * (amplified_start_width / 2)
+            inner_right_x = cx - px * (amplified_start_width / 2)
+            inner_right_y = cy - py * (amplified_start_width / 2)
+            outer_left_x = end_x - px * (amplified_end_width / 2)
+            outer_left_y = end_y - py * (amplified_end_width / 2)
+            outer_right_x = end_x + px * (amplified_end_width / 2)
+            outer_right_y = end_y + py * (amplified_end_width / 2)
 
             # 生成独立的梯形多边形
             trapezoid = [
@@ -90,5 +92,5 @@ class SunburstGenerator:
             trapezoids.append(trapezoid)
 
         logger.info(f"Sunburst generated with {ray_count} trapezoid rays, length: {ray_length}, "
-                   f"start_width: {start_width}, end_width: {end_width}")
+                   f"amplified start_width: {amplified_start_width}, amplified end_width: {amplified_end_width}")
         return trapezoids

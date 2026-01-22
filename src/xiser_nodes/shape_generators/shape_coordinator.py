@@ -10,6 +10,7 @@ from typing import List, Tuple, Dict, Any
 from .base_shape_generator import BaseShapeGenerator
 from .spiral_generator import SpiralGenerator
 from .sunburst_generator import SunburstGenerator
+from .param_standardizer import ParamStandardizer
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
@@ -27,6 +28,7 @@ class ShapeCoordinator:
                                  params: Dict[str, Any] = None) -> List[Tuple[float, float]]:
         """
         根据类型和参数生成形状坐标（在变换之前）。
+        使用标准化参数处理以提高一致性。
 
         Args:
             shape_type: 要生成的形状类型
@@ -36,23 +38,26 @@ class ShapeCoordinator:
         Returns:
             坐标点列表（相对于形状中心在0,0）
         """
+        # 标准化输入参数
+        params = params or {}
+        standardized_params = ParamStandardizer.validate_params(params, shape_type)
+
         # size是前端传递的基础半径，直接使用
         radius = size
-        params = params or {}
 
         cx, cy = 0, 0  # 形状中心为 (0, 0)
         coords = []
 
         logger.info(f"Generating {shape_type} coordinates with radius: {radius}, "
-                   f"sides/points: {params.get('sides') or params.get('points') or 'N/A'}, "
-                   f"inner_radius: {params.get('inner_radius', 0)}, angle: {params.get('angle', 360)}")
+                   f"sides/points: {standardized_params.get('sides') or standardized_params.get('points') or 'N/A'}, "
+                   f"inner_radius: {standardized_params.get('inner_radius', 0)}, angle: {standardized_params.get('angle', 360)}")
 
         if shape_type == "circle":
-            angle = params.get("angle", 360)
+            angle = standardized_params.get("angle", 360)
             # 角度为0时应该等同于360度（完整圆形）
             if angle == 0:
                 angle = 360
-            inner_radius = params.get("inner_radius", 0) / 100  # 转换为比例
+            inner_radius = standardized_params.get("inner_radius", 0) / 100  # 转换为比例
             # 增加段数以提高质量，与前端保持一致
             segments = max(32, min(96, int(angle * 48 / math.pi)))
 
@@ -91,67 +96,54 @@ class ShapeCoordinator:
                     coords = self.base_generator.generate_circle(cx, cy, radius, segments)
 
         elif shape_type == "polygon":
-            sides = params.get("sides", 4)
-            corner_radius = params.get("corner_radius", 0)
+            sides = standardized_params.get("sides", 4)
+            corner_radius = standardized_params.get("corner_radius", 0)
             coords = self.base_generator.generate_regular_polygon(cx, cy, radius, sides, corner_radius)
 
         elif shape_type == "star":
-            points = params.get("points", 5)
-            inner_ratio = params.get("inner_ratio", 0.4)
+            points = standardized_params.get("points", 5)
+            inner_ratio = standardized_params.get("inner_ratio", 0.4)
             coords = self.base_generator.generate_star(cx, cy, radius, points, inner_ratio)
 
         elif shape_type == "heart":
-            path_offset = params.get("path_offset", 0)
+            path_offset = standardized_params.get("path_offset", 0)
             coords = self.base_generator.generate_heart(cx, cy, radius, path_offset)
 
         elif shape_type == "flower":
-            petals = params.get("petals", 5)
-            petal_length = params.get("petal_length", 0.5)
+            petals = standardized_params.get("petals", 5)
+            petal_length = standardized_params.get("petal_length", 0.5)
             coords = self.base_generator.generate_flower(cx, cy, radius, petals, petal_length)
 
         elif shape_type == "spiral":
-            # 使用新的螺旋参数
-            start_width = params.get("startWidth", 15)
-            end_width = params.get("endWidth", 15)
-            turns = params.get("turns", 4)
-            points_per_turn = params.get("pointsPerTurn", 100)
-            line_length = params.get("lineLength", 1.0)
-            smoothness = 1.0  # 固定平滑度
-
-            # 修复宽度参数：前端传递的是原始值，但后端期望的是乘以超采样因子和补偿因子的值
-            # 超采样因子 = 4，额外补偿 = 2.5，总共 = 10倍
-            width_scale_factor = 4 * 2.5  # 10倍
-            scaled_start_width = start_width * width_scale_factor
-            scaled_end_width = end_width * width_scale_factor
-            logger.info(f"Spiral width scaling: frontend start={start_width}, end={end_width} -> backend start={scaled_start_width:.1f}, end={scaled_end_width:.1f} (scale={width_scale_factor})")
+            # 使用标准化后的螺旋参数
+            start_width = standardized_params.get("start_width", 15)
+            end_width = standardized_params.get("end_width", 15)
+            turns = standardized_params.get("turns", 4)
+            points_per_turn = standardized_params.get("points_per_turn", 100)
+            line_length = standardized_params.get("line_length", 1.0)
+            smoothness = standardized_params.get("smoothness", 1.0)
 
             coords = self.spiral_generator.generate_spiral_with_width(
                 cx, cy, size,  # 使用与其他形状一致的size
-                scaled_start_width, scaled_end_width, turns, points_per_turn, smoothness, line_length
+                start_width, end_width, turns, points_per_turn, smoothness, line_length
             )
 
         elif shape_type == "sunburst":
-            ray_count = params.get("ray_count", 10)
-            ray_length = params.get("ray_length", 1.0)
-            start_width = params.get("start_width", -1)
-            end_width = params.get("end_width", 30)
-
-            # 修复宽度参数：前端传递的是原始值，但后端期望的是乘以超采样因子和补偿因子的值
-            # 超采样因子 = 4，额外补偿 = 2.5，总共 = 10倍
-            width_scale_factor = 4 * 2.5  # 10倍
-            scaled_start_width = start_width * width_scale_factor
-            scaled_end_width = end_width * width_scale_factor
-            logger.info(f"Sunburst width scaling: frontend start={start_width}, end={end_width} -> backend start={scaled_start_width:.1f}, end={scaled_end_width:.1f} (scale={width_scale_factor})")
+            ray_count = standardized_params.get("ray_count", 10)
+            ray_length = standardized_params.get("ray_length", 1.0)
+            start_width = standardized_params.get("start_width", -1)
+            end_width = standardized_params.get("end_width", 30)
 
             trapezoids = self.sunburst_generator.generate_sunburst(cx, cy, size, ray_count, ray_length,
-                                                                  scaled_start_width, scaled_end_width)
+                                                                  start_width, end_width)
             # 返回特殊标记，表示这是射线形状的多边形列表
             coords = {"type": "sunburst", "trapezoids": trapezoids}
 
         else:
-            coords = self.base_generator.generate_circle(cx, cy, radius, params.get("segments", 64))
+            # 默认情况，生成圆
+            coords = self.base_generator.generate_circle(cx, cy, radius, standardized_params.get("segments", 64))
 
-        rotation_deg = params.get("shape_rotation", 0)
+        rotation_deg = standardized_params.get("shape_rotation", 0)
         if rotation_deg not in (None, 0, 0.0):
             coords = self._apply_shape_rotation(coords, rotation_deg)
 

@@ -22,13 +22,14 @@ class SpiralGenerator:
         """
         生成基于形状填充的螺旋坐标
         返回闭合的填充区域边界点
+        修复：增加螺旋线条粗度以匹配前端视觉效果
         """
         # 参数验证和限制
         turns = max(1, min(10, turns))
         points_per_turn = max(30, min(100, points_per_turn))
-        # 宽度参数已经考虑了超采样因子和额外补偿，所以放宽限制
-        start_width = max(0.0, min(200.0, start_width))  # 20 * 4 * 2.5 = 200
-        end_width = max(0.0, min(500.0, end_width))     # 50 * 4 * 2.5 = 500
+        # 直接使用原始值，但为了匹配前端视觉效果，大幅度增加宽度
+        start_width = max(0.0, float(start_width))
+        end_width = max(0.0, float(end_width))
         smoothness = max(0.0, min(1.0, smoothness))
 
         total_points = turns * points_per_turn
@@ -44,9 +45,14 @@ class SpiralGenerator:
             cx, cy, frontend_max_radius, min_radius, turns, points_per_turn, start_width, end_width
         )
 
+        # 为了匹配前端视觉效果，大幅放大宽度参数以克服渲染引擎差异
+        # 螺旋的宽度应该随着螺旋位置变化，保持起始和结束宽度的相对比例
+        amplified_start_width = max(5.0, start_width * 4)  # 大幅放大以匹配前端粗度
+        amplified_end_width = max(5.0, end_width * 4)    # 大幅放大以匹配前端粗度
+
         # 计算边界点（外侧和内侧）
         boundary_points = SpiralGenerator._calculate_boundary_points(
-            center_points, start_width, end_width, smoothness
+            center_points, amplified_start_width, amplified_end_width, smoothness
         )
 
         # 计算边界范围用于调试
@@ -61,7 +67,8 @@ class SpiralGenerator:
             # 调试信息：显示所有关键参数
             logger.info(f"=== SPIRAL DEBUG INFO ===")
             logger.info(f"Input params: cx={cx}, cy={cy}, max_radius={max_radius}")
-            logger.info(f"Width params: start_width={start_width}, end_width={end_width}")
+            logger.info(f"Original width params: start_width={start_width}, end_width={end_width}")
+            logger.info(f"Amplified width params: start_width={amplified_start_width}, end_width={amplified_end_width}")
             logger.info(f"Shape params: turns={turns}, points_per_turn={points_per_turn}, line_length={line_length}")
             logger.info(f"Calculated: frontend_max_radius={frontend_max_radius}, min_radius={min_radius}")
             logger.info(f"Center points count: {len(center_points)}")
@@ -128,7 +135,9 @@ class SpiralGenerator:
         center_points: List[Dict[str, Any]],
         start_width: float, end_width: float, smoothness: float
     ) -> List[Tuple[float, float]]:
-        """计算螺旋的边界点，形成闭合的填充区域"""
+        """计算螺旋的边界点，形成闭合的填充区域
+        修复：确保螺旋两端都有自然的半圆形封口
+        """
         if len(center_points) < 5:
             # 回退到简单圆形
             cx = center_points[0]['x'] if center_points else 0
@@ -142,63 +151,115 @@ class SpiralGenerator:
                 points.append((x, y))
             return points
 
+        # 获取螺旋的中心点（假设螺旋是从中心开始的）
+        cx = center_points[0]['x'] if center_points else 0
+        cy = center_points[0]['y'] if center_points else 0
+
         # 计算外侧和内侧边界点
         outer_points = []
         inner_points = []
 
-        for point in center_points:
-            half_width = point['width'] / 2
-            # 外侧点
-            outer_x = point['x'] + math.cos(point['tangent_angle'] + math.pi/2) * half_width
-            outer_y = point['y'] + math.sin(point['tangent_angle'] + math.pi/2) * half_width
+        for i, point in enumerate(center_points):
+            # 根据螺旋进展插值宽度
+            current_width = start_width + (end_width - start_width) * point['progress']
+            half_width = current_width / 2
+
+            # 对螺旋起始部分应用更平滑的渐进式处理，避免高曲率导致的自相交
+            # 在螺旋起始处，逐渐增大偏移距离，而不是立即应用全宽度
+            progress_factor = point['progress']
+
+            # 使用更平滑的余弦过渡函数来创建无缝过渡效果
+            # 在起始处缓慢增加宽度影响，在后续部分正常应用宽度
+            if progress_factor < 0.15:  # 在前15%的部分应用渐进式处理
+                # 使用平滑的余弦过渡函数，提供更自然的过渡
+                adjusted_factor = 0.5 * (1 - math.cos(progress_factor * math.pi / 0.15))  # 余弦过渡
+                effective_half_width = half_width * adjusted_factor
+            else:
+                effective_half_width = half_width
+
+            # 外侧点 - 垂直于切线方向向外
+            outer_x = point['x'] + math.cos(point['tangent_angle'] + math.pi/2) * effective_half_width
+            outer_y = point['y'] + math.sin(point['tangent_angle'] + math.pi/2) * effective_half_width
             outer_points.append((outer_x, outer_y))
 
-            # 内侧点
-            inner_x = point['x'] + math.cos(point['tangent_angle'] - math.pi/2) * half_width
-            inner_y = point['y'] + math.sin(point['tangent_angle'] - math.pi/2) * half_width
+            # 内侧点 - 垂直于切线方向向内
+            inner_x = point['x'] + math.cos(point['tangent_angle'] - math.pi/2) * effective_half_width
+            inner_y = point['y'] + math.sin(point['tangent_angle'] - math.pi/2) * effective_half_width
             inner_points.append((inner_x, inner_y))
 
-        # 构建闭合路径：外侧路径 + 终点封口 + 内侧路径（反向） + 起点封口
+        # 构建闭合路径：外侧路径 + 终点封口 + 内侧路径（反向）+ 起点封口（贝塞尔曲线过渡）
         boundary_points = []
 
         # 添加外侧路径
         boundary_points.extend(outer_points)
 
-        # 添加终点封口（简化版半圆）
-        last_point = center_points[-1]
-        last_outer = outer_points[-1]
-        last_inner = inner_points[-1]
+        # 添加终点封口（半圆形封口，与前端保持一致）
+        if len(outer_points) > 0 and len(inner_points) > 0:
+            last_point_info = center_points[-1]
+            last_tangent_angle = last_point_info['tangent_angle']
 
-        # 终点半圆封口
-        end_radius = last_point['width'] / 2
-        start_angle = last_point['tangent_angle'] + math.pi/2
-        end_angle = last_point['tangent_angle'] - math.pi/2
+            # 从最后外侧点到最后内侧点画半圆封口
+            last_outer = outer_points[-1]
+            last_inner = inner_points[-1]
 
-        steps = max(8, int(20 * smoothness))
-        for i in range(1, steps):
-            angle = start_angle - (start_angle - end_angle) * (i / steps)
-            x = last_point['x'] + math.cos(angle) * end_radius
-            y = last_point['y'] + math.sin(angle) * end_radius
-            boundary_points.append((x, y))
+            # 计算半圆的参数
+            end_radius = abs(end_width) / 2
+            end_steps = max(4, int(8 * smoothness))  # 平滑度影响封口点数
 
-        # 添加内侧路径（反向）
+            # 使用中心点和角度来画半圆封口
+            # 中心点在内外两点的中点
+            center_x = (last_outer[0] + last_inner[0]) / 2
+            center_y = (last_outer[1] + last_inner[1]) / 2
+
+            # 半圆从外侧开始，沿着切线垂直方向转180度到内侧
+            start_angle = last_tangent_angle + math.pi/2  # 从外侧开始
+            end_angle = last_tangent_angle - math.pi/2    # 到达内侧
+
+            for i in range(end_steps + 1):
+                angle_ratio = i / end_steps
+                current_angle = start_angle + (end_angle - start_angle) * angle_ratio
+                x = center_x + math.cos(current_angle) * end_radius
+                y = center_y + math.sin(current_angle) * end_radius
+                boundary_points.append((x, y))
+
+        # 添加内侧路径（反向，确保路径连续）
         boundary_points.extend(reversed(inner_points))
 
-        # 添加起点封口（简化版贝塞尔曲线）
-        first_point = center_points[0]
-        first_outer = outer_points[0]
-        first_inner = inner_points[0]
+        # 添加起点封口（使用贝塞尔曲线进行平滑过渡，模仿前端实现）
+        # 注意：需要考虑到渐进式处理的起始点
+        if len(outer_points) > 0 and len(inner_points) > 0:
+            first_point_info = center_points[0] if center_points else None
 
-        # 起点贝塞尔封口
-        control_x = first_point['x'] - math.cos(first_point['tangent_angle']) * first_point['width'] * 0.3
-        control_y = first_point['y'] - math.sin(first_point['tangent_angle']) * first_point['width'] * 0.3
+            if first_point_info and first_point_info['width'] > 0.1:  # 当宽度大于阈值时才进行封口
+                # 使用实际计算出的边界点（已应用渐进式处理）
+                first_outer = outer_points[0]
+                first_inner = inner_points[0]
 
-        steps = max(5, int(10 * smoothness))
-        for i in range(1, steps):
-            t = i / steps
-            x = (1-t)**2 * first_inner[0] + 2*(1-t)*t * control_x + t**2 * first_outer[0]
-            y = (1-t)**2 * first_inner[1] + 2*(1-t)*t * control_y + t**2 * first_outer[1]
-            boundary_points.append((x, y))
+                # 使用贝塞尔曲线进行平滑过渡，模仿前端实现
+                # 控制点计算：考虑到渐进式处理的影响
+                # 使用中心点的实际宽度，而不是最大宽度
+                actual_start_half_width = first_point_info['width'] / 2
+                progress_factor = first_point_info['progress']
+
+                # 根据渐进式处理计算有效的控制点
+                if progress_factor < 0.15:
+                    adjusted_factor = 0.5 * (1 - math.cos(progress_factor * math.pi / 0.15))
+                    effective_control_offset = actual_start_half_width * adjusted_factor * 0.3
+                else:
+                    effective_control_offset = actual_start_half_width * 0.3
+
+                control_x = first_point_info['x'] - math.cos(first_point_info['tangent_angle']) * effective_control_offset * 2
+                control_y = first_point_info['y'] - math.sin(first_point_info['tangent_angle']) * effective_control_offset * 2
+
+                # 生成贝塞尔曲线点（二次贝塞尔：P(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂）
+                bezier_steps = 50  # 增加步数确保平滑
+                for i in range(bezier_steps + 1):
+                    t = i / bezier_steps
+                    # 二次贝塞尔曲线公式
+                    x = (1-t)**2 * first_inner[0] + 2*(1-t)*t * control_x + t**2 * first_outer[0]
+                    y = (1-t)**2 * first_inner[1] + 2*(1-t)*t * control_y + t**2 * first_outer[1]
+
+                    boundary_points.append((x, y))
 
         return boundary_points
 
