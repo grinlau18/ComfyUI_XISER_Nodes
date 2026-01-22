@@ -116,6 +116,15 @@ class RenderUtils:
             x_t = x_k + image_center_x + pos_x
             y_t = y_k + image_center_y + pos_y
 
+            # 5. 添加微小确定性偏移避免网格对齐问题
+            # 使用基于坐标值的微小正弦偏移，避免精确网格对齐导致的渲染异常
+            # 偏移量非常小（~0.0001像素），不会影响视觉效果
+            offset_scale = 0.0001  # 0.0001像素偏移
+            offset_x = math.sin(x_t * 1000.0) * offset_scale
+            offset_y = math.cos(y_t * 1000.0) * offset_scale
+            x_t += offset_x
+            y_t += offset_y
+
             transformed_coords.append((x_t, y_t))
 
         logger.info(f"Simple transformed coordinates range: x=[{min(x for x, _ in transformed_coords):.2f}, {max(x for x, _ in transformed_coords):.2f}], y=[{min(y for _, y in transformed_coords):.2f}, {max(y for _, y in transformed_coords):.2f}]")

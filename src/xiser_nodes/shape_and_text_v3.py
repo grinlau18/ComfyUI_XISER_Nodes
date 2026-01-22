@@ -410,7 +410,7 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             logger.info(f"Scaled corner radius: frontend={frontend_radius} -> backend={scaled_radius:.2f}, max_backend_radius={max_backend_radius:.2f}")
 
         # 生成初始形状坐标（以形状中心为原点）
-        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size_for_generation, standardized_params)
+        shape_coords = shape_coordinator.generate_shape_coordinates(shape_type, shape_size, standardized_params)
 
         # 详细日志：形状尺寸信息
         logger.info("=== 形状尺寸信息 ===")

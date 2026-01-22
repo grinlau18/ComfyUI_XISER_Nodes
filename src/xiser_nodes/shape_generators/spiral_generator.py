@@ -177,15 +177,22 @@ class SpiralGenerator:
             else:
                 effective_half_width = half_width
 
-            # 外侧点 - 垂直于切线方向向外
-            outer_x = point['x'] + math.cos(point['tangent_angle'] + math.pi/2) * effective_half_width
-            outer_y = point['y'] + math.sin(point['tangent_angle'] + math.pi/2) * effective_half_width
-            outer_points.append((outer_x, outer_y))
+            # 当有效半宽度很小时，直接使用中心点避免浮点误差
+            if effective_half_width < 0.001:
+                # 直接使用中心点，确保内外侧点完全相同
+                center_point = (point['x'], point['y'])
+                outer_points.append(center_point)
+                inner_points.append(center_point)
+            else:
+                # 外侧点 - 垂直于切线方向向外
+                outer_x = point['x'] + math.cos(point['tangent_angle'] + math.pi/2) * effective_half_width
+                outer_y = point['y'] + math.sin(point['tangent_angle'] + math.pi/2) * effective_half_width
+                outer_points.append((outer_x, outer_y))
 
-            # 内侧点 - 垂直于切线方向向内
-            inner_x = point['x'] + math.cos(point['tangent_angle'] - math.pi/2) * effective_half_width
-            inner_y = point['y'] + math.sin(point['tangent_angle'] - math.pi/2) * effective_half_width
-            inner_points.append((inner_x, inner_y))
+                # 内侧点 - 垂直于切线方向向内
+                inner_x = point['x'] + math.cos(point['tangent_angle'] - math.pi/2) * effective_half_width
+                inner_y = point['y'] + math.sin(point['tangent_angle'] - math.pi/2) * effective_half_width
+                inner_points.append((inner_x, inner_y))
 
         # 构建闭合路径：外侧路径 + 终点封口 + 内侧路径（反向）+ 起点封口（贝塞尔曲线过渡）
         boundary_points = []
@@ -229,37 +236,60 @@ class SpiralGenerator:
         # 注意：需要考虑到渐进式处理的起始点
         if len(outer_points) > 0 and len(inner_points) > 0:
             first_point_info = center_points[0] if center_points else None
+            first_outer = outer_points[0]
+            first_inner = inner_points[0]
 
-            if first_point_info and first_point_info['width'] > 0.1:  # 当宽度大于阈值时才进行封口
-                # 使用实际计算出的边界点（已应用渐进式处理）
-                first_outer = outer_points[0]
-                first_inner = inner_points[0]
-
-                # 使用贝塞尔曲线进行平滑过渡，模仿前端实现
-                # 控制点计算：考虑到渐进式处理的影响
-                # 使用中心点的实际宽度，而不是最大宽度
-                actual_start_half_width = first_point_info['width'] / 2
+            # 只有first_point_info存在时才添加起点封口
+            if first_point_info:
+                # 使用与inner_points/outer_points相同的渐进式处理逻辑计算有效宽度
                 progress_factor = first_point_info['progress']
+                current_width = start_width + (end_width - start_width) * progress_factor
+                half_width = current_width / 2
 
-                # 根据渐进式处理计算有效的控制点
+                # 应用与边界点生成相同的渐进式处理
+                # 添加最小调整因子，避免宽度为0导致的薄区域
                 if progress_factor < 0.15:
                     adjusted_factor = 0.5 * (1 - math.cos(progress_factor * math.pi / 0.15))
-                    effective_control_offset = actual_start_half_width * adjusted_factor * 0.3
+                    # 确保最小调整因子，避免宽度为0
+                    adjusted_factor = max(0.01, adjusted_factor)
+                    effective_half_width = half_width * adjusted_factor
                 else:
-                    effective_control_offset = actual_start_half_width * 0.3
+                    effective_half_width = half_width
 
-                control_x = first_point_info['x'] - math.cos(first_point_info['tangent_angle']) * effective_control_offset * 2
-                control_y = first_point_info['y'] - math.sin(first_point_info['tangent_angle']) * effective_control_offset * 2
+                # 只有当有效宽度足够大时才添加半圆形封口
+                # 使用与边界点生成相同的阈值（0.001）
+                if effective_half_width > 0.001:
+                    # 使用半圆形封口，与终点封口保持一致
+                    first_tangent_angle = first_point_info['tangent_angle']
+                    start_radius = effective_half_width
+                    start_steps = max(4, int(8 * smoothness))  # 平滑度影响封口点数
 
-                # 生成贝塞尔曲线点（二次贝塞尔：P(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂）
-                bezier_steps = 50  # 增加步数确保平滑
-                for i in range(bezier_steps + 1):
-                    t = i / bezier_steps
-                    # 二次贝塞尔曲线公式
-                    x = (1-t)**2 * first_inner[0] + 2*(1-t)*t * control_x + t**2 * first_outer[0]
-                    y = (1-t)**2 * first_inner[1] + 2*(1-t)*t * control_y + t**2 * first_outer[1]
+                    # 使用中心点和角度来画半圆封口
+                    # 中心点在内外两点的中点
+                    center_x = (first_inner[0] + first_outer[0]) / 2
+                    center_y = (first_inner[1] + first_outer[1]) / 2
 
-                    boundary_points.append((x, y))
+                    # 半圆从内侧开始，沿着切线垂直方向转180度到外侧
+                    # 注意方向：内侧在切线负垂直方向，外侧在切线正垂直方向
+                    start_angle = first_tangent_angle - math.pi/2  # 从内侧开始
+                    end_angle = first_tangent_angle + math.pi/2    # 到达外侧
+
+                    for i in range(start_steps + 1):
+                        angle_ratio = i / start_steps
+                        current_angle = start_angle + (end_angle - start_angle) * angle_ratio
+                        x = center_x + math.cos(current_angle) * start_radius
+                        y = center_y + math.sin(current_angle) * start_radius
+                        boundary_points.append((x, y))
+                else:
+                    # 有效宽度太小，跳过封口
+                    # 直接确保路径闭合：将最后一个点设置为第一个点（first_outer）
+                    if boundary_points:
+                        boundary_points[-1] = first_outer
+
+        # 确保多边形精确闭合（第一个点和最后一个点相同）
+        if boundary_points and boundary_points[0] != boundary_points[-1]:
+            # 直接设置最后一个点为第一个点，确保精确闭合
+            boundary_points[-1] = boundary_points[0]
 
         return boundary_points
 

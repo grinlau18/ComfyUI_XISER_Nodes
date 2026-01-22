@@ -69,9 +69,11 @@ class SpiralRenderer(BaseRenderer):
         # 标准化螺旋参数
         standardized_params = ParamStandardizer.standardize_spiral_params(params)
 
-        # 计算基础形状尺寸
-        base_size = width * 0.25  # 使用输出宽度的25%作为基础半径
-        size = base_size * scale_factor  # 转换为渲染坐标系
+        # 计算基础形状尺寸（使用统一的尺寸计算工具）
+        from .size_utils import SizeUtils
+        base_size = SizeUtils.compute_base_shape_size(width, height, None)  # 使用统一的尺寸计算
+        adjusted_size = SizeUtils.adjust_for_shape_type(base_size, "spiral")  # 应用螺旋尺寸补偿
+        size = adjusted_size * scale_factor  # 转换为渲染坐标系
 
         # 生成螺旋坐标
         coords = self.generator.generate_spiral_with_width(
