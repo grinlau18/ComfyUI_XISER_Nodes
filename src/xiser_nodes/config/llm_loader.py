@@ -338,7 +338,9 @@ class LLMConfigLoader:
             return []
 
         models = []
-        for model_name in group.models:
+        # 确保 models 不是 None，如果是则使用空列表
+        model_names = group.models if group.models is not None else []
+        for model_name in model_names:
             model = self.get_model(model_name)
             if model:
                 models.append(model)
@@ -366,7 +368,9 @@ class LLMConfigLoader:
         choices = []
 
         for group_name, group in self._groups.items():
-            for model_name in group.models:
+            # 确保 models 不是 None，如果是则使用空列表
+            models = group.models if group.models is not None else []
+            for model_name in models:
                 model = self.get_model(model_name)
                 if model:
                     choices.append({
