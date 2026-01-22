@@ -723,7 +723,7 @@ groups:
     name: "其他"
     description: "其他大语言模型"
     models:
-      - "z-image-turbo"
+      # No models currently in this category
 
 # 提供者类型定义
 provider_types:
