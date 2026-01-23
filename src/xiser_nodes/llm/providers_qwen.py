@@ -274,15 +274,26 @@ class QwenImageCreateProvider(BaseLLMProvider):
                 return f"Qwen image edit code: {response.get('code')} {response.get('message', '')}"
             output = response.get("output", {}) if isinstance(response, dict) else {}
             choices = output.get("choices") if isinstance(output, dict) else None
+
             if choices:
-                count = 0
-                try:
-                    content = choices[0].get("message", {}).get("content") or []
-                    count = len(content)
-                except Exception:
-                    count = 0
+                total_count = 0
+                # 遍历所有choices，统计总图片数量
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if not isinstance(choice, dict):
+                            continue
+                        try:
+                            content = choice.get("message", {}).get("content") or []
+                            if isinstance(content, list):
+                                # 计算这个choice中的图片数量
+                                for item in content:
+                                    if isinstance(item, dict) and isinstance(item.get("image"), str):
+                                        total_count += 1
+                        except Exception:
+                            continue
+
                 rid = response.get("request_id", "")
-                return f"Qwen image edit success: {count} image(s). request_id={rid}".strip()
+                return f"Qwen image edit success: {total_count} image(s). request_id={rid}".strip()
             return f"Qwen image edit: no choices in response. raw={response}"
         return ""
 
@@ -292,33 +303,48 @@ class QwenImageCreateProvider(BaseLLMProvider):
         if not choices:
             return []
         results: List[torch.Tensor] = []
-        try:
-            content = choices[0].get("message", {}).get("content") or []
-        except Exception:
-            content = []
-        if isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and isinstance(part.get("image"), str):
-                    self._fetch_and_append(part["image"], results)
-        elif isinstance(content, str) and content.startswith("http"):
-            self._fetch_and_append(content, results)
+
+        # 遍历所有choices，而不仅仅是第一个
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                try:
+                    content = choice.get("message", {}).get("content") or []
+                except Exception:
+                    content = []
+
+                if isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, dict) and isinstance(part.get("image"), str):
+                            self._fetch_and_append(part["image"], results)
+                elif isinstance(content, str) and content.startswith("http"):
+                    self._fetch_and_append(content, results)
+
         return results
 
     def extract_image_urls(self, response: Dict[str, Any]) -> List[str]:
         output = response.get("output", {}) if isinstance(response, dict) else {}
         choices = output.get("choices") if isinstance(output, dict) else None
         urls: List[str] = []
-        if isinstance(choices, list) and choices:
-            try:
-                content = choices[0].get("message", {}).get("content") or []
-            except Exception:
-                content = []
-            if isinstance(content, list):
-                for part in content:
-                    if isinstance(part, dict) and isinstance(part.get("image"), str):
-                        urls.append(part["image"])
-            elif isinstance(content, str) and content.startswith("http"):
-                urls.append(content)
+
+        # 遍历所有choices，而不仅仅是第一个
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                try:
+                    content = choice.get("message", {}).get("content") or []
+                except Exception:
+                    content = []
+
+                if isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, dict) and isinstance(part.get("image"), str):
+                            urls.append(part["image"])
+                elif isinstance(content, str) and content.startswith("http"):
+                    urls.append(content)
+
         return urls
 
     def _fetch_and_append(self, url: str, results: List[torch.Tensor]):
@@ -426,20 +452,26 @@ class QwenImageMaxProvider(BaseLLMProvider):
         results: List[torch.Tensor] = []
         output = response.get("output", {}) if isinstance(response, dict) else {}
         choices = output.get("choices") if isinstance(output, dict) else None
-        if isinstance(choices, list) and choices:
-            try:
-                content = choices[0].get("message", {}).get("content")
-            except Exception:
-                content = None
-            if isinstance(content, list):
-                for part in content:
-                    if not isinstance(part, dict):
-                        continue
-                    url = part.get("image") if isinstance(part.get("image"), str) else None
-                    if url:
-                        self._fetch_and_append(url, results)
-            elif isinstance(content, str) and content.startswith("http"):
-                self._fetch_and_append(content, results)
+
+        # 遍历所有choices，而不仅仅是第一个
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                try:
+                    content = choice.get("message", {}).get("content")
+                except Exception:
+                    content = None
+
+                if isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        url = part.get("image") if isinstance(part.get("image"), str) else None
+                        if url:
+                            self._fetch_and_append(url, results)
+                elif isinstance(content, str) and content.startswith("http"):
+                    self._fetch_and_append(content, results)
 
         return results
 
@@ -447,20 +479,27 @@ class QwenImageMaxProvider(BaseLLMProvider):
         urls: List[str] = []
         output = response.get("output", {}) if isinstance(response, dict) else {}
         choices = output.get("choices") if isinstance(output, dict) else None
-        if isinstance(choices, list) and choices:
-            try:
-                content = choices[0].get("message", {}).get("content")
-            except Exception:
-                content = None
-            if isinstance(content, list):
-                for part in content:
-                    if not isinstance(part, dict):
-                        continue
-                    image_url = part.get("image")
-                    if isinstance(image_url, str):
-                        urls.append(image_url)
-            elif isinstance(content, str) and content.startswith("http"):
-                urls.append(content)
+
+        # 遍历所有choices，而不仅仅是第一个
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                try:
+                    content = choice.get("message", {}).get("content")
+                except Exception:
+                    content = None
+
+                if isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        image_url = part.get("image")
+                        if isinstance(image_url, str):
+                            urls.append(image_url)
+                elif isinstance(content, str) and content.startswith("http"):
+                    urls.append(content)
+
         return urls
 
     def _fetch_and_append(self, url: str, results: List[torch.Tensor]):

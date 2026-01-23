@@ -350,39 +350,67 @@ class WanImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", "")
+                if isinstance(choices, list):
+                    all_texts = []
+                    total_image_count = 0
+
+                    # 遍历所有choices，收集文本和统计图片
+                    for choice in choices:
+                        if not isinstance(choice, dict) or "message" not in choice:
+                            continue
+
+                        content = choice["message"].get("content", "")
+                        if isinstance(content, str):
+                            all_texts.append(content)
+                        elif isinstance(content, list):
+                            # Extract text from content list (for interleave mode)
+                            for item in content:
+                                if isinstance(item, dict):
+                                    if item.get("type") == "text":
+                                        text = item.get("text", "")
+                                        if text:
+                                            all_texts.append(text)
+                                    elif item.get("type") == "image":
+                                        total_image_count += 1
+
+                    # 如果有文本，返回文本
+                    if all_texts:
+                        # 修复：对于逐字符的文本，直接拼接而不是用换行符
+                        return "".join(all_texts)
+                    # 如果只有图像，返回描述性文本（类似Qwen图像编辑提供者）
+                    elif total_image_count > 0:
+                        request_id = response.get("request_id", "")
+                        return f"Wan2.6 image edit success: {total_image_count} image(s). request_id={request_id}".strip()
+
+        # Fallback: try to find text in response
+        if "choices" in response:
+            choices = response["choices"]
+            if isinstance(choices, list):
+                all_texts = []
+                total_image_count = 0
+
+                for choice in choices:
+                    if not isinstance(choice, dict) or "message" not in choice:
+                        continue
+
+                    content = choice["message"].get("content", "")
                     if isinstance(content, str):
-                        return content
+                        all_texts.append(content)
                     elif isinstance(content, list):
-                        # Extract text from content list (for interleave mode)
-                        texts = []
-                        image_count = 0
                         for item in content:
                             if isinstance(item, dict):
                                 if item.get("type") == "text":
                                     text = item.get("text", "")
                                     if text:
-                                        texts.append(text)
+                                        all_texts.append(text)
                                 elif item.get("type") == "image":
-                                    image_count += 1
+                                    total_image_count += 1
 
-                        # 如果有文本，返回文本
-                        if texts:
-                            # 修复：对于逐字符的文本，直接拼接而不是用换行符
-                            return "".join(texts)
-                        # 如果只有图像，返回描述性文本（类似Qwen图像编辑提供者）
-                        elif image_count > 0:
-                            request_id = response.get("request_id", "")
-                            return f"Wan2.6 image edit success: {image_count} image(s). request_id={request_id}".strip()
-
-        # Fallback: try to find text in response
-        if "choices" in response:
-            choices = response["choices"]
-            if choices and "message" in choices[0]:
-                content = choices[0]["message"].get("content", "")
-                if isinstance(content, str):
-                    return content
+                if all_texts:
+                    return "".join(all_texts)
+                elif total_image_count > 0:
+                    request_id = response.get("request_id", "")
+                    return f"Wan2.6 image edit success: {total_image_count} image(s). request_id={request_id}".strip()
 
         # Check for direct content in response (for streaming)
         if "content" in response and isinstance(response["content"], list):
@@ -423,16 +451,18 @@ class WanImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", [])
-                    if isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict) and item.get("type") == "image":
-                                image_url = item.get("image")
-                                if image_url:
-                                    tensor = _download_image_to_tensor(image_url)
-                                    if tensor is not None:
-                                        images.append(tensor)
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if isinstance(choice, dict) and "message" in choice:
+                            content = choice["message"].get("content", [])
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and item.get("type") == "image":
+                                        image_url = item.get("image")
+                                        if image_url:
+                                            tensor = _download_image_to_tensor(image_url)
+                                            if tensor is not None:
+                                                images.append(tensor)
 
         # Check for direct content in response (for streaming/interleave mode)
         if "content" in response and isinstance(response["content"], list):
@@ -455,14 +485,16 @@ class WanImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", [])
-                    if isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict) and item.get("type") == "image":
-                                image_url = item.get("image")
-                                if image_url:
-                                    urls.append(image_url)
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if isinstance(choice, dict) and "message" in choice:
+                            content = choice["message"].get("content", [])
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and item.get("type") == "image":
+                                        image_url = item.get("image")
+                                        if image_url:
+                                            urls.append(image_url)
 
         # Check for direct content in response (for streaming/interleave mode)
         if "content" in response and isinstance(response["content"], list):

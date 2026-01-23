@@ -198,18 +198,20 @@ class ZImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", [])
-                    if isinstance(content, list):
-                        # 提取文本内容
-                        texts = []
-                        for item in content:
-                            if isinstance(item, dict):
-                                if "text" in item:
-                                    texts.append(item["text"])
+                if isinstance(choices, list):
+                    all_texts = []
+                    # 遍历所有choices，收集文本
+                    for choice in choices:
+                        if not isinstance(choice, dict) or "message" not in choice:
+                            continue
+                        content = choice["message"].get("content", [])
+                        if isinstance(content, list):
+                            for item in content:
+                                if isinstance(item, dict) and "text" in item:
+                                    all_texts.append(item["text"])
 
-                        if texts:
-                            return "\n".join(texts)
+                    if all_texts:
+                        return "\n".join(all_texts)
 
         # 检查错误情况
         if "error" in response:
@@ -235,16 +237,18 @@ class ZImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", [])
-                    if isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict) and "image" in item:
-                                image_url = item["image"]
-                                if image_url:
-                                    tensor = _download_image_to_tensor(image_url)
-                                    if tensor is not None:
-                                        images.append(tensor)
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if isinstance(choice, dict) and "message" in choice:
+                            content = choice["message"].get("content", [])
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and "image" in item:
+                                        image_url = item["image"]
+                                        if image_url:
+                                            tensor = _download_image_to_tensor(image_url)
+                                            if tensor is not None:
+                                                images.append(tensor)
 
         return images
 
@@ -257,14 +261,16 @@ class ZImageProvider(BaseLLMProvider):
             output = response["output"]
             if "choices" in output:
                 choices = output["choices"]
-                if choices and "message" in choices[0]:
-                    content = choices[0]["message"].get("content", [])
-                    if isinstance(content, list):
-                        for item in content:
-                            if isinstance(item, dict) and "image" in item:
-                                image_url = item["image"]
-                                if image_url:
-                                    urls.append(image_url)
+                if isinstance(choices, list):
+                    for choice in choices:
+                        if isinstance(choice, dict) and "message" in choice:
+                            content = choice["message"].get("content", [])
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and "image" in item:
+                                        image_url = item["image"]
+                                        if image_url:
+                                            urls.append(image_url)
 
         return urls
 
