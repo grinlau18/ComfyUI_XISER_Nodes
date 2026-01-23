@@ -118,24 +118,6 @@ class SizeUtils:
         render_height = int(height * scale_factor)
         return render_width, render_height
 
-    @staticmethod
-    def compute_stroke_width(stroke_width: int, scale: Dict[str, float]) -> float:
-        """
-        计算补偿后的描边宽度
-
-        Args:
-            stroke_width: 原始描边宽度
-            scale: 缩放比例
-
-        Returns:
-            补偿后的描边宽度
-        """
-        if stroke_width <= 0:
-            return 0.0
-
-        avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
-        compensated_stroke_width = stroke_width * avg_scale
-        return compensated_stroke_width
 
     @staticmethod
     def log_size_details(width: int, height: int, base_size: float, final_size: float, shape_type: str):

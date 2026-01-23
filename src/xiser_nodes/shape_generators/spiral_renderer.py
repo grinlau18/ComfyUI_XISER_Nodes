@@ -13,6 +13,8 @@ from .renderer_interface import BaseRenderer
 from .spiral_generator import SpiralGenerator
 from .render_utils import RenderUtils
 from .param_standardizer import ParamStandardizer
+from .stroke_utils import StrokeUtils
+from .color_utils import ColorUtils
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +62,7 @@ class SpiralRenderer(BaseRenderer):
         render_height = height * scale_factor
 
         # 创建渲染图像
-        bg_rgb = self.render_utils.hex_to_rgb(bg_color) + (255,)
+        bg_rgb = ColorUtils.hex_to_rgba(bg_color)
         if transparent_bg:
             image = Image.new("RGBA", (render_width, render_height), (0, 0, 0, 0))
         else:
@@ -88,8 +90,8 @@ class SpiralRenderer(BaseRenderer):
         )
 
         # 标准化颜色
-        shape_rgb = self.render_utils.hex_to_rgb(shape_color) + (255,)
-        stroke_rgb = self.render_utils.hex_to_rgb(stroke_color) + (255,) if stroke_width > 0 else (0, 0, 0, 255)
+        shape_rgb = StrokeUtils.hex_to_fill_rgba(shape_color)
+        stroke_rgb = StrokeUtils.hex_to_stroke_rgba(stroke_color, stroke_width)
 
         # 应用变换
         transformed_coords = self.render_utils.apply_simple_transform(
@@ -97,9 +99,9 @@ class SpiralRenderer(BaseRenderer):
         )
 
         # 标准化描边宽度
-        compensated_stroke_width = ParamStandardizer.standardize_stroke_params(
-            stroke_width, scale, "spiral"
-        ) * scale_factor  # 应用超采样因子
+        compensated_stroke_width = StrokeUtils.compute_compensated_stroke_width(
+            stroke_width, scale, "spiral", scale_factor
+        )
 
         # 渲染螺旋形状
         self.render_utils.render_shape_with_shapely(
@@ -127,7 +129,7 @@ class SpiralRenderer(BaseRenderer):
         if transparent_bg:
             bg_image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         else:
-            bg_rgb_final = self.render_utils.hex_to_rgb(bg_color) + (255,)
+            bg_rgb_final = ColorUtils.hex_to_rgba(bg_color)
             bg_image = Image.new("RGBA", (width, height), bg_rgb_final)
 
         bg_array = np.array(bg_image).astype(np.float32) / 255.0

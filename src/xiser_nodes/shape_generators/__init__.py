@@ -13,6 +13,7 @@ from .render_utils import RenderUtils
 from .batch_processor import BatchProcessor
 from .transform_utils import TransformUtils
 from .param_standardizer import ParamStandardizer
+from .stroke_utils import StrokeUtils
 from .renderer_interface import BaseRenderer, UnifiedRenderer
 from .shape_renderer import ShapeRenderer
 from .spiral_renderer import SpiralRenderer
@@ -28,6 +29,7 @@ __all__ = [
     "BatchProcessor",
     "TransformUtils",
     "ParamStandardizer",
+    "StrokeUtils",
     "BaseRenderer",
     "UnifiedRenderer",
     "ShapeRenderer",

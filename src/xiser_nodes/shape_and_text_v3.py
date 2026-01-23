@@ -29,6 +29,8 @@ try:
     from shape_generators.batch_processor import BatchProcessor
     from shape_generators.transform_utils import TransformUtils
     from shape_generators.param_standardizer import ParamStandardizer
+    from shape_generators.stroke_utils import StrokeUtils
+    from shape_generators.color_utils import ColorUtils
     from shape_generators.renderer_interface import UnifiedRenderer
 except ImportError:
     # 如果直接导入失败，尝试相对导入
@@ -38,6 +40,8 @@ except ImportError:
     from .shape_generators.batch_processor import BatchProcessor
     from .shape_generators.transform_utils import TransformUtils
     from .shape_generators.param_standardizer import ParamStandardizer
+    from .shape_generators.stroke_utils import StrokeUtils
+    from .shape_generators.color_utils import ColorUtils
     from .shape_generators.renderer_interface import UnifiedRenderer
 
 # 设置日志 - 启用INFO级别日志以便调试
@@ -322,7 +326,7 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
         render_height = request.height * scale_factor
 
         # 始终定义 bg_rgb，即使使用透明背景
-        bg_rgb = render_utils.hex_to_rgb(request.bg_color) + (255,)
+        bg_rgb = ColorUtils.hex_to_rgba(request.bg_color)
 
         if transparent_bg:
             image = Image.new("RGBA", (render_width, render_height), (0, 0, 0, 0))
@@ -438,8 +442,8 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
                 logger.info(f"形状边界: x=[{min(shape_x):.1f}, {max(shape_x):.1f}], y=[{min(shape_y):.1f}, {max(shape_y):.1f}]")
                 logger.info(f"形状宽度: {max(shape_x) - min(shape_x):.1f}, 高度: {max(shape_y) - min(shape_y):.1f}")
 
-        shape_rgb = render_utils.hex_to_rgb(request.shape_color) + (255,)
-        stroke_rgb = render_utils.hex_to_rgb(request.stroke_color) + (255,) if request.stroke_width > 0 else (0, 0, 0, 255)
+        shape_rgb = StrokeUtils.hex_to_fill_rgba(request.shape_color)
+        stroke_rgb = StrokeUtils.hex_to_stroke_rgba(request.stroke_color, request.stroke_width) if request.stroke_width > 0 else (0, 0, 0, 255)
 
         # 放射线图案现在使用填充渲染，不再使用描边渲染
         stroke_only_shape_types = set()
@@ -602,7 +606,7 @@ class XIS_ShapeAndTextV3(io.ComfyNode):
             bg_image = Image.new("RGBA", (request.width, request.height), (0, 0, 0, 0))
         else:
             # Create solid color background
-            bg_rgb = render_utils.hex_to_rgb(request.bg_color) + (255,)
+            bg_rgb = ColorUtils.hex_to_rgba(request.bg_color)
             bg_image = Image.new("RGBA", (request.width, request.height), bg_rgb)
 
         bg_array = np.array(bg_image).astype(np.float32) / 255.0

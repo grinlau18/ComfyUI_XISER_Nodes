@@ -12,6 +12,8 @@ from shapely import affinity
 from .text_processor import TextProcessor
 from .render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
 from .param_standardizer import ParamStandardizer
+from .stroke_utils import StrokeUtils
+from .color_utils import ColorUtils
 
 
 class TextRenderer:
@@ -117,7 +119,7 @@ class TextRenderer:
             logger.warning("Text geometry is empty, creating default empty tensors")
 
             # 返回带有背景色的图像，而不是空白图像
-            bg_rgb = self.render_utils.hex_to_rgb(bg_color) + (255,)
+            bg_rgb = ColorUtils.hex_to_rgba(bg_color)
 
             if transparent_bg:
                 composite = Image.new("RGBA", (render_width, render_height), (0, 0, 0, 0))
@@ -148,15 +150,14 @@ class TextRenderer:
             geometry, render_width, render_height, position, rotation_angle, scale, skew
         )
 
-        bg_rgb = self.render_utils.hex_to_rgb(bg_color) + (255,)
-        shape_rgb = self.render_utils.hex_to_rgb(shape_color) + (255,)
-        stroke_rgb = self.render_utils.hex_to_rgb(stroke_color) + (255,) if stroke_width > 0 else None
+        bg_rgb = StrokeUtils.hex_to_fill_rgba(bg_color)
+        shape_rgb = StrokeUtils.hex_to_fill_rgba(shape_color)
+        stroke_rgb = StrokeUtils.hex_to_stroke_rgba(stroke_color, stroke_width)
 
         # 使用统一的描边宽度补偿计算（与图形渲染保持一致）
-        # 使用参数标准化器进行描边宽度处理
-        compensated_stroke_width = ParamStandardizer.standardize_stroke_params(
-            stroke_width, scale, "text"
-        ) * supersample_factor  # 应用超采样因子
+        compensated_stroke_width = StrokeUtils.compute_compensated_stroke_width(
+            stroke_width, scale, "text", supersample_factor
+        )
 
         fill_mask_img = self.render_utils._geometry_to_mask(transformed_geometry, render_width, render_height)
         fill_mask = np.array(fill_mask_img, dtype=np.uint8)

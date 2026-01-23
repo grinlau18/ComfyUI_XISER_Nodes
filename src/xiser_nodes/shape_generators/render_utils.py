@@ -32,19 +32,6 @@ class RenderUtils:
         from .size_utils import SizeUtils
         return SizeUtils.compute_base_shape_size(width, height, shape_canvas)
 
-    @staticmethod
-    def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
-        """
-        将十六进制颜色转换为RGB元组。
-
-        Args:
-            hex_color: 十六进制颜色字符串（例如"#FF0000"）
-
-        Returns:
-            (r, g, b) 值元组
-        """
-        from .color_utils import ColorUtils
-        return ColorUtils.hex_to_rgb(hex_color)
 
     @staticmethod
     def apply_simple_transform(coords: List[Tuple[float, float]],
@@ -307,10 +294,7 @@ class RenderUtils:
                     draw.polygon(int_coords, fill=shape_color, outline=None)
                     # 如果需要描边，单独添加描边
                     if stroke_width > 0 and stroke_color is not None:
-                        stroke_width_int = round(stroke_width)
-                        for i in range(len(int_coords) - 1):
-                            draw.line([int_coords[i], int_coords[i + 1]],
-                                     fill=stroke_color, width=stroke_width_int)
+                        RenderUtils._draw_polygon_stroke_fallback(draw, int_coords, stroke_color, stroke_width)
 
     @staticmethod
     def render_shape_with_shapely(image: Image.Image, coords: List[Tuple[float, float]],
@@ -357,17 +341,14 @@ class RenderUtils:
             logger.error(f"Shapely rendering error: {e}")
             draw = ImageDraw.Draw(image, 'RGBA')
             if stroke_only:
-                stroke_width_int = round(stroke_width)
-                for idx in range(0, len(coords) - 1, 2):
-                    start_pt = coords[idx]
-                    end_pt = coords[idx + 1] if idx + 1 < len(coords) else None
-                    if end_pt is not None:
-                        draw.line([start_pt, end_pt], fill=stroke_color, width=stroke_width_int)
+                RenderUtils._draw_stroke_only_fallback(draw, coords, stroke_color, stroke_width)
             else:
                 int_coords = [(x, y) for x, y in coords]  # 使用浮点坐标
                 if int_coords and int_coords[0] != int_coords[-1]:
                     int_coords.append(int_coords[0])
                 draw.polygon(int_coords, fill=shape_color, outline=None)
+                if stroke_width > 0 and stroke_color is not None:
+                    RenderUtils._draw_polygon_stroke_fallback(draw, int_coords, stroke_color, stroke_width)
 
     @staticmethod
     def render_donut_with_shapely(image: Image.Image, outer_coords: List[Tuple[float, float]],
@@ -405,14 +386,9 @@ class RenderUtils:
                     int_inner_coords.append(int_inner_coords[0])
                 draw.polygon(int_outer_coords, fill=shape_color, outline=None)
                 draw.polygon(int_inner_coords, fill=(0, 0, 0, 0) if transparent_bg else bg_color, outline=None)
-                if stroke_width > 0:
-                    stroke_width_int = round(stroke_width)
-                    for i in range(len(int_outer_coords) - 1):
-                        draw.line([int_outer_coords[i], int_outer_coords[i + 1]],
-                                  fill=stroke_color, width=stroke_width_int)
-                    for i in range(len(int_inner_coords) - 1):
-                        draw.line([int_inner_coords[i], int_inner_coords[i + 1]],
-                                  fill=stroke_color, width=stroke_width_int)
+                if stroke_width > 0 and stroke_color is not None:
+                    RenderUtils._draw_polygon_stroke_fallback(draw, int_outer_coords, stroke_color, stroke_width)
+                    RenderUtils._draw_polygon_stroke_fallback(draw, int_inner_coords, stroke_color, stroke_width)
                 logger.info("Donut rendered using fallback polygon method")
             except Exception as e2:
                 logger.error(f"Fallback donut rendering also failed: {e2}")
@@ -444,7 +420,43 @@ class RenderUtils:
             draw.polygon(int_coords, fill=shape_color, outline=None)
             # 添加描边
             if stroke_width > 0 and stroke_color is not None:
-                stroke_width_int = round(stroke_width)
-                for i in range(len(int_coords) - 1):
-                    draw.line([int_coords[i], int_coords[i + 1]],
-                             fill=stroke_color, width=stroke_width_int)
+                RenderUtils._draw_polygon_stroke_fallback(draw, int_coords, stroke_color, stroke_width)
+
+    @staticmethod
+    def _draw_polygon_stroke_fallback(draw, coords, stroke_color, stroke_width):
+        """
+        降级逻辑中的多边形描边绘制方法
+
+        Args:
+            draw: ImageDraw对象
+            coords: 坐标列表
+            stroke_color: 描边颜色
+            stroke_width: 描边宽度
+        """
+        if not coords or stroke_width <= 0 or stroke_color is None:
+            return
+
+        stroke_width_int = round(stroke_width)
+        for i in range(len(coords) - 1):
+            draw.line([coords[i], coords[i + 1]], fill=stroke_color, width=stroke_width_int)
+
+    @staticmethod
+    def _draw_stroke_only_fallback(draw, coords, stroke_color, stroke_width):
+        """
+        降级逻辑中的仅描边绘制方法
+
+        Args:
+            draw: ImageDraw对象
+            coords: 坐标列表
+            stroke_color: 描边颜色
+            stroke_width: 描边宽度
+        """
+        if not coords or stroke_width <= 0 or stroke_color is None:
+            return
+
+        stroke_width_int = round(stroke_width)
+        for idx in range(0, len(coords) - 1, 2):
+            start_pt = coords[idx]
+            end_pt = coords[idx + 1] if idx + 1 < len(coords) else None
+            if end_pt is not None:
+                draw.line([start_pt, end_pt], fill=stroke_color, width=stroke_width_int)
