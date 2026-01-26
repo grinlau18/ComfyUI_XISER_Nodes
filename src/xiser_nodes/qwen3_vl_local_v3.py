@@ -181,7 +181,7 @@ def _update_progress(stage: str, progress: float, total_stages: int = 6, node_id
         logger.debug(f"进度更新失败: {e}")
 
 
-class XIS_Qwen3VLLocalV3(io.ComfyNode):
+class XIS_QwenVLInferenceV3(io.ComfyNode):
     """Qwen3-VL Local Node - V3版本
 
     使用Hugging Face Transformers在本地运行Qwen3-VL视觉语言模型。
@@ -199,8 +199,8 @@ class XIS_Qwen3VLLocalV3(io.ComfyNode):
         cls._model_display_map = display_to_model_id
 
         return io.Schema(
-            node_id="XIS_Qwen3VLLocal",
-            display_name="XIS Qwen3-VL Local",
+            node_id="XIS_QwenVLInference",
+            display_name="Qwen VL Inference",
             category="XISER_Nodes/LLM",
             description=f"""本地运行Qwen3-VL视觉语言模型进行图像理解和多模态对话。
 
@@ -526,5 +526,5 @@ For more details, see the extension documentation.""")
 
 # V3节点类列表
 V3_NODE_CLASSES = [
-    XIS_Qwen3VLLocalV3,
+    XIS_QwenVLInferenceV3,
 ]

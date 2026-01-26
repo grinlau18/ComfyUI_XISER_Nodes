@@ -19,6 +19,8 @@
 ✅ **LLM Orchestrator Enhancement** - Added Wan 2.6 model support with image editing and interleave mode
 ✅ **VGM Orchestrator Introduction** - New video generation orchestrator node supporting reference-based video, image-to-video, and keyframe-to-video modes
 ✅ **Performance Optimization** - Improved node interaction and system performance
+✅ **New Qwen VL Inference Node** - Local Qwen3-VL vision-language model for image analysis and reasoning
+✅ **New Multiple Angles Prompt Node** - Visual interface for generating camera angle prompts with 3D preview
 
 ---
 
@@ -116,6 +118,12 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_2.jpeg)
   ![XIS_LLMOrchestrator Workflow Example](img/XIS_LLMOrchestrator_3.jpeg)
 
+### 🔍 Qwen VL Inference Node (XIS_QwenVLInference)
+- **Purpose**: Run Qwen3-VL vision-language models locally for image analysis and reasoning, supporting up to 8 image inputs.
+- **Capabilities**: Image description, visual question answering, document understanding, OCR, etc., with full generation parameter control (temperature, top_p, max_tokens, etc.).
+- **Features**: Automatic model directory scanning, support for Qwen3-VL series models, local inference without internet connection.
+  ![Qwen VL Inference Node Interface](img/XIS_QwenVLInferenceV3_1.jpeg)
+
 ### 🎬 Video Generation Orchestrator (XIS_VGMOrchestrator)
 - **Purpose**: Orchestrate video generation tasks across multiple providers and models, supporting reference-based video generation (r2v), image-to-video (i2v), and keyframe-to-video (kf2v) modes. Outputs video frames as image batches for seamless integration with ComfyUI's video processing pipeline.
 - **Core Features**:
@@ -208,6 +216,10 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
 - **XIS_Label**: Double-click to open HTML/Markdown editors (CodeMirror with textarea fallback), toggle editors, adjust backgrounds and text scale, and enjoy consistent spacing, list handling, markdown conversion, and smart scrollbars across languages.
   - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
   ![Text Label Feature](img/XIS_Label_1.jpeg)
+
+- **XIS_MultipleAnglesPrompt**: Generate camera angle prompts through a visual interface with 3D preview and image reference support. Provides precise camera angle control for Qwen-Image-Edit-2511-Multiple-Angles-LoRA models.
+  ![Multiple Angles Prompt Node Interface](img/XIS_MultipleAnglesPromptV3_1.jpeg)
+
 ### 🧰 Image, Mask & File Nodes
 - **XIS_ImagePuzzle**: Advanced image stitching with four layout types (left-main, right-main, top-main, bottom-main), supporting multiple main images with proper spacing and alignment.
   ![XIS_ImagePuzzle Interface](img/XIS_ImagePuzzle_1.jpeg)
