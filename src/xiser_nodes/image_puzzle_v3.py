@@ -17,7 +17,7 @@ class XIS_ImagePuzzleV3(io.ComfyNode):
         return io.Schema(
             node_id="XIS_ImagePuzzle",
             display_name="Image Puzzle",
-            category="XISER_Nodes/Image_Processing",
+            category="XISER_Nodes/Image_And_Mask",
             description="Image puzzle tool supporting four core layout types: left-main, right-main, top-main, bottom-main.",
             inputs=[
                 io.Image.Input("pack_images", tooltip="Input images to pack"),

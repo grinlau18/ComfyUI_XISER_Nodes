@@ -14,6 +14,8 @@ from PIL import Image
 from .shape_coordinator import ShapeCoordinator
 from .render_utils import RenderUtils, FRONTEND_CANVAS_SCALE
 from .text_renderer import TextRenderer
+from .stroke_utils import StrokeUtils
+from .color_utils import ColorUtils
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)  # 关闭INFO级别日志
@@ -255,7 +257,7 @@ class BatchProcessor:
                 mode_value = shape_props.get("mode_selection") or shape_props.get("shape_type") or shape_type
                 current_shape_type = self._normalize_shape_type(mode_value)
 
-                bg_rgb = self.render_utils.hex_to_rgb(current_bg_color) + (255,)
+                bg_rgb = ColorUtils.hex_to_rgba(current_bg_color)
 
                 if current_transparent_bg:
                     image = Image.new("RGBA", (render_width, render_height), (0, 0, 0, 0))
@@ -302,8 +304,8 @@ class BatchProcessor:
 
                 shape_coords = self.shape_coordinator.generate_shape_coordinates(current_shape_type, current_shape_size, current_params)
 
-                shape_rgb = self.render_utils.hex_to_rgb(current_shape_color) + (255,)
-                stroke_rgb = self.render_utils.hex_to_rgb(current_stroke_color) + (255,) if current_stroke_width > 0 else None
+                shape_rgb = StrokeUtils.hex_to_fill_rgba(current_shape_color)
+                stroke_rgb = StrokeUtils.hex_to_stroke_rgba(current_stroke_color, current_stroke_width)
 
                 # 放射线图案现在使用填充渲染，不再使用描边渲染
                 stroke_only_shape = False
@@ -327,9 +329,10 @@ class BatchProcessor:
                     transformed_coords = self.render_utils.apply_simple_transform(
                         shape_coords, scale, rotation_angle, skew, position, render_width, render_height, scale_factor)
 
-                avg_scale = (scale.get('x', 1.0) + scale.get('y', 1.0)) / 2.0
-                frontend_scale_comp = 1.0 / 0.75 if 0.75 not in (0, None) else 1.0  # FRONTEND_CANVAS_SCALE
-                compensated_stroke_width = current_stroke_width * scale_factor * avg_scale * frontend_scale_comp * 0.9 if current_stroke_width > 0 else 0  # FRONTEND_STROKE_COMPENSATION
+                # 使用统一的描边补偿计算
+                compensated_stroke_width = StrokeUtils.compute_compensated_stroke_width(
+                    current_stroke_width, scale, current_shape_type, scale_factor
+                )
 
                 if isinstance(transformed_coords, dict) and transformed_coords.get("type") == "donut":
                     self.render_utils.render_donut_with_shapely(image, transformed_coords["outer"], transformed_coords["inner"],
@@ -402,7 +405,7 @@ class BatchProcessor:
                 if current_transparent_bg:
                     bg_image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
                 else:
-                    bg_rgb = self.render_utils.hex_to_rgb(current_bg_color) + (255,)
+                    bg_rgb = ColorUtils.hex_to_rgba(current_bg_color)
                     bg_image = Image.new("RGBA", (width, height), bg_rgb)
 
                 bg_array = np.array(bg_image).astype(np.float32) / 255.0

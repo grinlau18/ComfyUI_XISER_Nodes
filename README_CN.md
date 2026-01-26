@@ -19,6 +19,8 @@
 ✅ **LLM Orchestrator增强** - 新增Wan 2.6模型支持，提供图像编辑和图文混排模式
 ✅ **VGM Orchestrator引入** - 新增视频生成编排器节点，支持参考生视频、图生视频和首尾帧生视频三种模式
 ✅ **性能优化** - 改进节点交互和系统性能
+✅ **新增Qwen VL推理节点** - 本地运行Qwen3-VL视觉语言模型进行图像分析和推理
+✅ **新增多角度提示词节点** - 可视化界面生成摄像机角度提示词，支持3D预览
 
 ---
 
@@ -140,6 +142,12 @@
   ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_2.jpeg)
   ![XIS_LLMOrchestrator工作流示例](img/XIS_LLMOrchestrator_3.jpeg)
 
+### 🔍 Qwen VL本地推理节点（XIS_QwenVLInference）
+- **用途**：本地运行Qwen3-VL视觉语言模型进行图像分析和推理，支持最多8张图像输入。
+- **功能**：图像描述、视觉问答、文档理解、OCR等，完整的生成参数控制（temperature, top_p, max_tokens等）。
+- **特点**：自动扫描模型目录，支持Qwen3-VL系列模型，本地推理无需联网。
+  ![Qwen VL Inference节点界面](img/XIS_QwenVLInferenceV3_1.jpeg)
+
 ### 🎬 视频生成编排器（XIS_VGMOrchestrator）
 - **用途**：编排多种视频生成任务，支持参考生视频（r2v）、图生视频（i2v）和首尾帧生视频（kf2v）三种模式。输出视频帧作为图像批次，与ComfyUI视频处理流程无缝集成。
 - **核心特性**：
@@ -237,6 +245,9 @@
 - **XIS_Label**：双击编辑 HTML/Markdown，切换编辑器、调整背景与文本缩放，并享受统一段距、列表重新换行与智能滚动条。
   - Markdown 支持标题、列表、加粗/斜体、行内代码与链接，解析后渲染出一致的段落与滚动行为。
   ![文本标签功能](img/XIS_Label_1.jpeg)
+
+- **XIS_MultipleAnglesPrompt**：通过可视化界面生成摄像机角度提示词，支持3D预览和图像参考。为Qwen-Image-Edit-2511-Multiple-Angles-LoRA模型提供精确的摄像机角度控制。
+  ![Multiple Angles Prompt节点界面](img/XIS_MultipleAnglesPromptV3_1.jpeg)
 
 ### 🧰 图像、蒙版与文件节点
 - **XIS_ImagePuzzle**：高级图像拼接功能，支持四种布局类型（左主右副、右主左副、上主下副、下主上副），多张主图支持正确间距和对齐。 

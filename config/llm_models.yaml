@@ -692,6 +692,7 @@ models:
       default_seed: 42
       default_enable_cache: true
 
+
 # 模型分组（用于UI下拉框）
 groups:
   alibaba:

@@ -1,8 +1,23 @@
-opencv-python
-psd-tools
-shapely
-fonttools
+# Core dependencies for XISER Nodes
+opencv-python>=4.8.0
+psd-tools>=1.9.26
+shapely>=2.0.1
+fonttools>=4.43.0
 kornia==0.7.2
-timm
-cryptography
-requests
+timm>=0.9.16
+cryptography>=41.0.7
+pyyaml>=6.0.1
+packaging>=23.0
+requests>=2.31.0
+
+# Optional Qwen3-VL dependencies (for local model inference)
+# Install with: pip install "ComfyUI_XISER_Nodes[qwen-vl]" or manually:
+transformers>=4.57.0
+torch>=2.0.0
+huggingface-hub>=0.20.0
+safetensors>=0.4.0
+accelerate>=0.26.0
+bitsandbytes>=0.42.0
+pillow>=10.0.0
+numpy>=1.24.0
+flash-attn>=2.0.0

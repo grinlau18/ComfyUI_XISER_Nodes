@@ -9,7 +9,7 @@ __all__ = [
 ]
 __author__ = "XISER"
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.4.1"  # 确保是纯语义化版本（无后缀）
+__version__ = "1.4.2"  # 确保是纯语义化版本（无后缀）
 __license__ = "MIT"
 __description__ = "This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing (supporting mainstream models like DeepSeek, Qwen, Kimi, Wan), professional-grade image processing toolchains, video generation orchestration systems (supporting Wansiang series reference-based video, image-to-video, and keyframe-to-video generation), and visual data tools, providing end-to-end support for AI image and video generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, unified configuration-based video generation orchestration, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows."
 
@@ -275,8 +275,12 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.image_preview_v3 import V3_NODE_CLASSES as IMAGE_PREVIEW_NODES
             # 新增节点 - LLM
             from .src.xiser_nodes.llm_v3 import V3_NODE_CLASSES as LLM_NODES
+            # 新增节点 - Qwen3-VL Local
+            from .src.xiser_nodes.qwen3_vl_local_v3 import V3_NODE_CLASSES as QWEN3_VL_NODES
             # 新增节点 - VGM
             from .src.xiser_nodes.vgm_v3 import V3_NODE_CLASSES as VGM_NODES
+            # 新增节点 - Multiple Angles Prompt
+            from .src.xiser_nodes.multiple_angles_prompt_v3 import V3_NODE_CLASSES as MULTIPLE_ANGLES_PROMPT_NODES
 
             # 合并所有V3节点
             v3_nodes = []
@@ -305,6 +309,8 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(IMAGE_PREVIEW_NODES)
             v3_nodes.extend(LLM_NODES)
             v3_nodes.extend(VGM_NODES)
+            v3_nodes.extend(MULTIPLE_ANGLES_PROMPT_NODES)
+            v3_nodes.extend(QWEN3_VL_NODES)
 
             # print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")  # 简化日志，不显示此信息
             # 静默加载节点

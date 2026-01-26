@@ -15,7 +15,7 @@ class XIS_DynamicImageInputsV3(io.ComfyNode):
         return io.Schema(
             node_id="XIS_DynamicImageInputs",
             display_name="Dynamic Image Inputs",
-            category="XISER_Nodes/Image_Processing",
+            category="XISER_Nodes/Data_Processing",
             description="收集所有连接的图像并输出为列表，支持动态输入端口",
             inputs=[
                 # 动态输入：第一个图像输入

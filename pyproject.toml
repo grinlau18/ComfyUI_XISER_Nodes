@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_XISER_Nodes"
 description = "This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing (supporting mainstream models like DeepSeek, Qwen, Kimi, Wan), professional-grade image processing toolchains, video generation orchestration systems (supporting Wansiang series reference-based video, image-to-video, and keyframe-to-video generation), and visual data tools, providing end-to-end support for AI image and video generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, unified configuration-based video generation orchestration, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows."
-version = "1.4.1"
+version = "1.4.2"
 license = {file = "LICENSE"}
 dependencies = [
   "opencv-python>=4.8.0",
@@ -11,7 +11,22 @@ dependencies = [
   "kornia==0.7.2",
   "timm>=0.9.16",
   "cryptography>=41.0.7",
+  "pyyaml>=6.0.1",
+  "packaging>=23.0",
   "requests>=2.31.0"
+]
+
+[project.optional-dependencies]
+qwen-vl = [
+  "transformers>=4.57.0",
+  "torch>=2.0.0",
+  "huggingface-hub>=0.20.0",
+  "safetensors>=0.4.0",
+  "accelerate>=0.26.0",
+  "bitsandbytes>=0.42.0",
+  "pillow>=10.0.0",
+  "numpy>=1.24.0",
+  "flash-attn>=2.0.0"
 ]
 
 [project.urls]
