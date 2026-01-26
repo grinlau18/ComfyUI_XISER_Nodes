@@ -275,8 +275,12 @@ class XISERExtension(ComfyExtension):
             from .src.xiser_nodes.image_preview_v3 import V3_NODE_CLASSES as IMAGE_PREVIEW_NODES
             # 新增节点 - LLM
             from .src.xiser_nodes.llm_v3 import V3_NODE_CLASSES as LLM_NODES
+            # 新增节点 - Qwen3-VL Local
+            from .src.xiser_nodes.qwen3_vl_local_v3 import V3_NODE_CLASSES as QWEN3_VL_NODES
             # 新增节点 - VGM
             from .src.xiser_nodes.vgm_v3 import V3_NODE_CLASSES as VGM_NODES
+            # 新增节点 - Multiple Angles Prompt
+            from .src.xiser_nodes.multiple_angles_prompt_v3 import V3_NODE_CLASSES as MULTIPLE_ANGLES_PROMPT_NODES
 
             # 合并所有V3节点
             v3_nodes = []
@@ -305,6 +309,8 @@ class XISERExtension(ComfyExtension):
             v3_nodes.extend(IMAGE_PREVIEW_NODES)
             v3_nodes.extend(LLM_NODES)
             v3_nodes.extend(VGM_NODES)
+            v3_nodes.extend(MULTIPLE_ANGLES_PROMPT_NODES)
+            v3_nodes.extend(QWEN3_VL_NODES)
 
             # print(f"[XISER V3] 成功加载 {len(v3_nodes)} 个V3节点")  # 简化日志，不显示此信息
             # 静默加载节点

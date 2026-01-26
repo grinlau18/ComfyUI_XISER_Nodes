@@ -11,7 +11,22 @@ dependencies = [
   "kornia==0.7.2",
   "timm>=0.9.16",
   "cryptography>=41.0.7",
+  "pyyaml>=6.0.1",
+  "packaging>=23.0",
   "requests>=2.31.0"
+]
+
+[project.optional-dependencies]
+qwen-vl = [
+  "transformers>=4.57.0",
+  "torch>=2.0.0",
+  "huggingface-hub>=0.20.0",
+  "safetensors>=0.4.0",
+  "accelerate>=0.26.0",
+  "bitsandbytes>=0.42.0",
+  "pillow>=10.0.0",
+  "numpy>=1.24.0",
+  "flash-attn>=2.0.0"
 ]
 
 [project.urls]
