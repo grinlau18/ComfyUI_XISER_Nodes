@@ -246,7 +246,7 @@
   - Markdown 支持标题、列表、加粗/斜体、行内代码与链接，解析后渲染出一致的段落与滚动行为。
   ![文本标签功能](img/XIS_Label_1.jpeg)
 
-- **XIS_MultipleAnglesPrompt**：通过可视化界面生成摄像机角度提示词，支持3D预览和图像参考。为Qwen-Image-Edit-2511-Multiple-Angles-LoRA模型提供精确的摄像机角度控制。
+- **XIS_MultipleAnglesPrompt**：通过可视化界面生成摄像机角度提示词，支持3D预览和图像参考。为 [Qwen-Image-Edit-2511-Multiple-Angles-LoRA模型](https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA) 提供精确的摄像机角度控制。
   ![Multiple Angles Prompt节点界面](img/XIS_MultipleAnglesPromptV3_1.jpeg)
 
 ### 🧰 图像、蒙版与文件节点

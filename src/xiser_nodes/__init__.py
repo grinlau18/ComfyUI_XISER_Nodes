@@ -1,6 +1,6 @@
 """XISER Nodes Core Module - V3 Architecture"""
 
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 __author__ = "XISER"
 __email__ = "grinlau18@gmail.com"
 __license__ = "MIT"  # 补充许可证（可选但推荐）

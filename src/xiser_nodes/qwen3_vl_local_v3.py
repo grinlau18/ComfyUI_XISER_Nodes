@@ -21,178 +21,40 @@ except ImportError:
 # 创建API实例用于进度更新
 api_sync = ComfyAPISync()
 
-# 模型目录路径
-# 使用ComfyUI标准目录：models/LLM
-if HAS_FOLDER_PATHS:
-    # 获取LLM目录，参考ComfyUI-QwenVL项目的实现
-    llm_paths = folder_paths.get_folder_paths("LLM") if "LLM" in folder_paths.folder_names_and_paths else []
-    if llm_paths:
-        MODEL_BASE_DIR = llm_paths[0]
-    else:
-        # Fallback to default behavior
-        MODEL_BASE_DIR = os.path.join(folder_paths.models_dir, "LLM")
-else:
-    # Fallback path if folder_paths not available
-    # Try to get from environment variable, otherwise use default location in user's home
-    comfyui_path = os.environ.get("COMFYUI_PATH", os.path.expanduser("~/ComfyUI"))
-    MODEL_BASE_DIR = os.path.join(comfyui_path, "models", "LLM")
-
-# 完整的Qwen系列视觉模型列表（Hugging Face模型ID）
-QWEN_VL_MODELS = [
-    "Qwen/Qwen3-VL-2B-Instruct",
-    "Qwen/Qwen3-VL-2B-Thinking",
-    "Qwen/Qwen3-VL-2B-Instruct-FP8",
-    "Qwen/Qwen3-VL-2B-Thinking-FP8",
-    "Qwen/Qwen3-VL-4B-Instruct",
-    "Qwen/Qwen3-VL-4B-Thinking",
-    "Qwen/Qwen3-VL-4B-Instruct-FP8",
-    "Qwen/Qwen3-VL-4B-Thinking-FP8",
-    "Qwen/Qwen3-VL-8B-Instruct",
-    "Qwen/Qwen3-VL-8B-Thinking",
-    "Qwen/Qwen3-VL-8B-Instruct-FP8",
-    "Qwen/Qwen3-VL-8B-Thinking-FP8",
-    "Qwen/Qwen3-VL-32B-Instruct",
-    "Qwen/Qwen3-VL-32B-Thinking",
-    "Qwen/Qwen3-VL-32B-Instruct-FP8",
-    "Qwen/Qwen3-VL-32B-Thinking-FP8",
-    "Qwen/Qwen2.5-VL-3B-Instruct",
-    "Qwen/Qwen2.5-VL-7B-Instruct",
-]
+# 导入模型管理模块
+from .llm.model_manager import QWEN_VL_MODELS, QWEN_VL_OPTIONS_BUILDER, MODEL_BASE_DIRS
+from .llm.progress_manager import ProgressManager
 
 # 最大图像数量（Qwen3-VL支持最多8张图像）
 MAX_IMAGES = 8
 
-def _scan_local_models() -> Tuple[List[str], str]:
-    """扫描本地模型目录，返回模型路径列表和默认值
 
-    只扫描本地模型，不支持Hugging Face Hub格式模型。
-    参考ComfyUI-QwenVL项目，支持Transformers模型格式。
-    """
-    try:
-        # 确保目录存在
-        os.makedirs(MODEL_BASE_DIR, exist_ok=True)
-
-        if not os.path.isdir(MODEL_BASE_DIR):
-            logger.warning(f"Model directory not found: {MODEL_BASE_DIR}")
-            return [], ""  # 返回空列表，没有默认模型
-
-        # 递归查找包含config.json的目录（Transformers模型格式）
-        model_paths = []
-        for root, dirs, files in os.walk(MODEL_BASE_DIR):
-            if "config.json" in files:
-                # 使用相对路径作为显示路径
-                rel_path = os.path.relpath(root, MODEL_BASE_DIR)
-                model_paths.append(rel_path)
-
-        # 只返回本地模型，不添加Hugging Face选项
-        if model_paths:
-            # 按字母排序，确保一致性
-            model_paths.sort()
-            return model_paths, model_paths[0]  # 第一个本地模型作为默认
-        else:
-            logger.debug(f"No local models found in {MODEL_BASE_DIR}")
-            return [], ""  # 返回空列表，没有默认模型
-
-    except Exception as e:
-        logger.error(f"Failed to scan model directory: {e}")
-        return [], ""  # 返回空列表，没有默认模型
-
-
-def _get_model_options() -> Tuple[List[str], str, Dict[str, str]]:
-    """获取模型选项列表，包括完整Qwen系列模型和本地模型状态
-
-    返回:
-        (选项列表, 默认选项, 显示名称到模型ID的映射)
-        选项格式: "显示名称 [状态]" 显示名称为不带Qwen/前缀的模型名称
-        例如: "Qwen3-VL-8B-Instruct [本地]"
-    """
-    # 扫描本地模型目录
-    local_paths, _ = _scan_local_models()
-
-    # 构建本地模型路径集合，用于快速检查
-    local_paths_set = set(local_paths)
-
-    options = []
-    default_model_id = None
-    display_to_model_id = {}
-    model_id_to_display = {}
-
-    for model_id in QWEN_VL_MODELS:
-        # 提取显示名称（去掉Qwen/前缀）
-        if model_id.startswith("Qwen/"):
-            display_name = model_id[5:]  # 去掉"Qwen/"
-        else:
-            display_name = model_id
-
-        # 检查是否为本地模型：检查完整模型ID路径是否在本地路径中
-        # 例如：Qwen/Qwen3-VL-8B-Instruct 对应本地路径 Qwen/Qwen3-VL-8B-Instruct
-        is_local = model_id in local_paths_set
-        status = "[本地]" if is_local else "[需下载]"
-        display = f"{display_name} {status}"
-        options.append(display)
-        display_to_model_id[display] = model_id
-        model_id_to_display[model_id] = display
-
-        # 优先选择第一个本地模型作为默认
-        if is_local and default_model_id is None:
-            default_model_id = model_id
-
-    # 如果没有本地模型，则使用第一个模型作为默认
-    if default_model_id is None and QWEN_VL_MODELS:
-        default_model_id = QWEN_VL_MODELS[0]
-
-    # 获取默认选项字符串
-    default_display = model_id_to_display.get(default_model_id, options[0] if options else "")
-
-    return options, default_display, display_to_model_id
-
-
-
-
-# 进度阶段映射
-_STAGE_INDEX = {"准备": 0, "加载模型": 1, "处理": 2, "推理": 3, "解析": 4, "完成": 5}
-
+# 进度更新函数 - 使用ProgressManager统一处理
 def _update_progress(stage: str, progress: float, total_stages: int = 6, node_id: str = ""):
-    """更新进度显示
+    """更新进度显示 - 兼容旧接口，使用ProgressManager统一处理
 
     Args:
         stage: 当前阶段描述
         progress: 当前阶段进度 (0-1)
-        total_stages: 总阶段数
+        total_stages: 总阶段数 (已弃用，保留兼容性)
         node_id: 节点ID
     """
-    try:
-        # 阶段映射到索引
-        stage_index = _STAGE_INDEX.get(stage, 0)
-
-        # 计算整体进度
-        base_progress = (stage_index / total_stages) * 100
-        stage_progress = progress * (100 / total_stages)
-        total_progress = min(base_progress + stage_progress, 100)
-
-        # 更新进度
-        api_sync.execution.set_progress(
-            value=total_progress,
-            max_value=100.0,
-            node_id=node_id
-        )
-    except Exception as e:
-        # 进度更新失败不影响主要功能
-        logger.debug(f"进度更新失败: {e}")
+    # 使用ProgressManager的统一进度更新
+    ProgressManager.update_progress_for_qwen_vl(stage, progress, node_id)
 
 
 class XIS_QwenVLInferenceV3(io.ComfyNode):
-    """Qwen3-VL Local Node - V3版本
+    """Qwen3-VL Local Node - V3 version
 
-    使用Hugging Face Transformers在本地运行Qwen3-VL视觉语言模型。
-    支持图像理解和多模态对话。
+    Run Qwen3-VL vision-language model locally using Hugging Face Transformers.
+    Supports image understanding and multimodal dialogue.
     """
 
     @classmethod
     def define_schema(cls) -> io.Schema:
         """定义节点架构"""
         # 获取完整的模型选项列表，包括本地状态标记和映射
-        model_options, default_display, display_to_model_id = _get_model_options()
+        model_options, default_display, display_to_model_id = QWEN_VL_OPTIONS_BUILDER.build_options()
         logger.debug(f"Available models: {len(model_options)}, default: {default_display}")
 
         # 存储映射供execute方法使用
@@ -202,72 +64,72 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
             node_id="XIS_QwenVLInference",
             display_name="Qwen VL Inference",
             category="XISER_Nodes/LLM",
-            description=f"""本地运行Qwen3-VL视觉语言模型进行图像理解和多模态对话。
+            description=f"""Run Qwen3-VL vision-language model locally for image understanding and multimodal dialogue.
 
-功能：本地模型推理、图像描述、视觉问答、文档理解、OCR等。
-支持最多8张图像输入，完整的生成参数控制（temperature, top_p, max_tokens等）。
-自动扫描模型目录：{MODEL_BASE_DIR}，支持Qwen3-VL系列模型。
-首次使用可能需要下载模型权重（约9GB）。
+Features: Local model inference, image captioning, visual question answering, document understanding, OCR, etc.
+Supports up to 8 image inputs, complete generation parameter control (temperature, top_p, max_tokens, etc.).
+Automatically scans model directories: {', '.join(MODEL_BASE_DIRS)}, supports Qwen3-VL series models.
+First-time use may require downloading model weights (approx. 9GB).
 
-硬件：自动GPU/CPU选择，精度控制，Flash Attention 2加速。
-生成参数：temperature（0-2）、top_p（0-1）、max_tokens（16-16384）等。
+Hardware: Automatic GPU/CPU selection, precision control, Flash Attention 2 acceleration.
+Generation parameters: temperature (0-2), top_p (0-1), max_tokens (16-16384), etc.
 """,
             inputs=[
                 io.String.Input(
                     "instruction",
                     default="Describe this image.",
                     multiline=True,
-                    tooltip="输入指令或问题（例如：描述这张图片、图像里有什么？）"
+                    tooltip="Input instruction or question (e.g., describe this image, what's in the image?)"
                 ),
                 io.Image.Input(
                     "image",
                     optional=True,
-                    tooltip="单张输入图像"
+                    tooltip="Single input image"
                 ),
                 io.Image.Input(
                     "pack_images",
                     optional=True,
-                    tooltip="多张输入图像包"
+                    tooltip="Multiple input image pack"
                 ),
                 io.Combo.Input(
                     "model",
                     options=model_options,
                     default=default_display,
                     optional=True,
-                    tooltip="选择模型：自动扫描本地模型或使用Hugging Face模型ID。如果使用Hugging Face模型ID且本地不存在，会自动下载到{os.path.join(MODEL_BASE_DIR, '组织名称/模型名称')}目录，例如：{os.path.join(MODEL_BASE_DIR, 'Qwen/Qwen3-VL-8B-Instruct')}"
+                    tooltip="Select model: Automatically scans local models (search directories: {', '.join(MODEL_BASE_DIRS)}) or use Hugging Face model ID. If using Hugging Face model ID and not available locally, will automatically download to {os.path.join(MODEL_BASE_DIRS[0], 'organization/model_name')} directory, e.g.: {os.path.join(MODEL_BASE_DIRS[0], 'Qwen/Qwen3-VL-8B-Instruct')}"
                 ),
                 io.String.Input(
                     "system_prompt",
                     default="You are Qwen3-VL, a helpful vision-language assistant.",
                     multiline=True,
                     optional=True,
-                    tooltip="系统提示词，定义助手角色"
+                    tooltip="System prompt, defines assistant role"
                 ),
                 io.Combo.Input(
                     "device",
                     options=["auto", "cuda", "cpu"],
                     default="auto",
                     optional=True,
-                    tooltip="推理设备：auto（自动选择）、cuda（GPU）、cpu"
+                    tooltip="Inference device: auto (automatic selection), cuda (GPU), cpu"
                 ),
                 io.Combo.Input(
                     "dtype",
                     options=["auto", "bfloat16", "float16", "float32"],
                     default="auto",
                     optional=True,
-                    tooltip="模型精度：auto（自动选择）、bfloat16（GPU推荐）、float16、float32"
+                    tooltip="Model precision: auto (automatic selection), bfloat16 (GPU recommended), float16, float32"
                 ),
                 io.Boolean.Input(
                     "flash_attention_2",
                     default=False,
                     optional=True,
-                    tooltip="启用Flash Attention 2加速（需要安装flash-attn库）"
+                    tooltip="Enable Flash Attention 2 acceleration (requires flash-attn library installation)"
                 ),
                 io.Boolean.Input(
                     "trust_remote_code",
                     default=True,
                     optional=True,
-                    tooltip="信任远程代码（加载自定义模型时需要）"
+                    tooltip="Trust remote code (required when loading custom models)"
                 ),
                 io.Float.Input(
                     "temperature",
@@ -276,7 +138,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=2.0,
                     step=0.05,
                     optional=True,
-                    tooltip="温度参数，控制随机性（0.0: 确定性，1.0: 标准，2.0: 高随机性）"
+                    tooltip="Temperature parameter, controls randomness (0.0: deterministic, 1.0: standard, 2.0: high randomness)"
                 ),
                 io.Float.Input(
                     "top_p",
@@ -285,7 +147,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=1.0,
                     step=0.05,
                     optional=True,
-                    tooltip="Top-p采样参数（核采样）"
+                    tooltip="Top-p sampling parameter (nucleus sampling)"
                 ),
                 io.Int.Input(
                     "max_tokens",
@@ -294,7 +156,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=16384,
                     step=8,
                     optional=True,
-                    tooltip="最大生成token数（Qwen3-VL支持长上下文）"
+                    tooltip="Maximum number of tokens to generate (Qwen3-VL supports long context)"
                 ),
                 io.Int.Input(
                     "top_k",
@@ -303,7 +165,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=100,
                     step=1,
                     optional=True,
-                    tooltip="Top-k采样参数"
+                    tooltip="Top-k sampling parameter"
                 ),
                 io.Float.Input(
                     "repetition_penalty",
@@ -312,7 +174,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=2.0,
                     step=0.05,
                     optional=True,
-                    tooltip="重复惩罚，防止重复生成"
+                    tooltip="Repetition penalty, prevents repetitive generation"
                 ),
                 io.Float.Input(
                     "presence_penalty",
@@ -321,7 +183,7 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     max=2.0,
                     step=0.05,
                     optional=True,
-                    tooltip="存在惩罚，鼓励生成新内容"
+                    tooltip="Presence penalty, encourages generation of new content"
                 ),
                 io.Int.Input(
                     "seed",
@@ -331,17 +193,17 @@ class XIS_QwenVLInferenceV3(io.ComfyNode):
                     step=1,
                     control_after_generate=True,
                     optional=True,
-                    tooltip="随机种子（≥0为固定模式，-1为随机）"
+                    tooltip="Random seed (≥0 for fixed mode, -1 for random)"
                 ),
                 io.Boolean.Input(
                     "enable_cache",
                     default=True,
                     optional=True,
-                    tooltip="启用模型缓存，避免重复加载"
+                    tooltip="Enable model caching to avoid repeated loading"
                 ),
             ],
             outputs=[
-                io.String.Output("response", display_name="模型响应"),
+                io.String.Output("response", display_name="Model Response"),
             ]
         )
 
