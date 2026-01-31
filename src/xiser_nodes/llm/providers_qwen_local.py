@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import warnings
+import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from .base import (
     _image_to_data_url_from_b64,
 )
 from ..utils import logger
+from .model_manager import get_model_dirs as get_model_dirs_from_manager
 
 # Import folder_paths for ComfyUI model directory management
 try:
@@ -36,6 +38,32 @@ try:
 except ImportError:
     HAS_HUGGINGFACE_HUB = False
     logger.warning("huggingface_hub not available, model downloading disabled")
+
+# Try to import tqdm for download progress display
+try:
+    from tqdm.auto import tqdm
+    HAS_TQDM = True
+except ImportError:
+    HAS_TQDM = False
+    logger.debug("tqdm not available, download progress will not be displayed")
+
+# Import requests for handling network errors
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+    logger.warning("requests library not available")
+
+# Hugging Face mirror support
+HF_MIRRORS = {
+    "hf-mirror.com": "https://hf-mirror.com",
+    "huggingface.co": "https://huggingface.co",
+}
+HF_ENDPOINTS = [
+    "https://huggingface.co",  # Original endpoint
+    "https://hf-mirror.com",   # Chinese mirror
+]
 
 # Try to import transformers, but make it optional
 try:
@@ -58,11 +86,208 @@ except Exception as e:
     logger.warning(f"Failed to import Qwen3-VL modules from transformers: {e}. Qwen3-VL local provider will not work.")
 
 
+def get_model_dirs() -> List[Path]:
+    """获取所有可能的模型目录列表，按搜索顺序排列。
+
+    返回:
+        List[Path]: 模型目录路径列表，按优先级排序
+    """
+    # 使用统一的模型管理器获取目录
+    return get_model_dirs_from_manager()
+
+
+def check_model_dir(dir_path: Path) -> bool:
+    """检查目录是否包含有效的模型文件"""
+    if dir_path.exists() and dir_path.is_dir():
+        has_weights = any(dir_path.glob("*.safetensors")) or any(dir_path.glob("*.bin"))
+        if has_weights and os.path.exists(dir_path / "config.json"):
+            logger.debug(f"Valid model found at: {dir_path}")
+            return True
+    return False
+
+
+def find_model_in_dirs(model_id: str, model_dirs: List[Path]) -> Optional[Path]:
+    """在多个目录中查找模型
+
+    Args:
+        model_id: 模型ID或相对路径
+        model_dirs: 搜索目录列表
+
+    Returns:
+        Optional[Path]: 找到的模型路径，如果未找到则返回None
+    """
+    for model_dir in model_dirs:
+        if "/" in model_id:
+            # 创建完整路径，包括组织名称
+            target_dir = model_dir / model_id
+        else:
+            # 可能是本地模型相对路径（不含组织前缀）
+            target_dir = model_dir / model_id
+
+        if check_model_dir(target_dir):
+            logger.debug(f"Found model at: {target_dir}")
+            return target_dir
+
+    return None
+
+
+def download_with_mirror_fallback(repo_id: str, target_dir: Path) -> str:
+    """下载模型，支持镜像回退
+
+    先尝试使用原始Hugging Face地址，如果失败则尝试使用国内镜像。
+    每个endpoint最多重试3次，重试间隔逐渐增加。
+
+    Args:
+        repo_id: 模型ID，如"Qwen/Qwen3-VL-8B-Instruct"
+        target_dir: 目标目录
+
+    Returns:
+        本地模型目录路径
+    """
+    last_error = None
+    last_endpoint = None
+
+    # 下载配置
+    max_retries = 3  # 每个endpoint最大重试次数
+    base_retry_delay = 5  # 基础重试延迟（秒）
+    timeout = 300.0  # 超时时间（秒）
+
+    # 检查用户是否已经设置了HF_ENDPOINT
+    user_endpoint = os.environ.get("HF_ENDPOINT")
+    endpoints_to_try = []
+
+    if user_endpoint:
+        # 用户已经设置了endpoint，只尝试用户设置的
+        logger.info(f"User has set HF_ENDPOINT={user_endpoint}, using user's endpoint")
+        endpoints_to_try = [user_endpoint]
+    else:
+        # 用户没有设置endpoint，尝试所有endpoint
+        endpoints_to_try = HF_ENDPOINTS
+        logger.info(f"No user HF_ENDPOINT set, will try all endpoints: {endpoints_to_try}")
+
+    for i, endpoint in enumerate(endpoints_to_try):
+        # 为当前endpoint尝试多次重试
+        retry_count = 0
+        endpoint_success = False
+
+        # 记录开始尝试的端点
+        logger.info(f"Trying endpoint {i+1}/{len(endpoints_to_try)}: {endpoint}")
+
+        while retry_count < max_retries and not endpoint_success:
+            try:
+                if retry_count > 0:
+                    logger.info(f"Retry {retry_count}/{max_retries} for endpoint {endpoint}")
+                    # 计算指数退避延迟
+                    delay = base_retry_delay * (2 ** (retry_count - 1))
+                    logger.info(f"Waiting {delay} seconds before retry...")
+                    import time
+                    time.sleep(delay)
+
+                logger.info(f"Attempting to download from endpoint: {endpoint} (attempt {retry_count + 1}/{max_retries})")
+                logger.info(f"Downloading {repo_id} to {target_dir}")
+
+                # 设置环境变量以使用特定的endpoint
+                original_env = os.environ.get("HF_ENDPOINT")
+                os.environ["HF_ENDPOINT"] = endpoint
+
+                try:
+                    download_kwargs = {
+                        "repo_id": repo_id,
+                        "local_dir": str(target_dir),
+                        "local_dir_use_symlinks": False,
+                        "ignore_patterns": ["*.md", ".git*", "*.txt"],
+                        "resume_download": True,  # 启用断点续传
+                        "max_workers": 1,  # 设置为1以减少内存使用，避免崩溃
+                    }
+
+                    # 添加进度条显示如果tqdm可用
+                    if HAS_TQDM:
+                        download_kwargs["tqdm_class"] = tqdm
+                        logger.info("Download progress will be displayed with tqdm")
+
+                    snapshot_download(**download_kwargs)
+                    logger.info(f"Successfully downloaded from {endpoint} on attempt {retry_count + 1}")
+                    logger.debug(f"Model downloaded successfully to: {target_dir}")
+
+                    # 恢复原始环境变量
+                    if original_env is not None:
+                        os.environ["HF_ENDPOINT"] = original_env
+                    else:
+                        os.environ.pop("HF_ENDPOINT", None)
+
+                    endpoint_success = True
+                    return str(target_dir)
+                finally:
+                    # 确保环境变量被恢复
+                    if original_env is not None:
+                        os.environ["HF_ENDPOINT"] = original_env
+                    else:
+                        os.environ.pop("HF_ENDPOINT", None)
+
+            except Exception as e:
+                retry_count += 1
+                last_error = e
+                last_endpoint = endpoint
+
+                if retry_count < max_retries:
+                    logger.warning(f"Attempt {retry_count} failed for endpoint {endpoint}: {e}")
+                    # 继续重试
+                else:
+                    logger.warning(f"All {max_retries} attempts failed for endpoint {endpoint}: {e}")
+                    # 跳出循环，尝试下一个endpoint
+
+        # 如果当前endpoint成功，已经返回。如果失败，继续下一个endpoint
+        if not endpoint_success and i < len(endpoints_to_try) - 1:
+            logger.info(f"Endpoint {endpoint} failed, switching to next endpoint...")
+
+    # 所有endpoint都失败了
+    if last_error is not None:
+        # 提供详细的错误信息
+        error_msg = f"Failed to download model {repo_id} from all endpoints after {max_retries} retries per endpoint.\n\n"
+
+        # 检查是否为网络错误
+        network_errors = ["timeout", "Timeout", "connection", "Connection", "network", "Network"]
+        if any(err in str(last_error) for err in network_errors):
+            error_msg += "Network error detected. This could be due to:\n"
+            error_msg += "1. Slow or unstable internet connection\n"
+            error_msg += "2. Firewall or proxy blocking the connection\n"
+            error_msg += "3. Hugging Face servers being temporarily unavailable\n\n"
+
+        error_msg += f"Tried endpoints (each retried {max_retries} times):\n"
+        for endpoint in endpoints_to_try:
+            error_msg += f"  - {endpoint}\n"
+        error_msg += "\n"
+
+        # 针对国内用户的建议
+        if "hf-mirror.com" in endpoints_to_try:
+            error_msg += "For users in China:\n"
+            error_msg += "1. The system automatically tried the Chinese mirror (hf-mirror.com)\n"
+            error_msg += "2. If both endpoints failed, please check your network connection\n"
+            error_msg += "3. You can also try setting the HF_ENDPOINT environment variable manually:\n"
+            error_msg += "   - export HF_ENDPOINT=https://hf-mirror.com\n"
+            error_msg += "\n"
+
+        error_msg += "Suggested solutions:\n"
+        error_msg += "1. Check your internet connection and try again\n"
+        error_msg += "2. Use a VPN if you're in a region with restricted access\n"
+        error_msg += "3. Download the model manually:\n"
+        error_msg += f"   - Visit: https://huggingface.co/{repo_id} or https://hf-mirror.com/{repo_id}\n"
+        error_msg += f"   - Download the model files to: {target_dir}\n"
+        error_msg += "   - Required files: config.json, *.safetensors or *.bin files\n"
+        error_msg += "4. Try using a smaller model (e.g., Qwen3-VL-2B-Instruct)\n\n"
+        error_msg += f"Last error from {last_endpoint}: {str(last_error)}"
+
+        raise RuntimeError(error_msg)
+    else:
+        raise RuntimeError(f"Failed to download model {repo_id} from all endpoints")
+
+
 def ensure_model(model_id: str) -> str:
     """确保模型存在，如果本地没有则下载
 
     参考ComfyUI-QwenVL项目的ensure_model函数实现。
     模型下载到ComfyUI标准目录：models/LLM/{完整模型ID路径}
+    支持从多个目录（LLM、prompt_generator）查找模型。
 
     Args:
         model_id: Hugging Face模型ID（如"Qwen/Qwen3-VL-8B-Instruct"）或本地模型路径
@@ -76,75 +301,51 @@ def ensure_model(model_id: str) -> str:
             logger.debug(f"Using existing local model at: {model_id}")
             return model_id
 
-    # 获取模型目录
-    if HAS_FOLDER_PATHS:
-        # 参考ComfyUI-QwenVL项目的目录结构
-        llm_paths = folder_paths.get_folder_paths("LLM") if "LLM" in folder_paths.folder_names_and_paths else []
-        if llm_paths:
-            models_dir = Path(llm_paths[0])
-        else:
-            # Fallback to default behavior
-            models_dir = Path(folder_paths.models_dir) / "LLM"
-    else:
-        # Fallback path
-        # Try to get from environment variable, otherwise use default location in user's home
-        comfyui_path = os.environ.get("COMFYUI_PATH", os.path.expanduser("~/ComfyUI"))
-        models_dir = Path(comfyui_path) / "models" / "LLM"
+    # 获取所有可能的模型目录
+    model_dirs = get_model_dirs()
+    if not model_dirs:
+        raise ValueError("No model directories configured")
 
-    # 确保根目录存在
-    models_dir.mkdir(parents=True, exist_ok=True)
+    # 首先尝试在所有目录中查找现有模型
+    found_dir = find_model_in_dirs(model_id, model_dirs)
+    if found_dir:
+        return str(found_dir)
 
-    # 使用完整的模型ID作为目录路径
-    # 例如：Qwen/Qwen3-VL-8B-Instruct → {models_dir}/Qwen/Qwen3-VL-8B-Instruct
-    # 例如：Qwen/Qwen3-VL-2B-Instruct → {models_dir}/Qwen/Qwen3-VL-2B-Instruct
-    # 这保持了Hugging Face的原始组织/模型结构
-    if "/" in model_id:
-        # 创建完整路径，包括组织名称
-        target_dir = models_dir / model_id
-    else:
-        # 可能是本地模型相对路径（不含组织前缀）
-        target_dir = models_dir / model_id
-
-    # 检查模型是否已存在（有config.json文件）
-    def check_model_dir(dir_path: Path) -> bool:
-        """检查目录是否包含有效的模型文件"""
-        if dir_path.exists() and dir_path.is_dir():
-            has_weights = any(dir_path.glob("*.safetensors")) or any(dir_path.glob("*.bin"))
-            if has_weights and os.path.exists(dir_path / "config.json"):
-                logger.debug(f"Using existing model at: {dir_path}")
-                return True
-        return False
-
-    # 检查目标目录是否存在（完整路径格式）
-    if check_model_dir(target_dir):
-        return str(target_dir)
-
-    # 如果没有模型文件且支持下载，从Hugging Face下载
+    # 如果没有找到模型且支持下载，从Hugging Face下载
     if HAS_HUGGINGFACE_HUB and "/" in model_id:
-        logger.debug(f"Downloading model {model_id} to {target_dir}")
-        try:
-            # 确保目标目录的父目录存在（例如Qwen目录）
-            target_dir.parent.mkdir(parents=True, exist_ok=True)
+        # 使用第一个目录作为默认下载目录
+        download_dir = model_dirs[0]
+        if "/" in model_id:
+            # 创建完整路径，包括组织名称
+            target_dir = download_dir / model_id
+        else:
+            # 可能是本地模型相对路径（不含组织前缀）
+            target_dir = download_dir / model_id
 
-            # 参考ComfyUI-QwenVL项目的下载参数
-            snapshot_download(
-                repo_id=model_id,
-                local_dir=str(target_dir),
-                local_dir_use_symlinks=False,
-                ignore_patterns=["*.md", ".git*", "*.txt"],
-            )
-            logger.debug(f"Model downloaded successfully to: {target_dir}")
-            return str(target_dir)
-        except Exception as e:
-            logger.error(f"Failed to download model {model_id}: {e}")
-            raise RuntimeError(f"Failed to download model {model_id}: {e}")
+        logger.debug(f"Downloading model {model_id} to {target_dir}")
+        # 确保目标目录的父目录存在（例如Qwen目录）
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+
+        # 使用镜像回退下载
+        return download_with_mirror_fallback(model_id, target_dir)
     else:
         # 不支持下载或不是Hugging Face模型ID
-        if not target_dir.exists():
-            raise ValueError(f"Model directory not found: {target_dir}. "
-                           f"Please download the model manually to {target_dir} or "
-                           f"install huggingface_hub for automatic downloading.")
-        return str(target_dir)
+        # 在所有目录中检查是否存在
+        for model_dir in model_dirs:
+            if "/" in model_id:
+                target_dir = model_dir / model_id
+            else:
+                target_dir = model_dir / model_id
+
+            if target_dir.exists():
+                return str(target_dir)
+
+        # 如果没有任何目录存在，报告第一个目录的错误
+        target_dir = model_dirs[0] / model_id
+        raise ValueError(f"Model directory not found in any location. "
+                       f"Expected at: {target_dir} or other directories. "
+                       f"Please download the model manually or "
+                       f"install huggingface_hub for automatic downloading.")
 
 
 class Qwen3VLLocalProvider(BaseLLMProvider):
@@ -277,6 +478,7 @@ For more details, see the extension documentation."""}
 
         # Build payload (contains all inference parameters)
         endpoint, payload, extra_headers = self.build_payload(user_prompt, image_payloads, overrides)
+
 
         # Progress: loading model
         if progress_callback:
@@ -436,6 +638,76 @@ For more details, see the extension documentation."""}
 
             # Generate with parameters
             generation_config = payload["generation_config"]
+
+            # Validate and clean generation parameters to avoid CUDA errors
+            try:
+                # Ensure temperature is valid
+                temperature = generation_config.get("temperature", 0.7)
+                if temperature < 0:
+                    logger.warning(f"Temperature {temperature} is negative, setting to 0.7")
+                    temperature = 0.7
+                elif temperature == 0:
+                    logger.info("Temperature is 0, using greedy decoding")
+                elif temperature > 2.0:
+                    logger.warning(f"Temperature {temperature} is too high, clamping to 2.0")
+                    temperature = 2.0
+
+                generation_config["temperature"] = temperature
+
+                # Ensure top_p is valid
+                top_p = generation_config.get("top_p", 0.8)
+                if top_p < 0:
+                    logger.warning(f"top_p {top_p} is negative, setting to 0.8")
+                    top_p = 0.8
+                elif top_p > 1.0:
+                    logger.warning(f"top_p {top_p} > 1.0, clamping to 1.0")
+                    top_p = 1.0
+                elif top_p == 0:
+                    logger.info("top_p is 0, using no top-p sampling")
+
+                generation_config["top_p"] = top_p
+
+                # Ensure top_k is valid
+                top_k = generation_config.get("top_k")
+                if top_k is not None:
+                    if top_k <= 0:
+                        logger.warning(f"top_k {top_k} is invalid, setting to None")
+                        generation_config["top_k"] = None
+                    elif top_k > 1000:  # Reasonable upper limit
+                        logger.warning(f"top_k {top_k} is too high, clamping to 1000")
+                        generation_config["top_k"] = 1000
+
+                # Ensure repetition_penalty is valid
+                repetition_penalty = generation_config.get("repetition_penalty", 1.0)
+                if repetition_penalty < 1.0:
+                    logger.warning(f"repetition_penalty {repetition_penalty} < 1.0, setting to 1.0")
+                    generation_config["repetition_penalty"] = 1.0
+                elif repetition_penalty > 2.0:
+                    logger.warning(f"repetition_penalty {repetition_penalty} > 2.0, clamping to 2.0")
+                    generation_config["repetition_penalty"] = 2.0
+
+                # Ensure presence_penalty is valid
+                presence_penalty = generation_config.get("presence_penalty", 1.5)
+                if presence_penalty < 1.0:
+                    logger.warning(f"presence_penalty {presence_penalty} < 1.0, setting to 1.0")
+                    generation_config["presence_penalty"] = 1.0
+                elif presence_penalty > 2.0:
+                    logger.warning(f"presence_penalty {presence_penalty} > 2.0, clamping to 2.0")
+                    generation_config["presence_penalty"] = 2.0
+
+                logger.info(f"Validated generation config: {generation_config}")
+            except Exception as e:
+                logger.error(f"Failed to validate generation config: {e}, using defaults")
+                # Use safe defaults
+                generation_config = {
+                    "temperature": 0.7,
+                    "top_p": 0.8,
+                    "max_new_tokens": generation_config.get("max_new_tokens", 1024),
+                    "top_k": 20,
+                    "repetition_penalty": 1.0,
+                    "presence_penalty": 1.5,
+                }
+
             logger.debug(f"Generation config: {generation_config}")
             logger.debug(f"Model inputs type: {type(model_inputs)}")
 
@@ -464,51 +736,123 @@ For more details, see the extension documentation."""}
                 generation_config.pop("seed", None)
 
             with torch.no_grad():
-                try:
-                    generated_ids = model.generate(
-                        **generate_kwargs,
-                        max_new_tokens=generation_config["max_new_tokens"],
-                        temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                        top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                        top_k=generation_config.get("top_k"),
-                        repetition_penalty=generation_config.get("repetition_penalty"),
-                        do_sample=generation_config["temperature"] > 0,
-                    )
-                    logger.debug(f"model.generate succeeded")
-                except Exception as e:
-                    logger.error(f"model.generate failed: {e}")
-                    # Try alternative approach
-                    logger.debug(f"Trying alternative generate approach")
-                    # Extract specific tensors from model_inputs
-                    if isinstance(model_inputs, dict):
-                        if "input_ids" in model_inputs and "attention_mask" in model_inputs:
-                            generated_ids = model.generate(
-                                input_ids=model_inputs["input_ids"],
-                                attention_mask=model_inputs["attention_mask"],
-                                max_new_tokens=generation_config["max_new_tokens"],
-                                temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                                top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                                top_k=generation_config.get("top_k"),
-                                repetition_penalty=generation_config.get("repetition_penalty"),
-                                do_sample=generation_config["temperature"] > 0,
-                            )
-                            logger.info(f"Alternative generate succeeded")
+                max_retries = 2
+                generated_ids = None
+                last_error = None
+
+                for retry in range(max_retries):
+                    try:
+                        # On retry, use more conservative parameters
+                        current_temp = generation_config["temperature"]
+                        current_top_p = generation_config["top_p"]
+                        current_top_k = generation_config.get("top_k")
+                        current_repetition_penalty = generation_config.get("repetition_penalty")
+
+                        if retry > 0:
+                            logger.info(f"Retry {retry}/{max_retries} with conservative parameters")
+                            # Reduce temperature for stability
+                            if current_temp > 0:
+                                current_temp = max(0.1, current_temp * 0.7)
+                                logger.info(f"Reduced temperature to {current_temp}")
+
+                            # Increase top_p for stability (closer to 1.0)
+                            if current_top_p > 0:
+                                current_top_p = min(0.95, current_top_p + 0.1)
+                                logger.info(f"Adjusted top_p to {current_top_p}")
+
+                            # Reduce top_k or disable it
+                            if current_top_k is not None:
+                                current_top_k = min(20, current_top_k)
+                                logger.info(f"Reduced top_k to {current_top_k}")
+
+                            # Use default repetition_penalty if it was causing issues
+                            if current_repetition_penalty is not None and current_repetition_penalty > 1.2:
+                                current_repetition_penalty = 1.1
+                                logger.info(f"Reduced repetition_penalty to {current_repetition_penalty}")
+
+                        # Try standard generate first
+                        generated_ids = model.generate(
+                            **generate_kwargs,
+                            max_new_tokens=generation_config["max_new_tokens"],
+                            temperature=current_temp if current_temp > 0 else None,
+                            top_p=current_top_p if current_top_p > 0 else None,
+                            top_k=current_top_k,
+                            repetition_penalty=current_repetition_penalty,
+                            do_sample=current_temp > 0,
+                        )
+                        logger.debug(f"model.generate succeeded on attempt {retry + 1}")
+                        break  # Success, exit retry loop
+
+                    except RuntimeError as e:
+                        last_error = e
+                        error_str = str(e)
+                        logger.error(f"model.generate failed on attempt {retry + 1}: {error_str}")
+
+                        # Check if it's a CUDA assertion error
+                        if "CUDA error" in error_str or "assert" in error_str or "probability tensor" in error_str:
+                            logger.warning(f"CUDA/assertion error detected, will retry with safer parameters")
+                            if retry < max_retries - 1:
+                                # Clear CUDA cache and wait before retry
+                                if torch.cuda.is_available():
+                                    torch.cuda.empty_cache()
+                                import time
+                                time.sleep(0.5 * (retry + 1))
+                                continue
+                            else:
+                                logger.error(f"All {max_retries} attempts failed")
+                                raise
+                        else:
+                            # Other runtime error, try alternative approach
+                            logger.debug(f"Trying alternative generate approach")
+                            try:
+                                # Extract specific tensors from model_inputs
+                                if isinstance(model_inputs, dict):
+                                    if "input_ids" in model_inputs and "attention_mask" in model_inputs:
+                                        generated_ids = model.generate(
+                                            input_ids=model_inputs["input_ids"],
+                                            attention_mask=model_inputs["attention_mask"],
+                                            max_new_tokens=generation_config["max_new_tokens"],
+                                            temperature=current_temp if current_temp > 0 else None,
+                                            top_p=current_top_p if current_top_p > 0 else None,
+                                            top_k=current_top_k,
+                                            repetition_penalty=current_repetition_penalty,
+                                            do_sample=current_temp > 0,
+                                        )
+                                        logger.info(f"Alternative generate succeeded")
+                                        break
+                                elif hasattr(model_inputs, "input_ids") and hasattr(model_inputs, "attention_mask"):
+                                    generated_ids = model.generate(
+                                        input_ids=model_inputs.input_ids,
+                                        attention_mask=model_inputs.attention_mask,
+                                        max_new_tokens=generation_config["max_new_tokens"],
+                                        temperature=current_temp if current_temp > 0 else None,
+                                        top_p=current_top_p if current_top_p > 0 else None,
+                                        top_k=current_top_k,
+                                        repetition_penalty=current_repetition_penalty,
+                                        do_sample=current_temp > 0,
+                                    )
+                                    logger.info(f"Alternative generate succeeded")
+                                    break
+                                else:
+                                    raise
+                            except Exception as inner_e:
+                                last_error = inner_e
+                                logger.error(f"Alternative approach also failed: {inner_e}")
+                                if retry < max_retries - 1:
+                                    continue
+                                else:
+                                    raise
+
+                    except Exception as e:
+                        last_error = e
+                        logger.error(f"Unexpected error in model.generate on attempt {retry + 1}: {e}")
+                        if retry < max_retries - 1:
+                            continue
                         else:
                             raise
-                    elif hasattr(model_inputs, "input_ids") and hasattr(model_inputs, "attention_mask"):
-                        generated_ids = model.generate(
-                            input_ids=model_inputs.input_ids,
-                            attention_mask=model_inputs.attention_mask,
-                            max_new_tokens=generation_config["max_new_tokens"],
-                            temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                            top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                            top_k=generation_config.get("top_k"),
-                            repetition_penalty=generation_config.get("repetition_penalty"),
-                            do_sample=generation_config["temperature"] > 0,
-                        )
-                        logger.info(f"Alternative generate succeeded")
-                    else:
-                        raise
+
+                if generated_ids is None:
+                    raise RuntimeError(f"Failed to generate after {max_retries} attempts: {last_error}")
 
             logger.info(f"model.generate returned type: {type(generated_ids)}")
             if hasattr(generated_ids, "shape"):
@@ -662,8 +1006,95 @@ For more details, see the extension documentation."""}
             logger.error(f"Qwen3-VL local inference failed: {e}")
             return {"error": f"Inference failed: {str(e)}"}
 
+    def _try_load_from_path(self, model_path: str, loading_config: Dict[str, Any]) -> Tuple[AutoModelForVision2Seq, AutoProcessor]:
+        """尝试从指定路径加载模型和处理器"""
+        # Determine device
+        device = loading_config.get("device", "auto")
+        if device == "auto":
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Convert to torch.device object to ensure compatibility
+        device = torch.device(device)
+
+        # Determine dtype
+        dtype_str = loading_config.get("dtype", "auto")
+
+        if dtype_str == "auto":
+            dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+        elif dtype_str == "bfloat16":
+            dtype = torch.bfloat16
+        elif dtype_str == "float16":
+            dtype = torch.float16
+        elif dtype_str == "float32":
+            dtype = torch.float32
+        else:
+            dtype = torch.float32
+
+        flash_attention_2 = loading_config.get("flash_attention_2", False)
+        trust_remote_code = loading_config.get("trust_remote_code", True)
+
+        logger.info(f"Attempting to load model from: {model_path}")
+
+        # Load processor
+        processor = AutoProcessor.from_pretrained(
+            model_path,
+            trust_remote_code=trust_remote_code
+        )
+
+        # Load model with appropriate settings
+        attn_implementation = "flash_attention_2" if flash_attention_2 else "eager"
+
+        try:
+            model = AutoModelForVision2Seq.from_pretrained(
+                model_path,
+                torch_dtype=dtype,
+                device_map=None,  # 禁用自动设备映射，避免meta tensor问题
+                low_cpu_mem_usage=False,  # 禁用低CPU内存模式，避免meta tensor
+                attn_implementation=attn_implementation,
+                trust_remote_code=trust_remote_code,
+                use_safetensors=True
+            )
+
+            # 手动将模型移动到设备，处理可能的meta tensor问题
+            try:
+                model = model.to(device)
+                logger.info(f"Model manually moved to device: {device}")
+            except RuntimeError as e:
+                if "Cannot copy out of meta tensor" in str(e) or "no data" in str(e):
+                    logger.warning(f"Meta tensor detected, using to_empty() instead: {e}")
+                    # 使用to_empty()方法将模型从meta设备移动到目标设备
+                    model = model.to_empty(device=device, recurse=True)
+                    logger.info(f"Model moved from meta to device {device} using to_empty()")
+                else:
+                    raise
+        except Exception as e:
+            # Fallback to eager attention if flash attention fails
+            logger.warning(f"Failed to load with {attn_implementation}, falling back to eager: {e}")
+            model = AutoModelForVision2Seq.from_pretrained(
+                model_path,
+                torch_dtype=dtype,
+                device_map=None,  # 禁用自动设备映射，避免meta tensor问题
+                low_cpu_mem_usage=False,  # 禁用低CPU内存模式，避免meta tensor
+                trust_remote_code=trust_remote_code,
+                use_safetensors=True
+            )
+
+            # 手动将模型移动到设备，处理可能的meta tensor问题
+            try:
+                model = model.to(device)
+                logger.info(f"Model manually moved to device: {device}")
+            except RuntimeError as e:
+                if "Cannot copy out of meta tensor" in str(e) or "no data" in str(e):
+                    logger.warning(f"Meta tensor detected, using to_empty() instead: {e}")
+                    # 使用to_empty()方法将模型从meta设备移动到目标设备
+                    model = model.to_empty(device=device, recurse=True)
+                    logger.info(f"Model moved from meta to device {device} using to_empty()")
+                else:
+                    raise
+
+        return model, processor
+
     def _load_model(self, loading_config: Dict[str, Any], model_path: str) -> Tuple[AutoModelForVision2Seq, AutoProcessor]:
-        """Load or get cached model and processor."""
+        """Load or get cached model and processor with retry across multiple directories."""
         # Check if we need to load a new model
         if (self._model is None or self._processor is None or
             self._current_model_path != model_path or
@@ -682,74 +1113,102 @@ For more details, see the extension documentation."""}
                 self._processor = None
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-            # Ensure model exists (download if needed)
-            # This handles both local paths and Hugging Face model IDs
-            try:
-                actual_model_path = ensure_model(model_path)
-                logger.info(f"Model resolved to: {actual_model_path}")
-            except Exception as e:
-                logger.error(f"Failed to ensure model {model_path}: {e}")
-                raise
+            # 尝试从多个目录加载模型
+            success = False
+            last_error = None
 
-            # Determine device
+            # 如果是绝对路径，直接尝试加载
+            if os.path.isabs(model_path) and os.path.isdir(model_path):
+                try:
+                    model, processor = self._try_load_from_path(model_path, loading_config)
+                    self._model = model
+                    self._processor = processor
+                    self._current_model_path = model_path
+                    success = True
+                    logger.info(f"Successfully loaded model from absolute path: {model_path}")
+                except Exception as e:
+                    last_error = e
+                    logger.error(f"Failed to load model from absolute path {model_path}: {e}")
+            else:
+                # 获取所有可能的模型目录
+                model_dirs = get_model_dirs()
+                if not model_dirs:
+                    raise ValueError("No model directories configured")
+
+                # 首先尝试查找现有模型
+                found_paths = []
+                for model_dir in model_dirs:
+                    if "/" in model_path:
+                        # 创建完整路径，包括组织名称
+                        candidate_path = model_dir / model_path
+                    else:
+                        # 可能是本地模型相对路径（不含组织前缀）
+                        candidate_path = model_dir / model_path
+
+                    if check_model_dir(candidate_path):
+                        found_paths.append(str(candidate_path))
+                        logger.debug(f"Found candidate model at: {candidate_path}")
+
+                # 如果找到了现有模型，尝试逐个加载
+                if found_paths:
+                    logger.info(f"Found {len(found_paths)} candidate model locations: {found_paths}")
+                    for candidate_path in found_paths:
+                        try:
+                            model, processor = self._try_load_from_path(candidate_path, loading_config)
+                            self._model = model
+                            self._processor = processor
+                            self._current_model_path = candidate_path
+                            success = True
+                            logger.info(f"Successfully loaded model from: {candidate_path}")
+                            break
+                        except Exception as e:
+                            last_error = e
+                            logger.warning(f"Failed to load model from {candidate_path}: {e}")
+                            # 继续尝试下一个路径
+
+                # 如果没有找到现有模型或所有现有模型都加载失败，尝试ensure_model（可能触发下载）
+                if not success:
+                    try:
+                        actual_model_path = ensure_model(model_path)
+                        logger.info(f"Model resolved to: {actual_model_path}")
+                        model, processor = self._try_load_from_path(actual_model_path, loading_config)
+                        self._model = model
+                        self._processor = processor
+                        self._current_model_path = actual_model_path
+                        success = True
+                        logger.info(f"Successfully loaded model after ensure_model: {actual_model_path}")
+                    except Exception as e:
+                        last_error = e
+                        logger.error(f"Failed to load model via ensure_model: {e}")
+
+            if not success:
+                if last_error:
+                    raise RuntimeError(f"Failed to load model {model_path} from any location: {last_error}")
+                else:
+                    raise RuntimeError(f"Failed to load model {model_path} from any location")
+
+            # 存储加载配置
             device = loading_config.get("device", "auto")
             if device == "auto":
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-            # Determine dtype
             dtype_str = loading_config.get("dtype", "auto")
+
             if dtype_str == "auto":
-                dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
+                self._dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
             elif dtype_str == "bfloat16":
-                dtype = torch.bfloat16
+                self._dtype = torch.bfloat16
             elif dtype_str == "float16":
-                dtype = torch.float16
+                self._dtype = torch.float16
             elif dtype_str == "float32":
-                dtype = torch.float32
+                self._dtype = torch.float32
             else:
-                dtype = torch.float32
+                self._dtype = torch.float32
 
-            flash_attention_2 = loading_config.get("flash_attention_2", False)
-            trust_remote_code = loading_config.get("trust_remote_code", True)
-
-            # Load processor
-            processor = AutoProcessor.from_pretrained(
-                actual_model_path,
-                trust_remote_code=trust_remote_code
-            )
-
-            # Load model with appropriate settings
-            attn_implementation = "flash_attention_2" if flash_attention_2 else "eager"
-
-            try:
-                model = AutoModelForVision2Seq.from_pretrained(
-                    actual_model_path,
-                    torch_dtype=dtype,
-                    device_map=device,
-                    attn_implementation=attn_implementation,
-                    trust_remote_code=trust_remote_code,
-                    use_safetensors=True
-                )
-            except Exception as e:
-                # Fallback to eager attention if flash attention fails
-                logger.warning(f"Failed to load with {attn_implementation}, falling back to eager: {e}")
-                model = AutoModelForVision2Seq.from_pretrained(
-                    actual_model_path,
-                    torch_dtype=dtype,
-                    device_map=device,
-                    trust_remote_code=trust_remote_code,
-                    use_safetensors=True
-                )
-
-            # Store references
-            self._model = model
-            self._processor = processor
-            self._current_model_path = actual_model_path  # Store actual path for caching
             self._device = device
-            self._dtype = dtype
-            self._flash_attention_2 = flash_attention_2
+            self._flash_attention_2 = loading_config.get("flash_attention_2", False)
 
-            logger.info(f"Qwen3-VL model loaded on {device} with dtype {dtype}")
+            logger.info(f"Qwen3-VL model loaded on {device} with dtype {self._dtype}")
 
         return self._model, self._processor
 

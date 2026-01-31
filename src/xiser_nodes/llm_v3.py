@@ -13,6 +13,7 @@ from .llm.registry import _validate_inputs, build_default_registry
 from .config import get_llm_config_loader
 from .llm import SEED_CACHE  # 从llm模块导入缓存
 from .key_store import KEY_STORE
+from .llm.progress_manager import ProgressManager
 
 # 创建API实例用于进度更新
 api = ComfyAPI()
@@ -30,7 +31,7 @@ def _dummy_image_tensor():
 
 
 def _update_progress(stage: str, progress: float, total_stages: int = 8, node_id: str = ""):
-    """更新进度显示
+    """更新进度显示 - 使用ProgressManager统一处理
 
     Args:
         stage: 当前阶段描述
@@ -38,27 +39,8 @@ def _update_progress(stage: str, progress: float, total_stages: int = 8, node_id
         total_stages: 总阶段数
         node_id: 节点ID
     """
-    try:
-        # 阶段映射到索引
-        stage_index = {
-            "准备": 0, "验证": 1, "连接": 2, "处理": 3,
-            "轮询": 4, "流式": 5, "解析": 6, "完成": 7
-        }.get(stage, 0)
-
-        # 计算整体进度
-        base_progress = (stage_index / total_stages) * 100
-        stage_progress = progress * (100 / total_stages)
-        total_progress = min(base_progress + stage_progress, 100)
-
-        # 更新进度
-        api_sync.execution.set_progress(
-            value=total_progress,
-            max_value=100.0,
-            node_id=node_id
-        )
-    except Exception as e:
-        # 进度更新失败不影响主要功能
-        pass
+    # 使用ProgressManager的统一进度更新
+    ProgressManager.update_progress(stage, progress, total_stages, node_id)
 
 
 class XIS_LLMOrchestratorV3(io.ComfyNode):

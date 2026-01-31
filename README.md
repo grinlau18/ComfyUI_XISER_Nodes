@@ -217,7 +217,7 @@ The new cutout button in the canvas helper uses [BiRefNet](https://github.com/ta
   - Supports Markdown headings, lists, bold/italic, inline code, and links before rendering parsed nodes with normalized gaps and smart scrollbars.
   ![Text Label Feature](img/XIS_Label_1.jpeg)
 
-- **XIS_MultipleAnglesPrompt**: Generate camera angle prompts through a visual interface with 3D preview and image reference support. Provides precise camera angle control for Qwen-Image-Edit-2511-Multiple-Angles-LoRA models.
+- **XIS_MultipleAnglesPrompt**: Generate camera angle prompts through a visual interface with 3D preview and image reference support. Provides precise camera angle control for [Qwen-Image-Edit-2511-Multiple-Angles-LoRA models](https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA).
   ![Multiple Angles Prompt Node Interface](img/XIS_MultipleAnglesPromptV3_1.jpeg)
 
 ### 🧰 Image, Mask & File Nodes

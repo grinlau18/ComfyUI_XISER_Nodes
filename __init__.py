@@ -9,7 +9,7 @@ __all__ = [
 ]
 __author__ = "XISER"
 __email__ = "grinlau18@gmail.com"
-__version__ = "1.4.2"  # 确保是纯语义化版本（无后缀）
+__version__ = "1.4.3"  # 确保是纯语义化版本（无后缀）
 __license__ = "MIT"
 __description__ = "This extension integrates interactive multi-layer canvas editing, multimodal LLM intelligent processing (supporting mainstream models like DeepSeek, Qwen, Kimi, Wan), professional-grade image processing toolchains, video generation orchestration systems (supporting Wansiang series reference-based video, image-to-video, and keyframe-to-video generation), and visual data tools, providing end-to-end support for AI image and video generation workflows from creative conception to fine editing. With advanced PSD import, BiRefNet intelligent matting, real-time layer transformations, unified configuration-based video generation orchestration, and secure API key management, it significantly enhances creative efficiency and output quality. Additionally, it offers workflow customization features like node color management and label nodes to improve visual organization and personalization of complex workflows."
 
