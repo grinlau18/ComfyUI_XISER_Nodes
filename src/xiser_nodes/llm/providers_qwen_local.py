@@ -165,10 +165,13 @@ def download_with_mirror_fallback(repo_id: str, target_dir: Path) -> str:
         endpoints_to_try = HF_ENDPOINTS
         logger.info(f"No user HF_ENDPOINT set, will try all endpoints: {endpoints_to_try}")
 
-    for endpoint in endpoints_to_try:
+    for i, endpoint in enumerate(endpoints_to_try):
         # 为当前endpoint尝试多次重试
         retry_count = 0
         endpoint_success = False
+
+        # 记录开始尝试的端点
+        logger.info(f"Trying endpoint {i+1}/{len(endpoints_to_try)}: {endpoint}")
 
         while retry_count < max_retries and not endpoint_success:
             try:
@@ -193,7 +196,6 @@ def download_with_mirror_fallback(repo_id: str, target_dir: Path) -> str:
                         "local_dir": str(target_dir),
                         "local_dir_use_symlinks": False,
                         "ignore_patterns": ["*.md", ".git*", "*.txt"],
-                        "timeout": timeout,  # 使用配置的超时时间
                         "resume_download": True,  # 启用断点续传
                         "max_workers": 1,  # 设置为1以减少内存使用，避免崩溃
                     }
@@ -235,6 +237,8 @@ def download_with_mirror_fallback(repo_id: str, target_dir: Path) -> str:
                     # 跳出循环，尝试下一个endpoint
 
         # 如果当前endpoint成功，已经返回。如果失败，继续下一个endpoint
+        if not endpoint_success and i < len(endpoints_to_try) - 1:
+            logger.info(f"Endpoint {endpoint} failed, switching to next endpoint...")
 
     # 所有endpoint都失败了
     if last_error is not None:
@@ -475,6 +479,7 @@ For more details, see the extension documentation."""}
         # Build payload (contains all inference parameters)
         endpoint, payload, extra_headers = self.build_payload(user_prompt, image_payloads, overrides)
 
+
         # Progress: loading model
         if progress_callback:
             progress_callback("准备", 0.2)
@@ -633,6 +638,76 @@ For more details, see the extension documentation."""}
 
             # Generate with parameters
             generation_config = payload["generation_config"]
+
+            # Validate and clean generation parameters to avoid CUDA errors
+            try:
+                # Ensure temperature is valid
+                temperature = generation_config.get("temperature", 0.7)
+                if temperature < 0:
+                    logger.warning(f"Temperature {temperature} is negative, setting to 0.7")
+                    temperature = 0.7
+                elif temperature == 0:
+                    logger.info("Temperature is 0, using greedy decoding")
+                elif temperature > 2.0:
+                    logger.warning(f"Temperature {temperature} is too high, clamping to 2.0")
+                    temperature = 2.0
+
+                generation_config["temperature"] = temperature
+
+                # Ensure top_p is valid
+                top_p = generation_config.get("top_p", 0.8)
+                if top_p < 0:
+                    logger.warning(f"top_p {top_p} is negative, setting to 0.8")
+                    top_p = 0.8
+                elif top_p > 1.0:
+                    logger.warning(f"top_p {top_p} > 1.0, clamping to 1.0")
+                    top_p = 1.0
+                elif top_p == 0:
+                    logger.info("top_p is 0, using no top-p sampling")
+
+                generation_config["top_p"] = top_p
+
+                # Ensure top_k is valid
+                top_k = generation_config.get("top_k")
+                if top_k is not None:
+                    if top_k <= 0:
+                        logger.warning(f"top_k {top_k} is invalid, setting to None")
+                        generation_config["top_k"] = None
+                    elif top_k > 1000:  # Reasonable upper limit
+                        logger.warning(f"top_k {top_k} is too high, clamping to 1000")
+                        generation_config["top_k"] = 1000
+
+                # Ensure repetition_penalty is valid
+                repetition_penalty = generation_config.get("repetition_penalty", 1.0)
+                if repetition_penalty < 1.0:
+                    logger.warning(f"repetition_penalty {repetition_penalty} < 1.0, setting to 1.0")
+                    generation_config["repetition_penalty"] = 1.0
+                elif repetition_penalty > 2.0:
+                    logger.warning(f"repetition_penalty {repetition_penalty} > 2.0, clamping to 2.0")
+                    generation_config["repetition_penalty"] = 2.0
+
+                # Ensure presence_penalty is valid
+                presence_penalty = generation_config.get("presence_penalty", 1.5)
+                if presence_penalty < 1.0:
+                    logger.warning(f"presence_penalty {presence_penalty} < 1.0, setting to 1.0")
+                    generation_config["presence_penalty"] = 1.0
+                elif presence_penalty > 2.0:
+                    logger.warning(f"presence_penalty {presence_penalty} > 2.0, clamping to 2.0")
+                    generation_config["presence_penalty"] = 2.0
+
+                logger.info(f"Validated generation config: {generation_config}")
+            except Exception as e:
+                logger.error(f"Failed to validate generation config: {e}, using defaults")
+                # Use safe defaults
+                generation_config = {
+                    "temperature": 0.7,
+                    "top_p": 0.8,
+                    "max_new_tokens": generation_config.get("max_new_tokens", 1024),
+                    "top_k": 20,
+                    "repetition_penalty": 1.0,
+                    "presence_penalty": 1.5,
+                }
+
             logger.debug(f"Generation config: {generation_config}")
             logger.debug(f"Model inputs type: {type(model_inputs)}")
 
@@ -661,51 +736,123 @@ For more details, see the extension documentation."""}
                 generation_config.pop("seed", None)
 
             with torch.no_grad():
-                try:
-                    generated_ids = model.generate(
-                        **generate_kwargs,
-                        max_new_tokens=generation_config["max_new_tokens"],
-                        temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                        top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                        top_k=generation_config.get("top_k"),
-                        repetition_penalty=generation_config.get("repetition_penalty"),
-                        do_sample=generation_config["temperature"] > 0,
-                    )
-                    logger.debug(f"model.generate succeeded")
-                except Exception as e:
-                    logger.error(f"model.generate failed: {e}")
-                    # Try alternative approach
-                    logger.debug(f"Trying alternative generate approach")
-                    # Extract specific tensors from model_inputs
-                    if isinstance(model_inputs, dict):
-                        if "input_ids" in model_inputs and "attention_mask" in model_inputs:
-                            generated_ids = model.generate(
-                                input_ids=model_inputs["input_ids"],
-                                attention_mask=model_inputs["attention_mask"],
-                                max_new_tokens=generation_config["max_new_tokens"],
-                                temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                                top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                                top_k=generation_config.get("top_k"),
-                                repetition_penalty=generation_config.get("repetition_penalty"),
-                                do_sample=generation_config["temperature"] > 0,
-                            )
-                            logger.info(f"Alternative generate succeeded")
+                max_retries = 2
+                generated_ids = None
+                last_error = None
+
+                for retry in range(max_retries):
+                    try:
+                        # On retry, use more conservative parameters
+                        current_temp = generation_config["temperature"]
+                        current_top_p = generation_config["top_p"]
+                        current_top_k = generation_config.get("top_k")
+                        current_repetition_penalty = generation_config.get("repetition_penalty")
+
+                        if retry > 0:
+                            logger.info(f"Retry {retry}/{max_retries} with conservative parameters")
+                            # Reduce temperature for stability
+                            if current_temp > 0:
+                                current_temp = max(0.1, current_temp * 0.7)
+                                logger.info(f"Reduced temperature to {current_temp}")
+
+                            # Increase top_p for stability (closer to 1.0)
+                            if current_top_p > 0:
+                                current_top_p = min(0.95, current_top_p + 0.1)
+                                logger.info(f"Adjusted top_p to {current_top_p}")
+
+                            # Reduce top_k or disable it
+                            if current_top_k is not None:
+                                current_top_k = min(20, current_top_k)
+                                logger.info(f"Reduced top_k to {current_top_k}")
+
+                            # Use default repetition_penalty if it was causing issues
+                            if current_repetition_penalty is not None and current_repetition_penalty > 1.2:
+                                current_repetition_penalty = 1.1
+                                logger.info(f"Reduced repetition_penalty to {current_repetition_penalty}")
+
+                        # Try standard generate first
+                        generated_ids = model.generate(
+                            **generate_kwargs,
+                            max_new_tokens=generation_config["max_new_tokens"],
+                            temperature=current_temp if current_temp > 0 else None,
+                            top_p=current_top_p if current_top_p > 0 else None,
+                            top_k=current_top_k,
+                            repetition_penalty=current_repetition_penalty,
+                            do_sample=current_temp > 0,
+                        )
+                        logger.debug(f"model.generate succeeded on attempt {retry + 1}")
+                        break  # Success, exit retry loop
+
+                    except RuntimeError as e:
+                        last_error = e
+                        error_str = str(e)
+                        logger.error(f"model.generate failed on attempt {retry + 1}: {error_str}")
+
+                        # Check if it's a CUDA assertion error
+                        if "CUDA error" in error_str or "assert" in error_str or "probability tensor" in error_str:
+                            logger.warning(f"CUDA/assertion error detected, will retry with safer parameters")
+                            if retry < max_retries - 1:
+                                # Clear CUDA cache and wait before retry
+                                if torch.cuda.is_available():
+                                    torch.cuda.empty_cache()
+                                import time
+                                time.sleep(0.5 * (retry + 1))
+                                continue
+                            else:
+                                logger.error(f"All {max_retries} attempts failed")
+                                raise
+                        else:
+                            # Other runtime error, try alternative approach
+                            logger.debug(f"Trying alternative generate approach")
+                            try:
+                                # Extract specific tensors from model_inputs
+                                if isinstance(model_inputs, dict):
+                                    if "input_ids" in model_inputs and "attention_mask" in model_inputs:
+                                        generated_ids = model.generate(
+                                            input_ids=model_inputs["input_ids"],
+                                            attention_mask=model_inputs["attention_mask"],
+                                            max_new_tokens=generation_config["max_new_tokens"],
+                                            temperature=current_temp if current_temp > 0 else None,
+                                            top_p=current_top_p if current_top_p > 0 else None,
+                                            top_k=current_top_k,
+                                            repetition_penalty=current_repetition_penalty,
+                                            do_sample=current_temp > 0,
+                                        )
+                                        logger.info(f"Alternative generate succeeded")
+                                        break
+                                elif hasattr(model_inputs, "input_ids") and hasattr(model_inputs, "attention_mask"):
+                                    generated_ids = model.generate(
+                                        input_ids=model_inputs.input_ids,
+                                        attention_mask=model_inputs.attention_mask,
+                                        max_new_tokens=generation_config["max_new_tokens"],
+                                        temperature=current_temp if current_temp > 0 else None,
+                                        top_p=current_top_p if current_top_p > 0 else None,
+                                        top_k=current_top_k,
+                                        repetition_penalty=current_repetition_penalty,
+                                        do_sample=current_temp > 0,
+                                    )
+                                    logger.info(f"Alternative generate succeeded")
+                                    break
+                                else:
+                                    raise
+                            except Exception as inner_e:
+                                last_error = inner_e
+                                logger.error(f"Alternative approach also failed: {inner_e}")
+                                if retry < max_retries - 1:
+                                    continue
+                                else:
+                                    raise
+
+                    except Exception as e:
+                        last_error = e
+                        logger.error(f"Unexpected error in model.generate on attempt {retry + 1}: {e}")
+                        if retry < max_retries - 1:
+                            continue
                         else:
                             raise
-                    elif hasattr(model_inputs, "input_ids") and hasattr(model_inputs, "attention_mask"):
-                        generated_ids = model.generate(
-                            input_ids=model_inputs.input_ids,
-                            attention_mask=model_inputs.attention_mask,
-                            max_new_tokens=generation_config["max_new_tokens"],
-                            temperature=generation_config["temperature"] if generation_config["temperature"] > 0 else None,
-                            top_p=generation_config["top_p"] if generation_config["top_p"] > 0 else None,
-                            top_k=generation_config.get("top_k"),
-                            repetition_penalty=generation_config.get("repetition_penalty"),
-                            do_sample=generation_config["temperature"] > 0,
-                        )
-                        logger.info(f"Alternative generate succeeded")
-                    else:
-                        raise
+
+                if generated_ids is None:
+                    raise RuntimeError(f"Failed to generate after {max_retries} attempts: {last_error}")
 
             logger.info(f"model.generate returned type: {type(generated_ids)}")
             if hasattr(generated_ids, "shape"):
@@ -865,9 +1012,12 @@ For more details, see the extension documentation."""}
         device = loading_config.get("device", "auto")
         if device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Convert to torch.device object to ensure compatibility
+        device = torch.device(device)
 
         # Determine dtype
         dtype_str = loading_config.get("dtype", "auto")
+
         if dtype_str == "auto":
             dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
         elif dtype_str == "bfloat16":
@@ -897,21 +1047,49 @@ For more details, see the extension documentation."""}
             model = AutoModelForVision2Seq.from_pretrained(
                 model_path,
                 torch_dtype=dtype,
-                device_map=device,
+                device_map=None,  # 禁用自动设备映射，避免meta tensor问题
+                low_cpu_mem_usage=False,  # 禁用低CPU内存模式，避免meta tensor
                 attn_implementation=attn_implementation,
                 trust_remote_code=trust_remote_code,
                 use_safetensors=True
             )
+
+            # 手动将模型移动到设备，处理可能的meta tensor问题
+            try:
+                model = model.to(device)
+                logger.info(f"Model manually moved to device: {device}")
+            except RuntimeError as e:
+                if "Cannot copy out of meta tensor" in str(e) or "no data" in str(e):
+                    logger.warning(f"Meta tensor detected, using to_empty() instead: {e}")
+                    # 使用to_empty()方法将模型从meta设备移动到目标设备
+                    model = model.to_empty(device=device, recurse=True)
+                    logger.info(f"Model moved from meta to device {device} using to_empty()")
+                else:
+                    raise
         except Exception as e:
             # Fallback to eager attention if flash attention fails
             logger.warning(f"Failed to load with {attn_implementation}, falling back to eager: {e}")
             model = AutoModelForVision2Seq.from_pretrained(
                 model_path,
                 torch_dtype=dtype,
-                device_map=device,
+                device_map=None,  # 禁用自动设备映射，避免meta tensor问题
+                low_cpu_mem_usage=False,  # 禁用低CPU内存模式，避免meta tensor
                 trust_remote_code=trust_remote_code,
                 use_safetensors=True
             )
+
+            # 手动将模型移动到设备，处理可能的meta tensor问题
+            try:
+                model = model.to(device)
+                logger.info(f"Model manually moved to device: {device}")
+            except RuntimeError as e:
+                if "Cannot copy out of meta tensor" in str(e) or "no data" in str(e):
+                    logger.warning(f"Meta tensor detected, using to_empty() instead: {e}")
+                    # 使用to_empty()方法将模型从meta设备移动到目标设备
+                    model = model.to_empty(device=device, recurse=True)
+                    logger.info(f"Model moved from meta to device {device} using to_empty()")
+                else:
+                    raise
 
         return model, processor
 
@@ -1015,6 +1193,7 @@ For more details, see the extension documentation."""}
                 device = "cuda" if torch.cuda.is_available() else "cpu"
 
             dtype_str = loading_config.get("dtype", "auto")
+
             if dtype_str == "auto":
                 self._dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
             elif dtype_str == "bfloat16":
